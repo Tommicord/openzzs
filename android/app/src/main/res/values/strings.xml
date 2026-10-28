@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OpenZZS</string>
+    <string name="start">Start</string>
+    <string name="stop">Stop</string>
+    <string name="flush">Flush</string>
+    <string name="sensors">Sensors</string>
+    <string name="status_idle">backend=unknown  sensors=0  queued=0</string>
+</resources>

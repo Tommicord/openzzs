@@ -1,0 +1,29 @@
+# CMake / ninja build trees
+/build/
+/build-*/
+/cmake-build-*/
+/out/
+
+# IDE and editor state
+/.idea/
+*.iml
+
+# Build and measurement artifacts
+*.o
+*.a
+*.so
+*.su
+*.elf
+*.map
+*.gcda
+*.gcno
+*.gcov
+compile_commands.json
+
+# Local machine configuration
+local.properties
+.env
+
+# OS junk
+.DS_Store
+Thumbs.db
