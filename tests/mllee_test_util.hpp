@@ -190,15 +190,18 @@ class BlobBuilder
     _pack_weights (const LayerSpec &layer)
     {
         std::vector<uint8_t> raw;
-        if (layer._M_dtype == zzs::mllee::Dtype::I4 || layer._M_dtype == zzs::mllee::Dtype::F4E2M1)
+        if (layer._M_dtype == zzs::mllee::Dtype::I4
+            || layer._M_dtype == zzs::mllee::Dtype::F4E2M1
+            || layer._M_dtype == zzs::mllee::Dtype::I2
+            || layer._M_dtype == zzs::mllee::Dtype::I3
+            || layer._M_dtype == zzs::mllee::Dtype::F3E1M1)
             {
-                for (std::size_t i = 0; i < layer._M_weights.size (); i += 2)
-                    {
-                        const std::int8_t low = layer._M_weights[i];
-                        const std::int8_t high =
-                            i + 1 < layer._M_weights.size () ? layer._M_weights[i + 1] : 0;
-                        raw.push_back (zzs::mllee::_S_pack_int4 (low, high));
-                    }
+                raw.resize (zzs::mllee::_S_row_bytes (layer._M_dtype,
+                                                      static_cast<uint32_t> (
+                                                          layer._M_weights.size ())));
+                zzs::mllee::_S_pack_codes (
+                    layer._M_dtype, layer._M_weights.data (),
+                    static_cast<uint32_t> (layer._M_weights.size ()), raw.data ());
             }
         else
             {

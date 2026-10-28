@@ -446,7 +446,7 @@ embedding_run (Tape &tape, const EmbedSpec &spec, const uint16_t *const index,
     const Status status = spec.validate ();
     if (!status_ok (status))
         return status;
-    if (index == nullptr || (spec.is_bag () != (offsets == nullptr)))
+    if (index == nullptr || spec.is_bag () != (offsets != nullptr))
         return Status::BAD_LAYOUT;
     if (table._M_count != spec.table_elements ()
         || output._M_count != spec.output_elements ())

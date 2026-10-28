@@ -102,11 +102,26 @@ struct SoftmaxState
 static_assert (sizeof (SoftmaxState) == 8u, "softmax state is two domain words");
 
 /**
+ * @brief The Q15-to-Q7 scale of an exp sum, `15 * ln 2`, in Q7.
+ *
+ * A sum of Q15 exp terms is 2^15 times the real sum, so its log needs
+ * `15 * ln 2` subtracted.  Carrying the product in Q15 and narrowing once
+ * (`1331`) instead of multiplying the rounded Q7 `ln 2` (`15 * 89 = 1335`)
+ * removes a systematic four-Q7 bias from every log-probability.
+ */
+inline constexpr int32_t _S_exp_scale_q7
+    = _S_round_shift (static_cast<int64_t> (15) * _S_ln2_q15 * _S_q7_one, 15u);
+
+/**
  * @brief Natural log of a positive integer in Q7, via mantissa normalization.
  *
  * The mantissa loop narrows value into the [0.5, 1) Q15 window the log atom
- * covers, and the exponent count contributes exact whole octaves of ln 2 in
- * Q7.  Iterative, no recursion, defined for every value >= 1.
+ * covers, and the exponent count contributes whole octaves of ln 2.  The
+ * octave term is accumulated in Q15 and narrowed once: multiplying by the
+ * rounded `_S_ln2_q7` (89) per octave would add up to 0.28 Q7 per octave,
+ * i.e. more than four Q7 over the sixteen-octave range a softmax row can
+ * reach, which is exactly the resolution KL and log-softmax are read at.
+ * Iterative, no recursion, defined for every value >= 1.
  */
 [[nodiscard]] inline constexpr int32_t
 q7_log_pos_int (uint32_t value) noexcept
@@ -125,8 +140,12 @@ q7_log_pos_int (uint32_t value) noexcept
             mantissa <<= 1;
             --exponent;
         }
-    return q7_log_q15 (static_cast<int32_t> (mantissa))
-           + exponent * _S_ln2_q7;
+    const int32_t total_q15
+        = q15_log_q15 (static_cast<int32_t> (mantissa))
+          + exponent * _S_ln2_q15;
+    const int32_t result = _S_round_shift (
+        static_cast<int64_t> (total_q15) * _S_q7_one, 15u);
+    return result < _S_q15_min ? _S_q15_min : result;
 }
 
 /**
@@ -171,7 +190,7 @@ log_sum_exp_lanes (const int16_t *const logits_q15,
     state._M_max_q15 = maximum;
     state._M_lse_q7
         = (maximum >> 8) + q7_log_pos_int (static_cast<uint32_t> (total))
-          - 15 * _S_ln2_q7;
+          - _S_exp_scale_q7;
     return state;
 }
 
@@ -235,7 +254,7 @@ softmax_state_from_codes (const Trainable &t,
     state._M_max_q15 = maximum;
     state._M_lse_q7
         = (maximum >> 8) + q7_log_pos_int (static_cast<uint32_t> (total))
-          - 15 * _S_ln2_q7;
+          - _S_exp_scale_q7;
     return state;
 }
 
@@ -265,13 +284,21 @@ prob_q15 (const Trainable &t, const uint32_t index,
     return q15_exp_q7 (lambda > 0 ? 0 : lambda);
 }
 
-/** @brief One summed KL sweep; skips zero targets and saturates zero students. */
+/**
+ * @brief One summed KL sweep; skips zero targets and saturates zero students.
+ *
+ * The products are accumulated in int64 and shifted once at the end: shifting
+ * each term would floor-truncate up to one Q7 per class, which for a small KL
+ * over many classes can push the non-negative divergence below zero.  One
+ * rounded shift keeps the whole row's error below half a Q7 and is also one
+ * shift per row instead of one per class.
+ */
 [[nodiscard]] inline int32_t
 kl_sum_q7 (const Trainable &student, const Trainable &teacher,
            const int32_t inv_temperature_q15, const SoftmaxState &student_state,
            const SoftmaxState &teacher_state) noexcept
 {
-    int64_t total_q7 = 0;
+    int64_t products = 0;
     for (uint32_t i = 0; i < teacher._M_count; ++i)
     {
         const int32_t t_q15 = prob_q15 (teacher, i, inv_temperature_q15,
@@ -281,9 +308,13 @@ kl_sum_q7 (const Trainable &student, const Trainable &teacher,
         const int32_t delta
             = log_prob_q7 (teacher, i, inv_temperature_q15, teacher_state)
               - log_prob_q7 (student, i, inv_temperature_q15, student_state);
-        total_q7 += (static_cast<int64_t> (delta) * t_q15) >> 15;
+        products += static_cast<int64_t> (delta) * t_q15;
     }
-    return static_cast<int32_t> (total_q7);
+    /* The log lanes are Q7 quantized, so a near-zero divergence can still
+       close one Q7 below the true zero; the divergence itself is non-negative
+       by construction, and a negative loss would invert the gradient scale. */
+    const int32_t value = static_cast<int32_t> ((products + (1LL << 14)) >> 15);
+    return value > 0 ? value : 0;
 }
 
 /** @brief KL backward: student gets seed * invT * (p_s - p_t), teacher optional. */
@@ -414,6 +445,13 @@ distill_backward (const Trainable & /*output*/,
         = softmax_state_from_codes (student, inv_t);
     const SoftmaxState teacher_state
         = softmax_state_from_codes (teacher, inv_t);
+    /* Loop-invariant: the routed arm needs KL once per backward, not once per
+       class -- inside the loop this is C full exp sweeps instead of one. */
+    const int32_t kl_here
+        = meta->_M_route_teacher != 0u && teacher.has_grad ()
+              ? kl_sum_q7 (student, teacher, inv_t, student_state,
+                           teacher_state)
+              : 0;
     for (uint32_t i = 0; i < count; ++i)
     {
         const int32_t p_s = prob_q15 (student, i, inv_t, student_state);
@@ -442,8 +480,6 @@ distill_backward (const Trainable & /*output*/,
             const int32_t delta
                 = log_prob_q7 (teacher, i, inv_t, teacher_state)
                   - log_prob_q7 (student, i, inv_t, student_state);
-            const int32_t kl_here = kl_sum_q7 (student, teacher, inv_t,
-                                               student_state, teacher_state);
             const int32_t outer
                 = q15_clamp (static_cast<int32_t> (
                     static_cast<int64_t> (delta - kl_here) << 8));

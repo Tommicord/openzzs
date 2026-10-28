@@ -27,6 +27,56 @@
 #include <cstdint>
 
 /**
+ * @brief Non-aliasing hint for the hot kernel pointer pairs.
+ *
+ * The training kernels read one buffer and write another that provably cannot
+ * overlap (both are carved from the same Pool at disjoint offsets), but the
+ * compiler cannot see that from a call boundary.  `__restrict__` / `__restrict`
+ * differ in spelling between GCC/Clang and MSVC, so the kernels use this one
+ * name; an unknown compiler gets the empty expansion and the same semantics.
+ */
+#if defined (__GNUC__) || defined (__clang__)
+#define ZZS_TRAIN_RESTRICT __restrict__
+#else
+#define ZZS_TRAIN_RESTRICT
+#endif
+
+/**
+ * @brief Tell the optimizer an invariant the loop bound cannot prove.
+ *
+ * Only used where a `Status` check above the loop already established the
+ * fact; a portable build simply drops the hint.
+ */
+#if defined (__clang__)
+#define ZZS_TRAIN_ASSUMPTION(expression) __builtin_assume (expression)
+#elif defined (__GNUC__)
+#define ZZS_TRAIN_ASSUMPTION(expression)                                 \
+    do                                                                  \
+        {                                                               \
+            if (!(expression))                                          \
+                __builtin_unreachable ();                               \
+        }                                                               \
+    while (false)
+#else
+#define ZZS_TRAIN_ASSUMPTION(expression)                                 \
+    do                                                                  \
+        {                                                               \
+        }                                                               \
+    while (false)
+#endif
+
+/**
+ * @brief Assert a pointer's alignment where the buffer is aligned by
+ *        construction (a Pool carve or an `alignas` frame array).
+ */
+#if (defined (__GNUC__) || defined (__clang__)) && !defined (__apple__)
+#define ZZS_TRAIN_ASSUME_ALIGNED(pointer, bytes)                         \
+    __builtin_assume_aligned ((pointer), (bytes))
+#else
+#define ZZS_TRAIN_ASSUME_ALIGNED(pointer, bytes) (pointer)
+#endif
+
+/**
  * @brief Tensor views shared by every training kernel.
  *
  * A trainable tensor is one int8 code stream plus one Q15 gradient lane per

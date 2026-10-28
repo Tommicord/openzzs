@@ -100,14 +100,27 @@
  *                          only for the max kinds;
  *   - saved spec         : sizeof (PoolSpec) rounded up to the pool alignment.
  *
- * The window loop itself lives in `_S_pool_window_max` stack slots (int16 lanes
- * plus a byte mask) because a bounded frame is what keeps the pooling backward
- * allocatable by a caller that cannot afford a plane.
+ * The window loop itself lives in `_S_pool_window_chunk` stack slots (int16 lanes
+ * plus a byte mask) inside `pool_backward_window`, refilled once per chunk of
+ * taps, because a bounded frame is what keeps the pooling backward allocatable by
+ * a caller that cannot afford a plane.  The max path takes a separate noinline
+ * child, so those slots never sit on the frame of a scatter that cannot use them.
  */
 namespace zzs::mllee::train
 {
 /** @brief Taps one fixed-window backward keeps on the frame. */
 inline constexpr uint32_t _S_pool_window_max = 64u;
+
+/**
+ * @brief Taps one fixed-window backward pass routes, a SIMD lane group.
+ *
+ * `_S_pool_window_max` is the widest window a layer may ask for; the backward
+ * does not reserve that many frame slots, it walks the window in chunks of this
+ * size.  Sixteen int16 lanes plus their mask is one 32-byte group, which is what
+ * the routing primitive wants, and it bounds the pooling backward's frame by a
+ * constant that does not grow with the layer.
+ */
+inline constexpr uint32_t _S_pool_window_chunk = 16u;
 
 /** @brief Saved slot holding the spec copy. */
 inline constexpr uint32_t _S_pool_spec = 0u;
@@ -216,6 +229,11 @@ struct PoolSpec
             return this->_M_out[axis];
         if (pool_is_global (this->_M_kind))
             return 1u;
+        /* A zero stride is a shape error `validate ()` reports, but the length
+           helpers run before it, so pin the divide here: 0 means "no output
+           positions", which validate already rejects. */
+        if (this->_M_stride[axis] == 0u)
+            return 0u;
         const int32_t span = static_cast<int32_t> (this->_M_in[axis])
                              + this->_M_pad[axis * 2u]
                              + this->_M_pad[axis * 2u + 1u]
@@ -571,6 +589,25 @@ pool_tap (const PoolSpec &spec, const PoolStrides &strides,
     return tap;
 }
 
+/**
+ * @brief Tap @p tap_index of a @p length1-wide window, counting in row order.
+ *
+ * The backward walks a window in chunks, so the tap loops are flattened; this is
+ * the row-major decomposition that keeps tap `q` the same tap the nested
+ * `t0 * length1 + t1` loop would have visited, which is what makes the chunked
+ * gradient -- and the order the lanes are added in -- identical.
+ */
+[[nodiscard]] inline constexpr PoolTap
+pool_window_tap (const PoolSpec &spec, const PoolStrides &strides,
+                 const PoolWindow &window, const uint32_t item,
+                 const uint32_t channel, const uint32_t tap_index,
+                 const uint32_t length1) noexcept
+{
+    const uint32_t t0 = length1 != 0u ? tap_index / length1 : 0u;
+    const uint32_t t1 = length1 != 0u ? tap_index % length1 : tap_index;
+    return pool_tap (spec, strides, window, item, channel, t0, t1);
+}
+
 /** @brief Bound a tensor against the count and rank @p spec expects. */
 [[nodiscard]] inline constexpr Status
 pool_check_operand (const Trainable &tensor, const uint32_t elements,
@@ -748,14 +785,205 @@ pool_forward (const PoolSpec &spec, const Trainable &input, Trainable &output,
 }
 
 /**
+ * @brief The max reductions: one plane-sized scatter per channel.
+ *
+ * The index stream is read by the primitive as "output flat -> winner plane",
+ * so it is `in_plane` long with its tail beyond `plane` set to the skip
+ * sentinel: two outputs that pick the same input (overlapping windows) then both
+ * land on it, which an inverse map could not express.  The staged lanes are the
+ * plane's own gradients, folded into the operand with saturating adds.  The
+ * three scratch slices come from the recorded slab, so this frame carries
+ * pointers only.
+ */
+[[nodiscard]] ZZS_MLLEE_NOINLINE inline Status
+pool_backward_max (const Trainable &grad_output, const Trainable &input,
+                   const PoolSpec &spec, const uint16_t *window_state,
+                   int8_t *const scratch, uint32_t &saturated) noexcept
+{
+    if (scratch == nullptr || !simd_aligned (scratch))
+        return Status::BAD_LAYOUT;
+    const uint32_t plane_bytes = align_up (2u * spec.in_plane (),
+                                           _S_pool_alignment);
+    int16_t *const lane_scratch = reinterpret_cast<int16_t *> (scratch);
+    uint16_t *const index_scratch
+        = reinterpret_cast<uint16_t *> (scratch + plane_bytes);
+    int16_t *const grad_stage
+        = reinterpret_cast<int16_t *> (scratch + 2u * plane_bytes);
+
+    const PoolStrides in_stride = pool_input_strides (spec);
+    const PoolStrides out_stride = pool_output_strides (spec);
+    const uint32_t plane = spec.out_plane ();
+    const uint32_t in_plane = spec.in_plane ();
+    const uint32_t in1 = spec._M_in[1];
+    const uint16_t sentinel = static_cast<uint16_t> (in_plane);
+
+    uint32_t cursor = 0u;
+    for (uint32_t item = 0; item < spec._M_batch; ++item)
+        for (uint32_t channel = 0; channel < spec._M_channels; ++channel)
+            {
+                for (uint32_t flat = 0; flat < plane; ++flat, ++cursor)
+                    {
+                        grad_stage[flat]
+                            = grad_output._M_grad[pool_output_element (
+                                  spec, out_stride, item, channel, flat)];
+                        const uint32_t q = window_state[cursor];
+                        if (q >= in_plane)
+                            return Status::BAD_LAYOUT;
+                        index_scratch[flat] = static_cast<uint16_t> (q);
+                    }
+                for (uint32_t q = plane; q < in_plane; ++q)
+                    index_scratch[q] = sentinel;
+                scatter_by_index (grad_stage, index_scratch, lane_scratch,
+                                  in_plane, saturated);
+                for (uint32_t q = 0u; q < in_plane; ++q)
+                    {
+                        if (lane_scratch[q] == 0)
+                            continue;
+                        const uint32_t a0 = in1 != 0u ? q / in1 : 0u;
+                        const uint32_t a1 = in1 != 0u ? q % in1 : q;
+                        if (input.add_grad (
+                                pool_element (in_stride, item, channel, a0, a1),
+                                lane_scratch[q]))
+                            ++saturated;
+                    }
+            }
+    return Status::OK;
+}
+
+/**
+ * @brief The average, adaptive and L2 reductions: one window broadcast per
+ *        output position.
+ *
+ * A fixed window builds its lane buffer and its in-border mask on the frame,
+ * routes them through `route_by_mask` and adds each surviving lane into the
+ * operand -- `_S_pool_window_chunk` taps at a time, so the frame is a constant
+ * however wide the layer is (`validate ()` still caps a window at
+ * `_S_pool_window_max` taps).  A global window covers the whole plane, every tap
+ * is inside by construction, so it takes the same route one tap at a time with no
+ * frame buffer at all.
+ */
+[[nodiscard]] ZZS_MLLEE_NOINLINE inline Status
+pool_backward_window (const Trainable &output, const Trainable &grad_output,
+                      const Trainable &input, const PoolSpec &spec,
+                      const uint16_t *window_state, const int8_t *input_codes,
+                      uint32_t &saturated) noexcept
+{
+    const PoolStrides in_stride = pool_input_strides (spec);
+    const PoolStrides out_stride = pool_output_strides (spec);
+    const uint32_t plane = spec.out_plane ();
+    const bool global = pool_is_global (spec._M_kind);
+    int16_t window_lanes[_S_pool_window_chunk];
+    uint8_t window_mask[_S_pool_window_chunk];
+
+    uint32_t cursor = 0u;
+    for (uint32_t item = 0; item < spec._M_batch; ++item)
+        for (uint32_t channel = 0; channel < spec._M_channels; ++channel)
+            for (uint32_t flat = 0; flat < plane; ++flat, ++cursor)
+                {
+                    const uint32_t out_element = pool_output_element (
+                        spec, out_stride, item, channel, flat);
+                    const int32_t grad = grad_output._M_grad[out_element];
+                    const PoolWindow window = pool_window (spec, flat);
+                    const uint32_t length0
+                        = global ? spec._M_in[0] : window._M_length[0];
+                    const uint32_t length1
+                        = global ? spec._M_in[1] : window._M_length[1];
+                    const uint32_t count = length0 * length1;
+                    /* validate () caps a fixed window at
+                       _S_pool_window_max taps, so a wider window is always a
+                       global one: it covers the whole plane, every tap is
+                       inside the border by construction, and no frame buffer
+                       or mask is needed. */
+                    if (count > _S_pool_window_max && !global)
+                        return Status::OUT_OF_RANGE;
+                    const uint32_t area = window_state[cursor];
+                    const int32_t y = output._M_code[out_element];
+                    if (global)
+                        {
+                            for (uint32_t t0 = 0; t0 < length0; ++t0)
+                                for (uint32_t t1 = 0; t1 < length1; ++t1)
+                                    {
+                                        const PoolTap tap = pool_tap (
+                                            spec, in_stride, window, item,
+                                            channel, t0, t1);
+                                        if (!tap._M_inside)
+                                            continue;
+                                        const int32_t value
+                                            = pool_is_l2 (spec._M_kind)
+                                                  ? input_codes[tap._M_element]
+                                                  : 0;
+                                        const int32_t lane = pool_window_lane (
+                                            spec, grad, area, y, value);
+                                        if (lane == 0)
+                                            continue;
+                                        if (input.add_grad (tap._M_element,
+                                                            lane))
+                                            ++saturated;
+                                    }
+                            continue;
+                        }
+                    /* The frame carries one chunk of taps, not the whole window:
+                       a 64-tap layer is four passes of `_S_pool_window_chunk`
+                       taps, so a wide window costs the same stack as a narrow
+                       one.  Row order is preserved across the chunks, so the
+                       lanes reach `add_grad` in exactly the sequence the whole
+                       window would have used. */
+                    for (uint32_t base = 0u; base < count;
+                         base += _S_pool_window_chunk)
+                        {
+                            const uint32_t length
+                                = count - base < _S_pool_window_chunk
+                                      ? count - base
+                                      : _S_pool_window_chunk;
+                            for (uint32_t k = 0u; k < length; ++k)
+                                {
+                                    const PoolTap tap = pool_window_tap (
+                                        spec, in_stride, window, item, channel,
+                                        base + k, length1);
+                                    const int32_t value
+                                        = tap._M_inside
+                                              ? input_codes[tap._M_element]
+                                              : 0;
+                                    window_lanes[k] = q15_to_i16_sat (
+                                        pool_window_lane (spec, grad, area, y,
+                                                          value));
+                                    window_mask[k] = tap._M_inside ? 1u : 0u;
+                                }
+                            route_by_mask (window_lanes, window_mask,
+                                           window_lanes, length);
+                            for (uint32_t k = 0u; k < length; ++k)
+                                {
+                                    if (window_lanes[k] == 0
+                                        || !window_mask[k])
+                                        continue;
+                                    const PoolTap tap = pool_window_tap (
+                                        spec, in_stride, window, item, channel,
+                                        base + k, length1);
+                                    if (input.add_grad (tap._M_element,
+                                                        window_lanes[k]))
+                                        ++saturated;
+                                }
+                        }
+                }
+    return Status::OK;
+}
+
+/**
  * @brief Backward pass in the `BackwardFn` signature.
  *
  * Recorded node layout: operands [input] (a second operand slot is kept empty so
  * a pooling node never looks like a two-tensor op); saved
- * [spec, window state, scratch | null, input copy | null].  Max scatters through
- * `scatter_by_index` and folds the plane into the operand; average, adaptive and
- * L2 broadcast the window gradient through `route_by_mask` and add each lane in,
- * and the global kinds do the same over the whole plane without a window bound.
+ * [spec, window state, scratch | null, input copy | null].
+ *
+ * The dispatch is deliberately thin.  A max node stages whole planes in recorded
+ * scratch and a windowed node keeps a chunk of taps on the frame, so one shared
+ * body would size the pooling backward for the sum of two paths that never run
+ * together; each child owns only its own buffers and this frame carries the
+ * validation both of them need.  Max scatters through
+ * `scatter_by_index`, average, adaptive and L2 broadcast through
+ * `route_by_mask`, and the global kinds do the same over the whole plane without
+ * a window bound.  Both paths accumulate -- they never overwrite the operand --
+ * and both count the lanes that clamped.
  */
 [[nodiscard]] inline Status
 pool_backward (const Trainable &output, const Trainable &grad_output,
@@ -764,179 +992,40 @@ pool_backward (const Trainable &output, const Trainable &grad_output,
     const PoolSpec *const slot = context.saved_as<PoolSpec> (_S_pool_spec);
     if (slot == nullptr)
         return Status::BAD_LAYOUT;
-    const PoolSpec spec = *slot;
-    const Status status = spec.validate ();
+    const Status status = slot->validate ();
     if (!status_ok (status))
         return status;
     if (context._M_operands == nullptr || context._M_operand_count < 1u)
         return Status::BAD_LAYOUT;
     const Trainable &input = context._M_operands[0];
-    if (output._M_count != spec.output_elements ()
-        || input._M_count != spec.input_elements ())
+    if (output._M_count != slot->output_elements ()
+        || input._M_count != slot->input_elements ())
         return Status::BAD_LAYOUT;
     if (grad_output._M_grad == nullptr)
         return Status::BAD_LAYOUT;
     if (input._M_grad == nullptr)
         return Status::OK;
-
-    const uint16_t *window_state = context.saved_as<uint16_t> (_S_pool_window);
+    const uint16_t *const window_state
+        = context.saved_as<uint16_t> (_S_pool_window);
     if (window_state == nullptr)
         return Status::BAD_LAYOUT;
-    const int8_t *saved_input = context.saved_as<int8_t> (_S_pool_input);
-    const int8_t *const input_codes
-        = saved_input != nullptr ? saved_input : input._M_code;
-    int16_t *lane_scratch = nullptr;
-    uint16_t *index_scratch = nullptr;
-    int16_t *grad_stage = nullptr;
-    if (pool_is_max (spec._M_kind))
-        {
-            int8_t *const scratch = context.saved_as<int8_t> (_S_pool_scratch);
-            if (scratch == nullptr || !simd_aligned (scratch))
-                return Status::BAD_LAYOUT;
-            const uint32_t plane_bytes
-                = align_up (2u * spec.in_plane (), _S_pool_alignment);
-            lane_scratch = reinterpret_cast<int16_t *> (scratch);
-            index_scratch
-                = reinterpret_cast<uint16_t *> (scratch + plane_bytes);
-            grad_stage = reinterpret_cast<int16_t *> (scratch + 2u * plane_bytes);
-        }
 
-    const PoolStrides in_stride = pool_input_strides (spec);
-    const PoolStrides out_stride = pool_output_strides (spec);
-    const uint32_t plane = spec.out_plane ();
-    const uint32_t in_plane = spec.in_plane ();
-    const uint32_t in1 = spec._M_in[1];
-    const bool global = pool_is_global (spec._M_kind);
-    const uint16_t sentinel = static_cast<uint16_t> (in_plane);
     uint32_t saturated = 0u;
-    int16_t window_lanes[_S_pool_window_max];
-    uint8_t window_mask[_S_pool_window_max];
-
-    uint32_t cursor = 0u;
-    for (uint32_t item = 0; item < spec._M_batch; ++item)
-        for (uint32_t channel = 0; channel < spec._M_channels; ++channel)
-            {
-                if (pool_is_max (spec._M_kind))
-                    {
-                        /* One scatter per channel plane.  The index stream is
-                           read by the primitive as "output flat -> winner plane",
-                           so it is `in_plane` long with its tail beyond `plane`
-                           set to the skip sentinel: two outputs that pick the same
-                           input (overlapping windows) then both land on it, which
-                           an inverse map could not express.  The staged lanes are
-                           the plane's own gradients, folded into the operand with
-                           saturating adds afterwards. */
-                        for (uint32_t flat = 0; flat < plane; ++flat, ++cursor)
-                            {
-                                grad_stage[flat]
-                                    = grad_output._M_grad[pool_output_element (
-                                          spec, out_stride, item, channel, flat)];
-                                const uint32_t q = window_state[cursor];
-                                if (q >= in_plane)
-                                    return Status::BAD_LAYOUT;
-                                index_scratch[flat] = static_cast<uint16_t> (q);
-                            }
-                        for (uint32_t q = plane; q < in_plane; ++q)
-                            index_scratch[q] = sentinel;
-                        scatter_by_index (grad_stage, index_scratch, lane_scratch,
-                                          in_plane, saturated);
-                        for (uint32_t q = 0u; q < in_plane; ++q)
-                            {
-                                if (lane_scratch[q] == 0)
-                                    continue;
-                                const uint32_t a0
-                                    = in1 != 0u ? q / in1 : 0u;
-                                const uint32_t a1 = in1 != 0u ? q % in1 : q;
-                                if (input.add_grad (
-                                        pool_element (in_stride, item, channel,
-                                                      a0, a1),
-                                        lane_scratch[q]))
-                                    ++saturated;
-                            }
-                        continue;
-                    }
-                for (uint32_t flat = 0; flat < plane; ++flat, ++cursor)
-                    {
-                        const uint32_t out_element = pool_output_element (
-                            spec, out_stride, item, channel, flat);
-                        const int32_t grad = grad_output._M_grad[out_element];
-                        const PoolWindow window = pool_window (spec, flat);
-                        const uint32_t length0
-                            = global ? spec._M_in[0] : window._M_length[0];
-                        const uint32_t length1
-                            = global ? spec._M_in[1] : window._M_length[1];
-                        const uint32_t count = length0 * length1;
-                        /* validate () caps a fixed window at
-                           _S_pool_window_max taps, so a wider window is always a
-                           global one: it covers the whole plane, every tap is
-                           inside the border by construction, and no frame buffer
-                           or mask is needed. */
-                        if (count > _S_pool_window_max && !global)
-                            return Status::OUT_OF_RANGE;
-                        const uint32_t area = window_state[cursor];
-                        const int32_t y = output._M_code[out_element];
-                        if (global)
-                            {
-                                for (uint32_t t0 = 0; t0 < length0; ++t0)
-                                    for (uint32_t t1 = 0; t1 < length1; ++t1)
-                                        {
-                                            const PoolTap tap = pool_tap (
-                                                spec, in_stride, window, item,
-                                                channel, t0, t1);
-                                            if (!tap._M_inside)
-                                                continue;
-                                            const int32_t value = pool_is_l2 (
-                                                                    spec._M_kind)
-                                                                        ? input_codes
-                                                                              [tap
-                                                                                   ._M_element]
-                                                                        : 0;
-                                            const int32_t lane = pool_window_lane (
-                                                spec, grad, area, y, value);
-                                            if (lane == 0)
-                                                continue;
-                                            if (input.add_grad (tap._M_element,
-                                                                lane))
-                                                ++saturated;
-                                        }
-                                continue;
-                            }
-                        uint32_t window_index = 0u;
-                        for (uint32_t t0 = 0; t0 < length0; ++t0)
-                            for (uint32_t t1 = 0; t1 < length1; ++t1)
-                                {
-                                    const PoolTap tap = pool_tap (
-                                        spec, in_stride, window, item, channel,
-                                        t0, t1);
-                                    const int32_t value
-                                        = tap._M_inside
-                                              ? input_codes[tap._M_element]
-                                              : 0;
-                                    window_lanes[window_index] = q15_to_i16_sat (
-                                        pool_window_lane (spec, grad, area, y,
-                                                          value));
-                                    window_mask[window_index]
-                                        = tap._M_inside ? 1u : 0u;
-                                    ++window_index;
-                                }
-                        route_by_mask (window_lanes, window_mask, window_lanes,
-                                       window_index);
-                        window_index = 0u;
-                        for (uint32_t t0 = 0; t0 < length0; ++t0)
-                            for (uint32_t t1 = 0; t1 < length1; ++t1, ++window_index)
-                                {
-                                    if (window_lanes[window_index] == 0
-                                        || !window_mask[window_index])
-                                        continue;
-                                    const PoolTap tap = pool_tap (
-                                        spec, in_stride, window, item, channel,
-                                        t0, t1);
-                                    if (input.add_grad (tap._M_element,
-                                                        window_lanes[window_index]))
-                                        ++saturated;
-                                }
-                    }
-            }
+    Status done;
+    if (pool_is_max (slot->_M_kind))
+        done = pool_backward_max (grad_output, input, *slot, window_state,
+                                  context.saved_as<int8_t> (_S_pool_scratch),
+                                  saturated);
+    else
+        {
+            const int8_t *const saved_input
+                = context.saved_as<int8_t> (_S_pool_input);
+            done = pool_backward_window (
+                output, grad_output, input, *slot, window_state,
+                saved_input != nullptr ? saved_input : input._M_code, saturated);
+        }
+    if (!status_ok (done))
+        return done;
     context._M_saturation_events += saturated;
     return Status::OK;
 }
@@ -963,7 +1052,6 @@ pool_run (Tape &tape, const PoolSpec &spec, const Trainable &input,
 
     Pool &pool = tape.pool ();
     Saved slots[_S_max_operands];
-    Trainable operands[_S_max_operands];
     uint8_t *raw = nullptr;
     Slab slab;
     const Status carve = pool.carve (spec.bytes (), 1u, slab);
@@ -981,7 +1069,7 @@ pool_run (Tape &tape, const PoolSpec &spec, const Trainable &input,
     // scratch regions are only stepped over here: `pool_backward` unpacks them
     // from the `_S_pool_scratch` handle at the offsets its header comment lists.
     uint32_t offset = 0u;
-    const uint32_t spec_bytes
+    constexpr uint32_t spec_bytes
         = align_up (static_cast<uint32_t> (sizeof (PoolSpec)),
                     _S_pool_alignment);
     {
@@ -1002,7 +1090,7 @@ pool_run (Tape &tape, const PoolSpec &spec, const Trainable &input,
     slots[_S_pool_spec]._M_offset = slab._M_offset;
     slots[_S_pool_spec]._M_bytes = spec_bytes;
     slots[_S_pool_spec]._M_count = 1u;
-    const uint32_t window_offset = spec_bytes;
+    constexpr uint32_t window_offset = spec_bytes;
     slots[_S_pool_window]._M_offset = slab._M_offset + window_offset;
     slots[_S_pool_window]._M_bytes
         = align_up (2u * spec.output_elements (), _S_pool_alignment);
@@ -1034,10 +1122,10 @@ pool_run (Tape &tape, const PoolSpec &spec, const Trainable &input,
         for (uint32_t i = 0; i < spec.input_elements (); ++i)
             saved_input[i] = input._M_code[i];
 
-    operands[0] = input;
-    for (uint32_t index = 1u; index < _S_max_operands; ++index)
-        operands[index] = Trainable{};
-    return tape.record (pool_backward, spec._M_op_id, output, operands, 1u,
+    // The node has one operand, so the tape reads the caller's `Trainable`
+    // directly; a copy into a `_S_max_operands` array here would only enlarge the
+    // frame the forward pass nests inside.
+    return tape.record (pool_backward, spec._M_op_id, output, &input, 1u,
                         slots, _S_max_operands);
 }
 } // namespace zzs::mllee::train

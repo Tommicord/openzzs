@@ -93,12 +93,16 @@ enum LayerFlag : uint8_t
     ATTN_CAUSAL = 1u << 4,
     CONV_DEPTHWISE = 1u << 5,
     NORM_INSTANCE = 1u << 6,
+    /** @brief ATTENTION: rotate Q/K with RoPE (head_dim must be even). */
+    ATTN_ROPE = 1u << 7,
+    /** @brief NORM: normalize (input + second arena operand) instead of input. */
+    NORM_RESIDUAL = 1u << 7,
 };
 
 inline constexpr uint8_t _S_model_version = 1;
 inline constexpr uint8_t _S_op_count = static_cast<uint8_t> (Op::COUNT);
 inline constexpr uint8_t _S_op_compat_min = 5;
-inline constexpr uint8_t _S_layer_flag_mask = 0x7Fu;
+inline constexpr uint8_t _S_layer_flag_mask = 0xFFu;
 inline constexpr uint32_t _S_model_header_size = 32;
 inline constexpr uint32_t _S_layer_desc_size = 48;
 
@@ -289,10 +293,27 @@ _S_act_param (const Layer &layer) noexcept
     return _S_aux_param (layer);
 }
 
+/**
+ * @brief Flash LUT size a float weight format needs, or 0 for integer formats.
+ *
+ * The LUT maps the on-disk code to the normalized int8 weight the MAC consumes:
+ * 8 entries for E1M1, 16 for E2M1 and 256 for either 8-bit float.
+ */
 [[nodiscard]] inline constexpr uint32_t
 _S_lut_bytes (const Dtype dtype) noexcept
 {
-    return dtype == Dtype::F4E2M1 ? 16u : (dtype == Dtype::F8E4M3 || dtype == Dtype::F8E5M2 ? 256u : 0u);
+    switch (dtype)
+        {
+        case Dtype::F3E1M1:
+            return 8u;
+        case Dtype::F4E2M1:
+            return 16u;
+        case Dtype::F8E4M3:
+        case Dtype::F8E5M2:
+            return 256u;
+        default:
+            return 0u;
+        }
 }
 
 [[nodiscard]] ZZS_MLLEE_NOINLINE inline Status
@@ -321,7 +342,7 @@ parse_header (const uint8_t *model, const uint32_t model_len, Header &header) no
 
     if (header._M_layer_count == 0)
         return Status::BAD_LAYOUT;
-    if (header._M_default_dtype > static_cast<uint8_t> (Dtype::F4E2M1))
+    if (header._M_default_dtype > _S_dtype_max)
         return Status::BAD_LAYOUT;
     if (header._M_arena_bytes > _S_arena_bytes)
         return Status::ARENA_OVERFLOW;
@@ -416,6 +437,15 @@ _S_validate_shape (const Layer &layer) noexcept
         case Op::ATTENTION:
             if (layer._M_head_dim == 0 || layer._M_seq == 0 || layer._M_groups > 16)
                 return Status::BAD_LAYOUT;
+            if (layer._M_head_dim > 8)
+                return Status::UNSUPPORTED;
+            /* `_M_in_dim` is unused by the op (the QKV span comes from seq and
+               head_dim), but the output is exactly one code per token/head. */
+            if (out_dim != static_cast<uint32_t> (layer._M_seq)
+                               * layer._M_head_dim * _S_heads (layer))
+                return Status::BAD_LAYOUT;
+            if ((layer._M_flags & ATTN_ROPE) != 0 && (layer._M_head_dim & 1u) != 0u)
+                return Status::BAD_LAYOUT;
             break;
         case Op::ACTIVATION:
         case Op::LINEAR:
@@ -438,6 +468,42 @@ _S_validate_shape (const Layer &layer) noexcept
     return Status::OK;
 }
 
+/**
+ * @brief Codes in one streamed weight row, or 0 when the op has no weight row.
+ *
+ * A packed row has to be byte-terminated before the next row starts, which for
+ * 3-bit formats means a multiple of 8 codes.  LINEAR streams one `in_dim`-long
+ * row per output channel, CONV1D one `tap_channels * kernel` row per output
+ * channel (a depthwise conv taps one channel) and EMBEDDING one `head_dim`-long
+ * table row per token.
+ */
+[[nodiscard]] inline constexpr uint32_t
+_S_weight_row_codes (const Layer &layer) noexcept
+{
+    switch (layer._M_op)
+        {
+        case Op::LINEAR:
+            return layer._M_in_dim;
+        case Op::CONV1D:
+            {
+                if (layer._M_head_dim == 0
+                    || layer._M_in_dim % layer._M_head_dim != 0)
+                    return 0;
+                const uint32_t in_channels = layer._M_in_dim / layer._M_head_dim;
+                if (in_channels == 0)
+                    return 0;
+                const uint32_t taps
+                    = (layer._M_flags & CONV_DEPTHWISE) != 0 ? 1u : in_channels;
+                const uint32_t kernel = layer._M_kernel != 0 ? layer._M_kernel : 1u;
+                return taps * kernel;
+            }
+        case Op::EMBEDDING:
+            return layer._M_head_dim;
+        default:
+            return 0;
+        }
+}
+
 [[nodiscard]] ZZS_MLLEE_NOINLINE inline Status
 parse_layer (const uint8_t *model, const uint32_t model_len, const uint32_t offset,
              Layer &layer) noexcept
@@ -446,8 +512,7 @@ parse_layer (const uint8_t *model, const uint32_t model_len, const uint32_t offs
         return Status::TRUNCATED;
     const uint8_t *const p = model + offset;
     if (p[0] >= static_cast<uint8_t> (Op::COUNT) || p[1] >= static_cast<uint8_t> (Act::COUNT)
-        || p[2] > static_cast<uint8_t> (Dtype::F4E2M1)
-        || p[3] > static_cast<uint8_t> (Codec::PACKLOW))
+        || p[2] > _S_dtype_max || p[3] > static_cast<uint8_t> (Codec::PACKLOW))
         return Status::BAD_LAYOUT;
     if ((p[14] & ~_S_layer_flag_mask) != 0)
         return Status::BAD_LAYOUT;
@@ -507,12 +572,25 @@ parse_layer (const uint8_t *model, const uint32_t model_len, const uint32_t offs
             if (layer._M_weight_len == 0
                 || !_S_span_ok (layer._M_weight_off, layer._M_weight_len, model_len))
                 return Status::BAD_LAYOUT;
+            /* A 3-bit row is only byte-terminated at a multiple of 8 codes; an
+               unaligned one would share its final byte with the next row (or
+               with the codec header), so reject it instead of mis-decoding. */
+            if (const uint32_t row_codes = _S_weight_row_codes (layer);
+                row_codes != 0 && !_S_codes_aligned (layer._M_dtype, row_codes))
+                return Status::BAD_LAYOUT;
         }
     if (const uint32_t lut_bytes = _S_lut_bytes (layer._M_dtype);
         lut_bytes != 0
         && (layer._M_lut_off == 0 || !_S_span_ok (layer._M_lut_off, lut_bytes, model_len)))
         return Status::BAD_LAYOUT;
     if (_S_two_operand (op))
+        {
+            const uint32_t second
+                = _S_in2_len (layer) != 0 ? _S_in2_len (layer) : layer._M_in_dim;
+            if (!_S_span_ok (_S_in2_off (layer), second, _S_arena_bytes))
+                return Status::ARENA_OVERFLOW;
+        }
+    if (op == Op::NORM && (layer._M_flags & NORM_RESIDUAL) != 0)
         {
             const uint32_t second
                 = _S_in2_len (layer) != 0 ? _S_in2_len (layer) : layer._M_in_dim;

@@ -78,3 +78,5 @@
 #include "mllee/train_regularization.hpp"
 #include "mllee/train_running_stats.hpp"
 #include "mllee/train_softmax.hpp"
+#include "mllee/train_attention.hpp"
+#include "mllee/train_norm.hpp"

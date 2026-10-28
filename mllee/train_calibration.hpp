@@ -196,8 +196,8 @@ struct CalibHistogram
     }
 
     /** @brief Largest magnitude any occupied bin's edge represents. */
-    [[nodiscard]] constexpr int32_t
-    bin_magnitude (const uint32_t bin) const noexcept
+    [[nodiscard]] static constexpr int32_t
+    bin_magnitude (const uint32_t bin) noexcept
     {
         return CalibHistogram::bin_center (bin) < 0
                    ? -CalibHistogram::bin_lower (bin)
@@ -336,10 +336,12 @@ static_assert (sizeof (CalibLayout) == 16u,
 [[nodiscard]] inline constexpr Status
 calib_layout (const Shape &shape, const uint16_t axis, CalibLayout &out) noexcept
 {
+    /* Cleared first: any refusal, including one raised before the axis is even
+       looked at, leaves the caller's layout marked stale. */
+    out._M_valid = 0u;
     const Status shape_status = shape.validate ();
     if (!status_ok (shape_status))
         return shape_status;
-    out._M_valid = 0u;
     const uint32_t count = shape.elements ();
     if (axis == _S_calib_per_tensor)
         {
@@ -366,7 +368,16 @@ calib_layout (const Shape &shape, const uint16_t axis, CalibLayout &out) noexcep
     return Status::OK;
 }
 
-/** @brief Fold one batch into an axis-wise observer array: one pass per run. */
+/**
+ * @brief Fold one batch into an axis-wise observer array: one pass per run.
+ *
+ * The walk is channel-major -- every run of one channel is folded into one
+ * histogram before the next channel starts -- which is both what an axis-wise
+ * observer means and what keeps the routing arithmetic free of division: the
+ * run's channel is the loop counter, not a quotient of the byte offset.  A
+ * buffer whose length is not a whole number of periods ends in a short run of
+ * the channel that owns it.
+ */
 [[nodiscard]] inline Status
 calib_observe_axiswise (CalibHistogram *const histograms,
                         const CalibLayout &layout, const int16_t *const values,
@@ -379,25 +390,35 @@ calib_observe_axiswise (CalibHistogram *const histograms,
     if (layout._M_run == 0u || layout._M_period == 0u
         || layout._M_channels == 0u)
         return Status::BAD_LAYOUT;
-    uint32_t start = 0u;
-    while (start < layout._M_count)
+    /* A period that is not exactly the channel runs packed end to end would
+       leave elements no channel owns: the walk would either skip them or read
+       past the caller's histogram array. */
+    if (static_cast<uint64_t> (layout._M_channels) * layout._M_run
+        != layout._M_period)
+        return Status::BAD_LAYOUT;
+    const uint32_t run = layout._M_run;
+    const uint32_t period = layout._M_period;
+    for (uint32_t channel = 0u; channel < layout._M_channels; ++channel)
         {
-            const uint32_t channel
-                = (start % layout._M_period) / layout._M_run;
-            if (channel >= layout._M_channels)
-                return Status::BAD_LAYOUT;
-            const uint32_t available = layout._M_count - start;
-            const uint32_t run
-                = layout._M_run < available ? layout._M_run : available;
-            const Status status
-                = values != nullptr
-                      ? calib_observe_lanes (histograms[channel],
-                                             values + start, run)
-                      : calib_observe_codes (histograms[channel], codes + start,
-                                             run);
-            if (!status_ok (status))
-                return status;
-            start += run;
+            CalibHistogram &histogram = histograms[channel];
+            uint32_t folded = 0u;
+            for (uint32_t start = channel * run; start < layout._M_count;
+                 start += period)
+                {
+                    const uint32_t available = layout._M_count - start;
+                    const uint32_t length = run < available ? run : available;
+                    if (values != nullptr)
+                        for (uint32_t i = 0; i < length; ++i)
+                            calib_fold_q15 (histogram, values[start + i]);
+                    else
+                        for (uint32_t i = 0; i < length; ++i)
+                            calib_fold_q15 (histogram,
+                                            code_to_q15 (codes[start + i]));
+                    folded += length;
+                }
+            /* One call is one batch per channel, however many runs it walked. */
+            if (folded != 0u && histogram._M_batches < 0xFFFFu)
+                ++histogram._M_batches;
         }
     return Status::OK;
 }

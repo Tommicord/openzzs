@@ -41,7 +41,10 @@ inline constexpr uint8_t _S_pk_prob_shift = 5;
 inline constexpr uint8_t _S_pk_flag_delta = 1u << 0;
 inline constexpr uint8_t _S_pk_flag_dict = 1u << 1;
 inline constexpr uint8_t _S_pk_raw = 1u << 0;
-inline constexpr uint8_t _S_pk_half = 1u << 1;
+/** @brief Low flag bits the codec owns; the high nibble stores the reader fill count. */
+inline constexpr uint8_t _S_pk_flag_mask = 0x0Fu;
+/** @brief Shift of the 4-bit weight-reader reservoir fill count in `_M_flags`. */
+inline constexpr uint8_t _S_pk_res_shift = 4u;
 inline constexpr int32_t _S_pk_error = -1000;
 
 enum _S_PkProb : uint8_t
@@ -76,11 +79,18 @@ enum _S_PkKind : uint8_t
 };
 
 /**
- * @brief Decoder state.  Exactly 116 bytes on a 32-bit target.
+ * @brief Decoder state.  Exactly 124 bytes on a 32-bit target.
  *
  * The 64-byte ring is both the LZ window and the weight staging buffer used by
  * the convolution kernel: a whole output row is decoded into the ring and then
  * consumed before the next row is decoded.
+ *
+ * The weight reader carries a 16-bit LSB-first bit reservoir in `_M_res_lo` /
+ * `_M_res_hi` and a 4-bit fill count in the high nibble of `_M_flags`.  That
+ * lets it read 2-, 3-, 4- and 8-bit codes one at a time without assuming a code
+ * fits inside a byte; a 3-bit code that straddles a byte boundary is assembled
+ * by the refill shift.  The two reservoir bytes reuse the old nibble byte and
+ * its tail padding, so the 32-bit footprint stays at 124 bytes.
  */
 struct PacklowState
 {
@@ -101,8 +111,9 @@ struct PacklowState
     uint8_t _M_dist;
     uint8_t _M_status;
     uint8_t _M_dtype;
-    uint8_t _M_nibble;
+    uint8_t _M_res_lo;
     uint8_t _M_flags;
+    uint8_t _M_res_hi;
 };
 
 static_assert (sizeof (PacklowState) <= 136, "mllee packlow state exceeds its RAM budget");
@@ -464,14 +475,29 @@ _S_pk_next (PacklowState &state, const uint8_t *model, const uint8_t *dict,
         }
 }
 
-/** @brief Arm the weight reader: LUT and dtype live in the codec state, no extra struct. */
+/**
+ * @brief Arm the weight reader: LUT and dtype live in the codec state, no extra struct.
+ *
+ * The reservoir is cleared here so a reader reused across tensors never starts
+ * with leftover bits from the previous stream.  Low codec flags (the raw-stream
+ * marker) are preserved; the high nibble is the reservoir fill count.
+ */
 inline void
 _S_rd_begin (PacklowState &state, const int8_t *lut, const Dtype dtype) noexcept
 {
     state._M_lut = lut;
     state._M_dtype = static_cast<uint8_t> (dtype);
-    state._M_nibble = 0;
-    state._M_flags = static_cast<uint8_t> (state._M_flags & ~_S_pk_half);
+    state._M_flags = static_cast<uint8_t> (state._M_flags & _S_pk_flag_mask);
+    state._M_res_lo = 0;
+    state._M_res_hi = 0;
+}
+
+/** @brief Offset of the `row_bytes` tile the kernel just staged into the ring. */
+[[nodiscard]] ZZS_MLLEE_INLINE uint32_t
+_S_rd_staged_start (const PacklowState &state, const uint32_t row_bytes) noexcept
+{
+    return (static_cast<uint32_t> (state._M_ring_pos) + _S_pk_window_bytes - row_bytes)
+           & (_S_pk_window_bytes - 1u);
 }
 
 [[nodiscard]] ZZS_MLLEE_INLINE int32_t
@@ -490,58 +516,208 @@ _S_rd_byte (PacklowState &state, const uint8_t *model, const uint8_t *dict,
     return byte;
 }
 
+/**
+ * @brief Batch decode: fill the next `bytes` stream bytes into the ring.
+ *
+ * The ring doubles as the weight staging buffer, so a kernel can load a whole
+ * row here and then run its multiply-accumulate over the staged bytes (or over
+ * `simd::dot_i8` when the row is contiguous) instead of paying a full range
+ * decode inside the MAC loop.
+ */
+[[nodiscard]] ZZS_MLLEE_INLINE Status
+_S_pk_decode_into (PacklowState &state, const uint8_t *model, const uint8_t *dict,
+                   const uint16_t dict_len, const uint32_t bytes) noexcept
+{
+    for (uint32_t i = 0; i < bytes; ++i)
+        if (_S_pk_next (state, model, dict, dict_len) < 0)
+            {
+                if (static_cast<Status> (state._M_status) == Status::OK)
+                    _S_pk_set_status (state, Status::TRUNCATED);
+                return _S_pk_status (state);
+            }
+    return _S_pk_status (state);
+}
+
+/** @brief Staging entry point for a weight reader: `bytes` raw stream bytes. */
+[[nodiscard]] ZZS_MLLEE_INLINE Status
+_S_rd_into (PacklowState &state, const uint8_t *model, const uint8_t *dict,
+            const uint16_t dict_len, const uint32_t bytes) noexcept
+{
+    if (static_cast<Status> (state._M_status) != Status::OK)
+        return _S_pk_status (state);
+    return _S_pk_decode_into (state, model, dict, dict_len, bytes);
+}
+
+/** @brief Buffered bits, 0..15, stored in the high nibble of `_M_flags`. */
+[[nodiscard]] ZZS_MLLEE_INLINE uint8_t
+_S_rd_res_bits (const PacklowState &state) noexcept
+{
+    return static_cast<uint8_t> (state._M_flags >> _S_pk_res_shift);
+}
+
+/** @brief Reservoir value; bit 0 is the next bit of the code stream. */
+[[nodiscard]] ZZS_MLLEE_INLINE uint16_t
+_S_rd_res_value (const PacklowState &state) noexcept
+{
+    return static_cast<uint16_t> (static_cast<uint16_t> (state._M_res_lo)
+                                  | (static_cast<uint16_t> (state._M_res_hi) << 8));
+}
+
+/** @brief Store the reservoir and fill count, preserving the low codec flags. */
+inline void
+_S_rd_set_res (PacklowState &state, const uint16_t value, const uint8_t bits) noexcept
+{
+    state._M_res_lo = static_cast<uint8_t> (value & 0xFFu);
+    state._M_res_hi = static_cast<uint8_t> (value >> 8);
+    state._M_flags = static_cast<uint8_t> (
+        (state._M_flags & _S_pk_flag_mask)
+        | (static_cast<uint8_t> (bits << _S_pk_res_shift) & ~_S_pk_flag_mask));
+}
+
+/**
+ * @brief Resolve one raw code through the reader's dtype and LUT.
+ *
+ * Integer formats sign-extend from `_S_code_bits`, so I8/I4/I3/I2 share one
+ * path and 3-bit values decode as -4..3.  Float formats index the 8/16/256-entry
+ * Flash LUT (E1M1/E2M1/E4M3/E5M2); a float reader without a LUT falls back to
+ * the integer interpretation, matching the historical behaviour, but the
+ * validator rejects such a blob before it reaches the runtime.
+ */
+[[nodiscard]] ZZS_MLLEE_INLINE int32_t
+_S_code_of (const PacklowState &state, const uint32_t code) noexcept
+{
+    const Dtype dtype = static_cast<Dtype> (state._M_dtype);
+    const uint32_t field = code & _S_code_mask (dtype);
+    if (state._M_lut != nullptr)
+        return state._M_lut[field];
+    return _S_from_int_bits (field, _S_code_bits (dtype));
+}
+
+/**
+ * @brief Stage the next weight row: `bytes` stream bytes, in one move.
+ *
+ * A raw row already lies contiguous in Flash, so the reader only advances its
+ * cursor; a packlow row is decoded into the 64-byte ring, which doubles as the
+ * staging buffer.  Either way the row itself is addressed through the reader
+ * state, so a kernel's MAC loop carries no staging buffer of its own.
+ */
+[[nodiscard]] ZZS_MLLEE_INLINE Status
+_S_rd_row (PacklowState &state, const uint8_t *model, const uint8_t *dict,
+           const uint16_t dict_len, const uint32_t bytes) noexcept
+{
+    if ((state._M_flags & _S_pk_raw) != 0)
+        {
+            if (static_cast<Status> (state._M_status) != Status::OK)
+                return _S_pk_status (state);
+            if (bytes > state._M_remaining || state._M_src_off > state._M_src_end
+                || bytes > state._M_src_end - state._M_src_off)
+                {
+                    _S_pk_set_status (state, Status::TRUNCATED);
+                    return Status::TRUNCATED;
+                }
+            state._M_src_off += bytes;
+            state._M_remaining -= bytes;
+            return Status::OK;
+        }
+    return _S_rd_into (state, model, dict, dict_len, bytes);
+}
+
+/** @brief Byte `index` of the row the reader just staged, wherever it lives. */
+[[nodiscard]] ZZS_MLLEE_INLINE uint8_t
+_S_rd_row_byte (const PacklowState &state, const uint8_t *const model,
+                const uint32_t index, const uint32_t row_bytes) noexcept
+{
+    if ((state._M_flags & _S_pk_raw) != 0)
+        return model[state._M_src_off - row_bytes + index];
+    return state._M_ring[(_S_rd_staged_start (state, row_bytes) + index)
+                         & (_S_pk_window_bytes - 1u)];
+}
+
+/**
+ * @brief Code `index` of the staged row, bit-packed LSB-first.
+ *
+ * Byte-divisible formats land inside one byte; a 3-bit code can straddle two
+ * adjacent bytes of the same row, so the pair is folded into a 16-bit word
+ * before the shift.  Rows are byte-terminated (the validator requires an
+ * 8-code multiple for 3-bit), so a code never reads past `row_bytes`; the guard
+ * keeps a malformed row from touching the next ring byte.
+ */
+[[nodiscard]] ZZS_MLLEE_INLINE int32_t
+_S_rd_row_code (const PacklowState &state, const uint8_t *const model,
+                const uint32_t index, const uint32_t row_bytes) noexcept
+{
+    const Dtype dtype = static_cast<Dtype> (state._M_dtype);
+    const uint32_t bits = _S_code_bits (dtype);
+    const uint32_t bit = index * bits;
+    const uint32_t byte_index = bit >> 3;
+    if (byte_index >= row_bytes)
+        return 0;
+    const uint32_t shift = bit & 7u;
+    uint32_t word = _S_rd_row_byte (state, model, byte_index, row_bytes);
+    if (shift + bits > 8u && byte_index + 1u < row_bytes)
+        word |= static_cast<uint32_t> (
+                    _S_rd_row_byte (state, model, byte_index + 1u, row_bytes))
+                << 8;
+    return _S_code_of (state, (word >> shift) & ((1u << bits) - 1u));
+}
+
+/** @brief Byte count the staged row occupies, one code per byte. */
+[[nodiscard]] ZZS_MLLEE_INLINE uint32_t
+_S_rd_row_head (const PacklowState &state, const uint32_t row_bytes) noexcept
+{
+    const uint32_t start = _S_rd_staged_start (state, row_bytes);
+    return _S_pk_window_bytes - start < row_bytes ? _S_pk_window_bytes - start : row_bytes;
+}
+
+/**
+ * @brief Refill the reservoir until it holds `bits` bits, then pop one code.
+ *
+ * The byte stream is LSB-first, the same order `_S_pack_code_at` writes, so a
+ * 3-bit code that starts in one byte and ends in the next is assembled by the
+ * shift with no special case.  At most seven bits are left over when a refill
+ * starts, so `have + 8 <= 15` and a uint16 reservoir is sufficient.  Groups and
+ * rows do not have to be byte-aligned: the leftover bits simply carry into the
+ * next code, which is exactly what an unaligned 3-bit group needs.
+ */
+[[nodiscard]] ZZS_MLLEE_INLINE bool
+_S_rd_bits (PacklowState &state, const uint8_t *model, const uint8_t *dict,
+            const uint16_t dict_len, const uint32_t bits, uint32_t &code) noexcept
+{
+    uint8_t have = _S_rd_res_bits (state);
+    uint16_t reservoir = _S_rd_res_value (state);
+    while (have < bits)
+        {
+            const int32_t byte = _S_rd_byte (state, model, dict, dict_len);
+            if (byte == _S_pk_error)
+                return false;
+            reservoir = static_cast<uint16_t> (
+                reservoir
+                | (static_cast<uint16_t> (static_cast<uint8_t> (byte)) << have));
+            have = static_cast<uint8_t> (have + 8u);
+        }
+    code = static_cast<uint32_t> (reservoir) & ((1u << bits) - 1u);
+    reservoir = static_cast<uint16_t> (reservoir >> bits);
+    have = static_cast<uint8_t> (have - bits);
+    _S_rd_set_res (state, reservoir, have);
+    return true;
+}
+
+/**
+ * @brief Decode the next weight code through the dtype/LUT, one bit-field at a time.
+ *
+ * Works for 8-, 4-, 3- and 2-bit codes; the reservoir carries a partially
+ * consumed byte across calls, so group sizes need not be multiples of the
+ * codes-per-byte value (which does not exist for 3-bit anyway).
+ */
 [[nodiscard]] ZZS_MLLEE_INLINE int32_t
 _S_rd_code (PacklowState &state, const uint8_t *model, const uint8_t *dict,
             const uint16_t dict_len) noexcept
 {
-    const bool packed = state._M_dtype == static_cast<uint8_t> (Dtype::I4)
-                        || state._M_dtype == static_cast<uint8_t> (Dtype::F4E2M1);
-    if (packed)
-        {
-            uint8_t nibble;
-            if ((state._M_flags & _S_pk_half) == 0)
-                {
-                    const int32_t byte = _S_rd_byte (state, model, dict, dict_len);
-                    if (byte == _S_pk_error)
-                        return _S_pk_error;
-                    state._M_nibble = static_cast<uint8_t> (byte);
-                    state._M_flags = static_cast<uint8_t> (state._M_flags | _S_pk_half);
-                    nibble = static_cast<uint8_t> (byte & 0x0F);
-                }
-            else
-                {
-                    nibble = static_cast<uint8_t> ((state._M_nibble >> 4) & 0x0F);
-                    state._M_flags = static_cast<uint8_t> (state._M_flags & ~_S_pk_half);
-                }
-            return state._M_lut != nullptr ? state._M_lut[nibble] : _S_from_int4 (nibble);
-        }
-    const int32_t byte = _S_rd_byte (state, model, dict, dict_len);
-    if (byte == _S_pk_error)
+    const Dtype dtype = static_cast<Dtype> (state._M_dtype);
+    uint32_t code = 0;
+    if (!_S_rd_bits (state, model, dict, dict_len, _S_code_bits (dtype), code))
         return _S_pk_error;
-    if (state._M_lut != nullptr)
-        return state._M_lut[static_cast<uint8_t> (byte)];
-    return static_cast<int8_t> (static_cast<uint8_t> (byte));
-}
-
-/** @brief Read a code from the current 64-byte weight row staged in the ring. */
-[[nodiscard]] ZZS_MLLEE_INLINE int32_t
-_S_rd_staged (const PacklowState &state, const uint32_t index, const uint32_t row_bytes) noexcept
-{
-    const uint32_t start =
-        (static_cast<uint32_t> (state._M_ring_pos) + _S_pk_window_bytes - row_bytes)
-        & (_S_pk_window_bytes - 1u);
-    if (state._M_dtype == static_cast<uint8_t> (Dtype::I4)
-        || state._M_dtype == static_cast<uint8_t> (Dtype::F4E2M1))
-        {
-            const uint8_t byte =
-                state._M_ring[(start + (index >> 1)) & (_S_pk_window_bytes - 1u)];
-            const uint8_t nibble =
-                (index & 1u) != 0 ? static_cast<uint8_t> ((byte >> 4) & 0x0F)
-                                  : static_cast<uint8_t> (byte & 0x0F);
-            return state._M_lut != nullptr ? state._M_lut[nibble] : _S_from_int4 (nibble);
-        }
-    const uint8_t byte = state._M_ring[(start + index) & (_S_pk_window_bytes - 1u)];
-    return state._M_lut != nullptr ? state._M_lut[byte] : static_cast<int8_t> (byte);
+    return _S_code_of (state, code);
 }
 
 struct PacklowStats

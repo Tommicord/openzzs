@@ -54,7 +54,7 @@ if (( is_arm == 0 )); then
     core_bytes=${core_bytes:-0}
 else
     # The 32-bit layout is enforced by static_assert in mllee_size_check.cpp.
-    echo "layout: 32-bit assertions passed (Core == 640, Workspace == 192, PacklowState == 124)"
+    echo "layout: 32-bit assertions passed (Core == 640, Workspace == 192, PacklowState == 124, onnx::Loader == 116)"
     core_bytes=640
 fi
 
@@ -85,9 +85,24 @@ parse=$(frame "parse_layer(")
 pk_next=$(frame "_S_pk_next(")
 rd_code=$(frame "_S_rd_code(")
 rd_byte=$(frame "_S_rd_byte(")
+rd_dot_i8=$(frame "_S_rd_row_dot_i8(")
+rd_dot_packed=$(frame "_S_rd_row_dot_packed(")
+rd_packed_dot=$(frame "_S_packed_dot(")
 
-weight=$((run + execute + conv + rd_code + rd_byte + pk_next))
-linear_chain=$((run + execute + linear + rd_code + rd_byte + pk_next))
+# The codec reader and the vector dot are sibling children of a kernel: a row is
+# either decoded a code at a time or expanded in SIMD groups, never both at
+# once.  The vector child is format-dependent, so conv1d (I8 only) and linear
+# (I8 or packed) take their own maximum.
+codec_child=$((rd_code + rd_byte + pk_next))
+packed_child=$((rd_dot_packed + rd_packed_dot))
+conv_child=$rd_dot_i8
+(( codec_child > conv_child )) && conv_child=$codec_child
+linear_child=$rd_dot_i8
+(( packed_child > linear_child )) && linear_child=$packed_child
+(( codec_child > linear_child )) && linear_child=$codec_child
+
+weight=$((run + execute + conv + conv_child))
+linear_chain=$((run + execute + linear + linear_child))
 attention_chain=$((run + execute + attention))
 norm_chain=$((run + execute + norm))
 softmax_chain=$((run + execute + softmax))

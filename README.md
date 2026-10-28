@@ -40,7 +40,7 @@ Memory Management Strategy
     Memory Pooling: Implements memory pooling for frequent allocations
     Memory-Mapped Tensors: Support for memory-mapped tensors for large models
     Gradient Checkpointing: Memory-efficient training for large models
-    Quantization Support: int4/int8 quantization for memory-constrained devices
+    Quantization Support: int8/int4/int3/int2 and fp8/fp4/fp3 quantization for memory-constrained devices
 
 Power Outage Detection Pipeline
 

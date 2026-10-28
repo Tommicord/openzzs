@@ -46,6 +46,8 @@ echo "mllee M4 self-test: $cxx on $qemu (mps2-an385)"
     -o "$out/train_lanes.o"
 "$cc" "${arch[@]}" -c "$root"/mllee/asm-cortex-m4/mllee_train_q15_mac_cortex_m4.S \
     -o "$out/train_mac.o"
+"$cc" "${arch[@]}" -c "$root"/mllee/asm-cortex-m4/mllee_onnx_wire_cortex_m4.S \
+    -o "$out/onnx_wire.o"
 "$cxx" "${flags[@]}" -ffreestanding -c "$root/tools/mllee_m4_selftest.cpp" \
     -o "$out/selftest.o"
 "$cc" "${arch[@]}" -c "$root/tools/mllee_m4_startup.S" -o "$out/startup.o"
@@ -53,7 +55,7 @@ echo "mllee M4 self-test: $cxx on $qemu (mps2-an385)"
 "$cxx" "${arch[@]}" -nostdlib -nostartfiles -Wl,--gc-sections -Wl,-z,noexecstack \
     -T "$root/tools/mllee_m4.ld" \
     "$out/startup.o" "$out/selftest.o" "$out/mac.o" "$out/reduce.o" "$out/expand.o" \
-    "$out/train_lanes.o" "$out/train_mac.o" \
+    "$out/train_lanes.o" "$out/train_mac.o" "$out/onnx_wire.o" \
     -o "$out/selftest.elf"
 
 output=$(timeout 120 "$qemu" -machine mps2-an385 -nographic -semihosting \

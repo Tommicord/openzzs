@@ -133,6 +133,19 @@ inline constexpr uint32_t _S_conv_pre = 2u;
 /** @brief Saved slot holding the single combined scratch slab. */
 inline constexpr uint32_t _S_conv_scratch = 3u;
 
+/** @brief Saved slots this op carves: spec, input, pre-activation, scratch. */
+inline constexpr uint32_t _S_conv_saved = 4u;
+
+/**
+ * @brief Operand slots this op records: input, weight, bias.
+ *
+ * `Tape::record` reads exactly `operand_count` entries of the array it is given,
+ * so the run frame declares the op's own arity (3) rather than the tape's
+ * `_S_max_operands` (4): a 40-byte Trainable row is the largest item on this
+ * frame and the conv chain is the one the RAM gate measures.
+ */
+inline constexpr uint32_t _S_conv_operands = 3u;
+
 /** @brief Element order of the spatial axes. */
 enum class ConvLayout : uint8_t
 {
@@ -500,6 +513,179 @@ conv_check_operand (const Trainable &tensor, const uint32_t elements,
 }
 
 /**
+ * @brief im2col for one (batch item, group) block.
+ *
+ * @p collection receives `rows * taps` codes, one row per output position and
+ * one column per (channel, tap0, tap1) triple in the weight's own order.  The
+ * walk is row-major: `rows` is decomposed into (a0, a1) by the loop nest, so no
+ * element ever divides by the output width, and a tap whose source coordinate
+ * leaves the real border writes code 0 (a whole tap1 run at once, which is the
+ * padded row case) and is never read.
+ *
+ * The frame is bounded and the function is outlined so the collection's loop
+ * counters do not stack up with the requantization epilogue's on the caller's
+ * frame: `Trainer::step -> conv_run -> conv_forward -> collect` is the deepest
+ * forward chain the conv gate measures.
+ */
+ZZS_MLLEE_NOINLINE inline void
+conv_collect_block (const ConvSpec &spec, const int8_t *const ZZS_TRAIN_RESTRICT codes,
+                    int8_t *const ZZS_TRAIN_RESTRICT collection,
+                    const ConvStrides &in_stride, const uint32_t item,
+                    const uint32_t group) noexcept
+{
+    const uint32_t rows = spec.rows ();
+    const uint32_t taps = spec.taps ();
+    const uint32_t out0 = spec.out_length (0u);
+    const uint32_t out1 = spec.out_length (1u);
+    const uint32_t in_pg = spec.in_per_group ();
+    const uint32_t in0 = spec._M_in[0];
+    const uint32_t in1 = spec._M_in[1];
+    const uint32_t k0 = spec._M_kernel[0];
+    const uint32_t k1 = spec._M_kernel[1];
+    const uint32_t step0 = spec._M_stride[0];
+    const uint32_t step1 = spec._M_stride[1];
+    const uint32_t dil0 = spec._M_dilation[0];
+    const uint32_t dil1 = spec._M_dilation[1];
+    const uint32_t axis0 = in_stride._M_axis0;
+    const uint32_t axis1 = in_stride._M_axis1;
+    const uint32_t channel_stride = in_stride._M_channel;
+    const int32_t pad0 = spec._M_pad[0];
+    const int32_t pad2 = spec._M_pad[2];
+    /* `taps = in_per_group * k0 * k1` and `rows = out0 * out1` by construction
+       (validate), so the row cursor below cannot pass the slab. */
+    ZZS_TRAIN_ASSUMPTION (rows == out0 * out1 && taps == in_pg * k0 * k1);
+    const uint32_t plane_base = item * in_stride._M_batch
+                                + group * in_pg * channel_stride;
+    uint32_t row = 0u;
+    for (uint32_t a0 = 0; a0 < out0; ++a0)
+        {
+            const int32_t origin0 = static_cast<int32_t> (a0 * step0) - pad0;
+            for (uint32_t a1 = 0; a1 < out1; ++a1, ++row)
+                {
+                    const int32_t origin1 = static_cast<int32_t> (a1 * step1) - pad2;
+                    int8_t *const ZZS_TRAIN_RESTRICT destination
+                        = collection + row * taps;
+                    uint32_t column = 0u;
+                    for (uint32_t channel = 0; channel < in_pg; ++channel)
+                        {
+                            /* Input addressing comes from the source coordinates
+                               alone (`origin*` plus the tap offset), exactly as
+                               `conv_element`'s (source0, source1) arguments. */
+                            const uint32_t channel_base
+                                = plane_base + channel * channel_stride;
+                            for (uint32_t tap0 = 0; tap0 < k0; ++tap0)
+                                {
+                                    const int32_t source0 = origin0
+                                                            + static_cast<int32_t> (
+                                                                  tap0 * dil0);
+                                    const bool inside0 = source0 >= 0
+                                                         && static_cast<uint32_t> (
+                                                               source0)
+                                                             < in0;
+                                    if (!inside0)
+                                        {
+                                            /* The whole tap1 run reads padding:
+                                               one zero fill, no per-tap test. */
+                                            if (k1 == 1u)
+                                                destination[column] = 0;
+                                            else
+                                                __builtin_memset (
+                                                    destination + column, 0, k1);
+                                            column += k1;
+                                            continue;
+                                        }
+                                    const uint32_t tap_base
+                                        = channel_base
+                                          + static_cast<uint32_t> (source0) * axis0;
+                                    for (uint32_t tap1 = 0; tap1 < k1; ++tap1)
+                                        {
+                                            const int32_t source1 = origin1
+                                                                    + static_cast<int32_t> (
+                                                                          tap1 * dil1);
+                                            destination[column]
+                                                = source1 >= 0
+                                                      && static_cast<uint32_t> (
+                                                            source1)
+                                                             < in1
+                                                            ? codes[tap_base
+                                                                    + static_cast<uint32_t> (
+                                                                          source1)
+                                                                        * axis1]
+                                                            : 0;
+                                            ++column;
+                                        }
+                                }
+                        }
+                }
+        }
+}
+
+/**
+ * @brief Requantize, bias and activate one (item, group) block of the forward.
+ *
+ * Reads the `rows * opg` accumulator block the GEMM filled and writes the output
+ * codes through the layout strides; row-major in (a0, a1) like the collection,
+ * so the destination index is a running offset rather than a quotient.
+ */
+ZZS_MLLEE_NOINLINE inline void
+conv_requant_block (const ConvSpec &spec, const int32_t *const ZZS_TRAIN_RESTRICT block,
+                    const int8_t *const ZZS_TRAIN_RESTRICT bias_codes,
+                    int8_t *const ZZS_TRAIN_RESTRICT output_codes,
+                    int8_t *const ZZS_TRAIN_RESTRICT preactivation,
+                    const ConvStrides &out_stride, const uint32_t item,
+                    const uint32_t group, const bool channel_major) noexcept
+{
+    const uint32_t rows = spec.rows ();
+    const uint32_t opg = spec.out_per_group ();
+    const uint32_t out0 = spec.out_length (0u);
+    const uint32_t out1 = spec.out_length (1u);
+    const bool activate = spec.has_activation ();
+    const bool scaled = spec._M_requant_mult_q15 != _S_q15_one;
+    const bool use_bias = spec.has_bias ();
+    /* `channel` below is the global output channel (group * opg + local), so the
+       plane base carries only the batch term. */
+    const uint32_t plane_base = item * out_stride._M_batch;
+    uint32_t row = 0u;
+    for (uint32_t a0 = 0; a0 < out0; ++a0)
+        for (uint32_t a1 = 0; a1 < out1; ++a1, ++row)
+            {
+                const uint32_t row_base
+                    = plane_base + a0 * out_stride._M_axis0
+                      + a1 * out_stride._M_axis1;
+                const int32_t *const ZZS_TRAIN_RESTRICT row_source
+                    = block + row * opg;
+                for (uint32_t local = 0u; local < opg; ++local)
+                    {
+                        const uint32_t channel = group * opg + local;
+                        const int32_t accumulated = channel_major
+                                                        ? block[local * rows + row]
+                                                        : row_source[local];
+                        int32_t value = _S_round_shift (
+                            static_cast<int64_t> (accumulated),
+                            spec._M_requant_shift);
+                        if (scaled)
+                            value = _S_round_shift (
+                                static_cast<int64_t> (value)
+                                    * spec._M_requant_mult_q15,
+                                _S_grad_frac_bits);
+                        if (use_bias)
+                            value += bias_codes[channel];
+                        const int32_t code = _S_i8_code (value);
+                        const uint32_t target
+                            = row_base + channel * out_stride._M_channel;
+                        if (!activate)
+                            {
+                                output_codes[target] = static_cast<int8_t> (code);
+                                continue;
+                            }
+                        preactivation[target] = static_cast<int8_t> (code);
+                        output_codes[target] = static_cast<int8_t> (
+                            act_code (spec._M_act, code, spec._M_aux_code));
+                    }
+            }
+}
+
+/**
  * @brief Forward pass with no tape recording.
  *
  * @p scratch must hold `ConvSpec::scratch_bytes ()` bytes on a 4-byte boundary;
@@ -539,69 +725,22 @@ conv_forward (const ConvSpec &spec, const Trainable &input,
     const uint32_t rows = spec.rows ();
     const uint32_t taps = spec.taps ();
     const uint32_t opg = spec.out_per_group ();
-    const uint32_t in_pg = spec.in_per_group ();
-    const uint32_t out1 = spec.out_length (1u);
-    int32_t *const block = reinterpret_cast<int32_t *> (scratch + region._M_block);
+    int32_t *const block = reinterpret_cast<int32_t *> (
+        ZZS_TRAIN_ASSUME_ALIGNED (scratch + region._M_block, 4));
     int8_t *const collection = scratch + region._M_collection;
     const ConvStrides in_stride = conv_input_strides (spec);
     const ConvStrides out_stride = conv_output_strides (spec);
     const bool channel_major = spec._M_layout == ConvLayout::CHANNEL_MAJOR;
+    const Accum accumulator{ block, rows * opg };
 
     for (uint32_t item = 0; item < spec._M_batch; ++item)
         for (uint32_t group = 0; group < spec._M_groups; ++group)
             {
-                // im2col, one row per output position and one column per
-                // (channel, tap0, tap1) triple in the weight's own order.  A tap
-                // outside the real border writes code 0 and is never read.
-                for (uint32_t row = 0; row < rows; ++row)
-                    {
-                        const uint32_t a0 = out1 != 0u ? row / out1 : 0u;
-                        const uint32_t a1 = row % out1;
-                        int8_t *const destination = collection + row * taps;
-                        uint32_t column = 0u;
-                        for (uint32_t channel = 0; channel < in_pg; ++channel)
-                            for (uint32_t tap0 = 0; tap0 < spec._M_kernel[0];
-                                 ++tap0)
-                                {
-                                    const int32_t source0 = static_cast<int32_t> (
-                                                a0 * spec._M_stride[0])
-                                            + static_cast<int32_t> (
-                                                tap0 * spec._M_dilation[0])
-                                            - spec._M_pad[0];
-                                    const bool inside0
-                                        = source0 >= 0
-                                          && static_cast<uint32_t> (source0)
-                                                 < spec._M_in[0];
-                                    for (uint32_t tap1 = 0;
-                                         tap1 < spec._M_kernel[1]; ++tap1)
-                                        {
-                                            const int32_t source1 = static_cast<int32_t> (
-                                                        a1 * spec._M_stride[1])
-                                                    + static_cast<int32_t> (
-                                                          tap1 * spec._M_dilation[1])
-                                                    - spec._M_pad[2];
-                                            const bool inside1
-                                                = source1 >= 0
-                                                  && static_cast<uint32_t> (source1)
-                                                         < spec._M_in[1];
-                                            destination[column]
-                                                = inside0 && inside1
-                                                      ? input._M_code[conv_element (
-                                                            in_stride, item,
-                                                            group * in_pg + channel,
-                                                            static_cast<uint32_t> (
-                                                                source0),
-                                                            static_cast<uint32_t> (
-                                                                source1))]
-                                                      : 0;
-                                            ++column;
-                                        }
-                                }
-                    }
+                conv_collect_block (spec, input._M_code, collection, in_stride,
+                                    item, group);
 
                 const int8_t *const weight_block
                     = weight._M_code + group * opg * taps;
-                const Accum accumulator{ block, rows * opg };
                 accumulator.zero ();
                 const Status gemm = channel_major
                                         ? gemm_codes (
@@ -619,44 +758,135 @@ conv_forward (const ConvSpec &spec, const Trainable &input,
                 if (!status_ok (gemm))
                     return gemm;
 
-                for (uint32_t row = 0; row < rows; ++row)
-                    {
-                        const uint32_t a0 = out1 != 0u ? row / out1 : 0u;
-                        const uint32_t a1 = row % out1;
-                        for (uint32_t local = 0; local < opg; ++local)
-                            {
-                                const uint32_t channel = group * opg + local;
-                                const uint32_t source
-                                    = channel_major ? local * rows + row
-                                                    : row * opg + local;
-                                int32_t value = _S_round_shift (
-                                    static_cast<int64_t> (block[source]),
-                                    spec._M_requant_shift);
-                                if (spec._M_requant_mult_q15 != _S_q15_one)
-                                    value = _S_round_shift (
-                                        static_cast<int64_t> (value)
-                                            * spec._M_requant_mult_q15,
-                                        _S_grad_frac_bits);
-                                if (spec.has_bias ())
-                                    value += bias._M_code[channel];
-                                const uint32_t target
-                                    = conv_element (out_stride, item, channel, a0,
-                                                    a1);
-                                const int32_t code = _S_i8_code (value);
-                                if (!spec.has_activation ())
-                                    {
-                                        output._M_code[target]
-                                            = static_cast<int8_t> (code);
-                                        continue;
-                                    }
-                                preactivation[target] = static_cast<int8_t> (code);
-                                output._M_code[target] = static_cast<int8_t> (
-                                    act_code (spec._M_act, code, spec._M_aux_code));
-                            }
-                    }
+                conv_requant_block (spec, block, bias._M_code, output._M_code,
+                                    preactivation, out_stride, item, group,
+                                    channel_major);
             }
     output.zero_grad ();
     return Status::OK;
+}
+
+/**
+ * @brief Gather one (item, group) block of dY into the packed `[rows, opg]`
+ *        lane matrix the matmul kernel wants.
+ *
+ * The destination offset is a running `row * opg` and the source offset is the
+ * row's plane base plus a channel stride, so the gather contains no quotient --
+ * the flat output row used to be split with `/ out1` and `% out1` once per lane.
+ */
+ZZS_MLLEE_NOINLINE inline void
+conv_grad_gather (const ConvSpec &spec, const int16_t *const ZZS_TRAIN_RESTRICT source,
+                  int16_t *const ZZS_TRAIN_RESTRICT destination,
+                  const ConvStrides &out_stride, const uint32_t item,
+                  const uint32_t group) noexcept
+{
+    const uint32_t opg = spec.out_per_group ();
+    const uint32_t out0 = spec.out_length (0u);
+    const uint32_t out1 = spec.out_length (1u);
+    const uint32_t plane_base = item * out_stride._M_batch;
+    const uint32_t channel_base = plane_base + group * opg * out_stride._M_channel;
+    uint32_t row = 0u;
+    for (uint32_t a0 = 0; a0 < out0; ++a0)
+        for (uint32_t a1 = 0; a1 < out1; ++a1, ++row)
+            {
+                const uint32_t read_base = channel_base
+                                           + a0 * out_stride._M_axis0
+                                           + a1 * out_stride._M_axis1;
+                int16_t *const ZZS_TRAIN_RESTRICT lane
+                    = destination + row * opg;
+                for (uint32_t local = 0u; local < opg; ++local)
+                    lane[local] = source[read_base
+                                         + local * out_stride._M_channel];
+            }
+}
+
+/**
+ * @brief col2im for one (item, group) block: add every patch lane back into the
+ *        input element it read.
+ *
+ * The visits stay column-major (`channel, tap0, tap1` outer, output rows inner)
+ * because `add_grad` saturates: two windows landing on the same input element
+ * fold in visit order, and a reordered fold can clamp at a different lane, so
+ * the order the reference documents is the order kept here.  What changes is the
+ * per-element work -- the row decomposition and the source coordinates become
+ * running counters and one multiply per axis instead of a division and a modulo.
+ */
+ZZS_MLLEE_NOINLINE inline void
+conv_col2im_block (const ConvSpec &spec,
+                   const int16_t *const ZZS_TRAIN_RESTRICT patch,
+                   const Trainable &input, const ConvStrides &in_stride,
+                   const uint32_t item, const uint32_t group,
+                   uint32_t &saturated) noexcept
+{
+    const uint32_t taps = spec.taps ();
+    const uint32_t out0 = spec.out_length (0u);
+    const uint32_t out1 = spec.out_length (1u);
+    const uint32_t in_pg = spec.in_per_group ();
+    const uint32_t in0 = spec._M_in[0];
+    const uint32_t in1 = spec._M_in[1];
+    const uint32_t k0 = spec._M_kernel[0];
+    const uint32_t k1 = spec._M_kernel[1];
+    const uint32_t step0 = spec._M_stride[0];
+    const uint32_t step1 = spec._M_stride[1];
+    const uint32_t dil0 = spec._M_dilation[0];
+    const uint32_t dil1 = spec._M_dilation[1];
+    const uint32_t axis0 = in_stride._M_axis0;
+    const uint32_t axis1 = in_stride._M_axis1;
+    const uint32_t channel_stride = in_stride._M_channel;
+    const int32_t pad0 = spec._M_pad[0];
+    const int32_t pad2 = spec._M_pad[2];
+    const uint32_t plane_base = item * in_stride._M_batch
+                                + group * in_pg * channel_stride;
+    uint32_t column = 0u;
+    for (uint32_t channel = 0; channel < in_pg; ++channel)
+        {
+            const uint32_t channel_base = plane_base + channel * channel_stride;
+            for (uint32_t tap0 = 0; tap0 < k0; ++tap0)
+                {
+                    const int32_t base0 = static_cast<int32_t> (tap0 * dil0) - pad0;
+                    for (uint32_t tap1 = 0; tap1 < k1; ++tap1)
+                        {
+                            const int32_t base1 = static_cast<int32_t> (
+                                                      tap1 * dil1)
+                                                  - pad2;
+                            const int16_t *ZZS_TRAIN_RESTRICT lane
+                                = patch + column;
+                            for (uint32_t a0 = 0; a0 < out0; ++a0)
+                                {
+                                    const int32_t source0 = static_cast<int32_t> (
+                                                                  a0 * step0)
+                                                              + base0;
+                                    const bool inside0
+                                        = source0 >= 0
+                                          && static_cast<uint32_t> (source0) < in0;
+                                    const uint32_t row0 = channel_base
+                                                          + static_cast<uint32_t> (
+                                                                inside0 ? source0
+                                                                          : 0)
+                                                                * axis0;
+                                    for (uint32_t a1 = 0; a1 < out1; ++a1)
+                                        {
+                                            const int32_t source1 = static_cast<int32_t> (
+                                                                          a1 * step1)
+                                                                      + base1;
+                                            if (inside0 && source1 >= 0
+                                                && static_cast<uint32_t> (source1)
+                                                       < in1)
+                                                {
+                                                    if (input.add_grad (
+                                                            row0 + static_cast<uint32_t> (
+                                                                            source1)
+                                                                        * axis1,
+                                                            *lane))
+                                                        ++saturated;
+                                                }
+                                            lane += taps;
+                                        }
+                                }
+                            ++column;
+                        }
+                }
+        }
 }
 
 /**
@@ -670,6 +900,11 @@ conv_forward (const ConvSpec &spec, const Trainable &input,
  * the collection region, widened to lanes) and dW (straight into the weight's own
  * gradient lanes at the group offset).  A frozen operand simply has no lane
  * buffer, and the kernel skips that half.
+ *
+ * The collection the backward replays is written by the very same
+ * `conv_collect_block` the forward uses (only the code stream differs: the saved
+ * copy rather than the live input), which is what keeps the two directions from
+ * disagreeing about the column order.
  */
 [[nodiscard]] inline Status
 conv_backward (const Trainable &output, const Trainable &grad_output,
@@ -705,9 +940,7 @@ conv_backward (const Trainable &output, const Trainable &grad_output,
     const uint32_t rows = spec.rows ();
     const uint32_t taps = spec.taps ();
     const uint32_t opg = spec.out_per_group ();
-    const uint32_t in_pg = spec.in_per_group ();
     const uint32_t total = spec.output_elements ();
-    const uint32_t out1 = spec.out_length (1u);
     int8_t *const collection = scratch + region._M_collection;
     int16_t *const patch_lanes
         = reinterpret_cast<int16_t *> (scratch + region._M_patch);
@@ -752,65 +985,13 @@ conv_backward (const Trainable &output, const Trainable &grad_output,
     for (uint32_t item = 0; item < spec._M_batch; ++item)
         for (uint32_t group = 0; group < spec._M_groups; ++group)
             {
-                for (uint32_t row = 0; row < rows; ++row)
-                    {
-                        const uint32_t a0 = out1 != 0u ? row / out1 : 0u;
-                        const uint32_t a1 = row % out1;
-                        for (uint32_t local = 0; local < opg; ++local)
-                            grad_lanes[row * opg + local]
-                                = source_grad[conv_element (
-                                      out_stride, item, group * opg + local, a0,
-                                      a1)];
-                    }
+                conv_grad_gather (spec, source_grad, grad_lanes, out_stride,
+                                  item, group);
 
-                // Rebuild the collection from the saved codes in the weight's own
-                // column order; `matmul_backward_q15` widens it for dW and writes
-                // dPatch as lanes in the separate region next to it.
-                uint32_t column = 0u;
-                for (uint32_t channel = 0; channel < in_pg; ++channel)
-                    for (uint32_t tap0 = 0; tap0 < spec._M_kernel[0]; ++tap0)
-                        {
-                            const int32_t base0 = static_cast<int32_t> (
-                                                      tap0 * spec._M_dilation[0])
-                                                  - spec._M_pad[0];
-                            for (uint32_t tap1 = 0; tap1 < spec._M_kernel[1];
-                                 ++tap1)
-                                {
-                                    const int32_t base1 = static_cast<int32_t> (
-                                                      tap1 * spec._M_dilation[1])
-                                                          - spec._M_pad[2];
-                                    for (uint32_t row = 0; row < rows; ++row)
-                                        {
-                                            const uint32_t a0
-                                                = out1 != 0u ? row / out1 : 0u;
-                                            const uint32_t a1 = row % out1;
-                                            const int32_t source0 = static_cast<int32_t> (
-                                                        a0 * spec._M_stride[0])
-                                                    + base0;
-                                            const int32_t source1 = static_cast<int32_t> (
-                                                        a1 * spec._M_stride[1])
-                                                    + base1;
-                                            const bool inside
-                                                = source0 >= 0
-                                                  && static_cast<uint32_t> (source0)
-                                                         < spec._M_in[0]
-                                                  && source1 >= 0
-                                                  && static_cast<uint32_t> (source1)
-                                                         < spec._M_in[1];
-                                            collection[row * taps + column]
-                                                = inside
-                                                      ? input_codes[conv_element (
-                                                            in_stride, item,
-                                                            group * in_pg + channel,
-                                                            static_cast<uint32_t> (
-                                                                source0),
-                                                            static_cast<uint32_t> (
-                                                                source1))]
-                                                      : 0;
-                                        }
-                                    ++column;
-                                }
-                        }
+                // Replay the collection from the saved codes: same column order,
+                // same border test, same child the forward runs.
+                conv_collect_block (spec, input_codes, collection, in_stride,
+                                    item, group);
 
                 Trainable x_block;
                 x_block._M_code = collection;
@@ -840,65 +1021,8 @@ conv_backward (const Trainable &output, const Trainable &grad_output,
 
                 // col2im: add each patch gradient back into the element it read.
                 if (collect_input_grad)
-                    {
-                        column = 0u;
-                        for (uint32_t channel = 0; channel < in_pg; ++channel)
-                            for (uint32_t tap0 = 0; tap0 < spec._M_kernel[0];
-                                 ++tap0)
-                                {
-                                    const int32_t base0 = static_cast<int32_t> (
-                                                  tap0 * spec._M_dilation[0])
-                                              - spec._M_pad[0];
-                                    for (uint32_t tap1 = 0;
-                                         tap1 < spec._M_kernel[1]; ++tap1)
-                                        {
-                                            const int32_t base1 = static_cast<int32_t> (
-                                                        tap1 * spec._M_dilation[1])
-                                                    - spec._M_pad[2];
-                                            for (uint32_t row = 0; row < rows;
-                                                 ++row)
-                                                {
-                                                    const uint32_t a0 = out1 != 0u
-                                                                            ? row / out1
-                                                                            : 0u;
-                                                    const uint32_t a1 = row % out1;
-                                                    const int32_t source0 = static_cast<int32_t> (
-                                                                a0
-                                                                * spec._M_stride[0])
-                                                            + base0;
-                                                    const int32_t source1 = static_cast<int32_t> (
-                                                                a1
-                                                                * spec._M_stride[1])
-                                                            + base1;
-                                                    if (source0 >= 0
-                                                        && static_cast<uint32_t> (
-                                                               source0)
-                                                               < spec._M_in[0]
-                                                        && source1 >= 0
-                                                        && static_cast<uint32_t> (
-                                                               source1)
-                                                               < spec._M_in[1])
-                                                        {
-                                                            const uint32_t target = conv_element (
-                                                                in_stride, item,
-                                                                group * in_pg
-                                                                    + channel,
-                                                                static_cast<uint32_t> (
-                                                                    source0),
-                                                                static_cast<uint32_t> (
-                                                                    source1));
-                                                            if (input.add_grad (
-                                                                    target,
-                                                                    patch_lanes[row
-                                                                                * taps
-                                                                            + column]))
-                                                                ++saturated;
-                                                        }
-                                                }
-                                            ++column;
-                                        }
-                                }
-                    }
+                    conv_col2im_block (spec, patch_lanes, input, in_stride, item,
+                                       group, saturated);
 
                 // db = sum of dY over every output position of this group.
                 if (bias != nullptr && bias->_M_grad != nullptr)
@@ -914,6 +1038,30 @@ conv_backward (const Trainable &output, const Trainable &grad_output,
 
     context._M_saturation_events += saturated;
     return Status::OK;
+}
+
+/**
+ * @brief Copy the layer's operands into a tape node and record its backward.
+ *
+ * Split out of `conv_run` because the operand copies are three whole `Trainable`
+ * structs: kept in the caller they enlarge the frame that the forward pass, the
+ * deepest link of the chain, nests inside.  Here they are only live while the
+ * tape is being written, so the conv chain costs the deeper of forward and
+ * record rather than their sum.
+ */
+ZZS_MLLEE_NOINLINE [[nodiscard]] inline Status
+conv_record (Tape &tape, const ConvSpec &spec, const Trainable &input,
+             const Trainable &weight, const Trainable &bias, Trainable &output,
+             const Saved *const slots) noexcept
+{
+    Trainable operands[_S_conv_operands];
+    uint32_t operand_count = 0u;
+    operands[operand_count++] = input;
+    operands[operand_count++] = weight;
+    if (spec.has_bias ())
+        operands[operand_count++] = bias;
+    return tape.record (conv_backward, spec._M_op_id, output, operands,
+                        operand_count, slots, _S_conv_saved);
 }
 
 /**
@@ -942,9 +1090,11 @@ conv_run (Tape &tape, const ConvSpec &spec, const Trainable &input,
     if (spec.has_bias () && bias._M_count != spec._M_out_channels)
         return Status::BAD_LAYOUT;
 
-    Saved slots[_S_max_operands];
-    Trainable operands[_S_max_operands];
-    uint32_t operand_count = 0u;
+    Saved slots[_S_conv_saved];
+    static_assert (_S_conv_operands <= _S_max_operands,
+                   "a conv node must fit the tape's operand array");
+    static_assert (_S_conv_saved <= _S_max_operands,
+                   "a conv node must fit the tape's saved array");
 
     {
         ConvSpec *saved_spec = nullptr;
@@ -982,13 +1132,9 @@ conv_run (Tape &tape, const ConvSpec &spec, const Trainable &input,
     if (!status_ok (forward))
         return forward;
 
-    operands[operand_count++] = input;
-    operands[operand_count++] = weight;
-    if (spec.has_bias ())
-        operands[operand_count++] = bias;
-    for (uint32_t index = operand_count; index < _S_max_operands; ++index)
-        slots[index] = Saved{};
-    return tape.record (conv_backward, spec._M_op_id, output, operands,
-                        operand_count, slots, _S_max_operands);
+    /* The saved slots are independent of the operand count: one this call did not
+       carve keeps the zero handle it started with, and `saved_as` reads that as
+       absent. */
+    return conv_record (tape, spec, input, weight, bias, output, slots);
 }
 } // namespace zzs::mllee::train

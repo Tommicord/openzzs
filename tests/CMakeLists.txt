@@ -49,6 +49,8 @@ add_executable(test_mllee
   test_mllee_quant.cpp
   test_mllee_codec.cpp
   test_mllee_ops.cpp
+  test_mllee_onnx.cpp
+  test_mllee_simd_packed.cpp
   ${_zzs_mllee_training_tests})
 
 target_link_libraries(test_mllee PRIVATE openzzs-mllee Catch2::Catch2WithMain)

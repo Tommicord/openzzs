@@ -99,6 +99,11 @@ struct GradContext
         if (index >= this->_M_saved_count)
             return nullptr;
         const Saved &handle = this->_M_saved[index];
+        /* A slot the forward did not fill has a zero offset, so it has to read
+           as absent: testing the size alone would hand back the pool's first
+           slab and a backward would silently differentiate garbage. */
+        if (handle.is_null ())
+            return nullptr;
         if (handle._M_bytes < handle._M_count * sizeof (T))
             return nullptr;
         return reinterpret_cast<T *> (this->_M_pool->at (handle._M_offset));
@@ -344,13 +349,13 @@ class Tape
     }
 
     [[nodiscard]] Node *
-    node (const uint32_t index) noexcept
+    node (const uint32_t index) const noexcept
     {
         return index < this->_M_count ? this->_M_nodes + index : nullptr;
     }
 
     [[nodiscard]] Pool &
-    pool () noexcept
+    pool () const noexcept
     {
         return *this->_M_pool;
     }

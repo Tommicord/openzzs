@@ -257,3 +257,220 @@ TEST_CASE ("packlow encoder rejects tiny output buffers", "[mllee][codec]")
                  zzs::mllee::PacklowOptions{}, output, sizeof (output))
              == 0);
 }
+
+namespace
+{
+using zzs::mllee::Codec;
+using zzs::mllee::Dtype;
+using zzs::mllee::PacklowState;
+using zzs::mllee::Status;
+
+std::vector<uint8_t>
+pack_rows (const Dtype dtype, const std::vector<std::int8_t> &codes)
+{
+    std::vector<uint8_t> bytes (zzs::mllee::_S_row_bytes (
+                                    dtype, static_cast<uint32_t> (codes.size ())),
+                                0);
+    zzs::mllee::_S_pack_codes (bytes.data (), codes.data (),
+                               static_cast<uint32_t> (codes.size ()),
+                               zzs::mllee::_S_code_bits (dtype));
+    return bytes;
+}
+
+std::vector<std::int8_t>
+make_codes (const uint32_t count, const uint32_t seed)
+{
+    const auto bits = 3u;
+    std::mt19937 generator (seed);
+    std::vector<std::int8_t> codes (count);
+    for (std::int8_t &code : codes)
+        code = static_cast<std::int8_t> (generator () & ((1u << bits) - 1u));
+    return codes;
+}
+} // namespace
+
+TEST_CASE ("reader keeps int8 byte semantics", "[mllee][codec]")
+{
+    const std::vector<uint8_t> bytes = { 0, 1, 127, 128, 255 };
+    PacklowState state{};
+    REQUIRE (zzs::mllee::_S_pk_begin (state, bytes.data (),
+                                      static_cast<uint32_t> (bytes.size ()), 0,
+                                      static_cast<uint32_t> (bytes.size ()), Codec::RAW)
+             == Status::OK);
+    zzs::mllee::_S_rd_begin (state, nullptr, Dtype::I8);
+    const std::int32_t expected[5] = { 0, 1, 127, -128, -1 };
+    for (const std::int32_t value : expected)
+        REQUIRE (zzs::mllee::_S_rd_code (state, bytes.data (), nullptr, 0) == value);
+}
+
+TEST_CASE ("reservoir reads unaligned int2 and int3 groups", "[mllee][codec]")
+{
+    SECTION ("int2, groups of 6/6/5 codes")
+    {
+        const std::vector<std::int8_t> codes = make_codes (17, 11);
+        const std::vector<uint8_t> bytes = pack_rows (Dtype::I2, codes);
+        PacklowState state{};
+        REQUIRE (zzs::mllee::_S_pk_begin (state, bytes.data (),
+                                          static_cast<uint32_t> (bytes.size ()), 0,
+                                          static_cast<uint32_t> (bytes.size ()), Codec::RAW)
+                 == Status::OK);
+        zzs::mllee::_S_rd_begin (state, nullptr, Dtype::I2);
+        const uint32_t groups[] = { 6u, 6u, 5u };
+        uint32_t index = 0;
+        for (const uint32_t group : groups)
+            for (uint32_t k = 0; k < group; ++k, ++index)
+                REQUIRE (zzs::mllee::_S_rd_code (state, bytes.data (), nullptr, 0)
+                         == zzs::mllee::_S_from_int2 (
+                             static_cast<uint8_t> (codes[index])));
+        REQUIRE (zzs::mllee::_S_pk_status (state) == Status::OK);
+    }
+
+    SECTION ("int3, groups of 5/5/3 codes")
+    {
+        const std::vector<std::int8_t> codes = make_codes (13, 23);
+        const std::vector<uint8_t> bytes = pack_rows (Dtype::I3, codes);
+        PacklowState state{};
+        REQUIRE (zzs::mllee::_S_pk_begin (state, bytes.data (),
+                                          static_cast<uint32_t> (bytes.size ()), 0,
+                                          static_cast<uint32_t> (bytes.size ()), Codec::RAW)
+                 == Status::OK);
+        zzs::mllee::_S_rd_begin (state, nullptr, Dtype::I3);
+        const uint32_t groups[] = { 5u, 5u, 3u };
+        uint32_t index = 0;
+        for (const uint32_t group : groups)
+            for (uint32_t k = 0; k < group; ++k, ++index)
+                REQUIRE (zzs::mllee::_S_rd_code (state, bytes.data (), nullptr, 0)
+                         == zzs::mllee::_S_from_int3 (
+                             static_cast<uint8_t> (codes[index])));
+        REQUIRE (zzs::mllee::_S_pk_status (state) == Status::OK);
+    }
+}
+
+TEST_CASE ("row reader sign-extends int2/int3/int4 and uses the float LUT",
+           "[mllee][codec]")
+{
+    SECTION ("int2 rows of 12 codes")
+    {
+        const std::vector<std::int8_t> codes = make_codes (24, 31);
+        const std::vector<uint8_t> bytes = pack_rows (Dtype::I2, codes);
+        const uint32_t row_bytes = zzs::mllee::_S_row_bytes (Dtype::I2, 12);
+        PacklowState state{};
+        REQUIRE (zzs::mllee::_S_pk_begin (state, bytes.data (),
+                                          static_cast<uint32_t> (bytes.size ()), 0,
+                                          static_cast<uint32_t> (bytes.size ()), Codec::RAW)
+                 == Status::OK);
+        zzs::mllee::_S_rd_begin (state, nullptr, Dtype::I2);
+        for (uint32_t row = 0; row < 2; ++row)
+            {
+                REQUIRE (zzs::mllee::_S_rd_row (state, bytes.data (), nullptr, 0, row_bytes)
+                         == Status::OK);
+                for (uint32_t i = 0; i < 12; ++i)
+                    REQUIRE (zzs::mllee::_S_rd_row_code (state, bytes.data (), i, row_bytes)
+                             == zzs::mllee::_S_from_int2 (static_cast<uint8_t> (
+                                 codes[row * 12u + i])));
+            }
+    }
+
+    SECTION ("int3 rows of 16 codes, including straddling codes")
+    {
+        const std::vector<std::int8_t> codes = make_codes (32, 37);
+        const std::vector<uint8_t> bytes = pack_rows (Dtype::I3, codes);
+        const uint32_t row_bytes = zzs::mllee::_S_row_bytes (Dtype::I3, 16);
+        PacklowState state{};
+        REQUIRE (zzs::mllee::_S_pk_begin (state, bytes.data (),
+                                          static_cast<uint32_t> (bytes.size ()), 0,
+                                          static_cast<uint32_t> (bytes.size ()), Codec::RAW)
+                 == Status::OK);
+        zzs::mllee::_S_rd_begin (state, nullptr, Dtype::I3);
+        for (uint32_t row = 0; row < 2; ++row)
+            {
+                REQUIRE (zzs::mllee::_S_rd_row (state, bytes.data (), nullptr, 0, row_bytes)
+                         == Status::OK);
+                for (uint32_t i = 0; i < 16; ++i)
+                    REQUIRE (zzs::mllee::_S_rd_row_code (state, bytes.data (), i, row_bytes)
+                             == zzs::mllee::_S_from_int3 (static_cast<uint8_t> (
+                                 codes[row * 16u + i])));
+            }
+    }
+
+    SECTION ("int4 rows of 10 codes")
+    {
+        const std::vector<std::int8_t> codes = make_codes (20, 41);
+        const std::vector<uint8_t> bytes = pack_rows (Dtype::I4, codes);
+        const uint32_t row_bytes = zzs::mllee::_S_row_bytes (Dtype::I4, 10);
+        PacklowState state{};
+        REQUIRE (zzs::mllee::_S_pk_begin (state, bytes.data (),
+                                          static_cast<uint32_t> (bytes.size ()), 0,
+                                          static_cast<uint32_t> (bytes.size ()), Codec::RAW)
+                 == Status::OK);
+        zzs::mllee::_S_rd_begin (state, nullptr, Dtype::I4);
+        for (uint32_t row = 0; row < 2; ++row)
+            {
+                REQUIRE (zzs::mllee::_S_rd_row (state, bytes.data (), nullptr, 0, row_bytes)
+                         == Status::OK);
+                for (uint32_t i = 0; i < 10; ++i)
+                    REQUIRE (zzs::mllee::_S_rd_row_code (state, bytes.data (), i, row_bytes)
+                             == zzs::mllee::_S_from_int4 (static_cast<uint8_t> (
+                                 codes[row * 10u + i])));
+            }
+    }
+
+    SECTION ("float3 row decodes through the 8-entry LUT")
+    {
+        const uint8_t code_values[8] = { 0, 1, 2, 3, 4, 5, 6, 7 };
+        std::vector<std::int8_t> codes (code_values, code_values + 8);
+        codes.insert (codes.end (), codes.begin (), codes.end ());
+        const std::vector<uint8_t> bytes = pack_rows (Dtype::F3E1M1, codes);
+        const uint32_t row_bytes = zzs::mllee::_S_row_bytes (Dtype::F3E1M1, 8);
+        std::int8_t lut[8] = {};
+        zzs::mllee::build_weight_lut_e1m1 (1.5f, lut);
+        PacklowState state{};
+        REQUIRE (zzs::mllee::_S_pk_begin (state, bytes.data (),
+                                          static_cast<uint32_t> (bytes.size ()), 0,
+                                          static_cast<uint32_t> (bytes.size ()), Codec::RAW)
+                 == Status::OK);
+        zzs::mllee::_S_rd_begin (state, lut, Dtype::F3E1M1);
+        for (uint32_t row = 0; row < 2; ++row)
+            {
+                REQUIRE (zzs::mllee::_S_rd_row (state, bytes.data (), nullptr, 0, row_bytes)
+                         == Status::OK);
+                for (uint32_t i = 0; i < 8; ++i)
+                    REQUIRE (zzs::mllee::_S_rd_row_code (state, bytes.data (), i, row_bytes)
+                             == lut[codes[row * 8u + i] & 0x07]);
+            }
+    }
+}
+
+TEST_CASE ("packlow-compressed int3 stream reads through the reservoir", "[mllee][codec]")
+{
+    const std::vector<std::int8_t> codes = make_codes (29, 53);
+    const std::vector<uint8_t> raw = pack_rows (Dtype::I3, codes);
+    const std::vector<uint8_t> stream = encode (raw);
+    PacklowState state{};
+    REQUIRE (zzs::mllee::_S_pk_begin (state, stream.data (),
+                                      static_cast<uint32_t> (stream.size ()), 0,
+                                      static_cast<uint32_t> (stream.size ()), Codec::PACKLOW)
+             == Status::OK);
+    zzs::mllee::_S_rd_begin (state, nullptr, Dtype::I3);
+    for (const std::int8_t code : codes)
+        REQUIRE (zzs::mllee::_S_rd_code (state, stream.data (), nullptr, 0)
+                 == zzs::mllee::_S_from_int3 (static_cast<uint8_t> (code)));
+    REQUIRE (zzs::mllee::_S_pk_status (state) == Status::OK);
+}
+
+TEST_CASE ("reservoir reports truncation mid-code", "[mllee][codec]")
+{
+    const std::vector<uint8_t> bytes = { 0x88u }; // eight I3 bits
+    PacklowState state{};
+    REQUIRE (zzs::mllee::_S_pk_begin (state, bytes.data (),
+                                      static_cast<uint32_t> (bytes.size ()), 0,
+                                      static_cast<uint32_t> (bytes.size ()), Codec::RAW)
+             == Status::OK);
+    zzs::mllee::_S_rd_begin (state, nullptr, Dtype::I3);
+    REQUIRE (zzs::mllee::_S_rd_code (state, bytes.data (), nullptr, 0) == 0);
+    REQUIRE (zzs::mllee::_S_rd_code (state, bytes.data (), nullptr, 0) == 1);
+    // The third code needs a ninth bit that the stream does not have.
+    REQUIRE (zzs::mllee::_S_rd_code (state, bytes.data (), nullptr, 0)
+             == zzs::mllee::_S_pk_error);
+    REQUIRE (zzs::mllee::_S_pk_status (state) == Status::TRUNCATED);
+}

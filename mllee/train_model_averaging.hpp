@@ -126,8 +126,11 @@ avg_div_round (const int64_t numerator, const uint32_t denominator) noexcept
         return 0;
     const uint64_t divisor = denominator;
     const bool negative = numerator < 0;
-    const uint64_t magnitude = negative ? static_cast<uint64_t> (-numerator)
-                                        : static_cast<uint64_t> (numerator);
+    /* Negate in the unsigned domain: `-INT64_MIN` is not representable as a
+       signed int64, while its two's-complement magnitude is. */
+    const uint64_t magnitude = negative
+                                   ? ~static_cast<uint64_t> (numerator) + 1u
+                                   : static_cast<uint64_t> (numerator);
     const uint64_t quotient
         = (magnitude + divisor / 2u) / divisor;
     /* Round-half-away-from-zero can push the magnitude one step past INT32_MAX

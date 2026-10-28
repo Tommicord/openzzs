@@ -8,17 +8,19 @@ PyTorch-style operators around them — so the same blob a device runs is the
 blob it can fine-tune.
 
 - No heap, no exceptions, no RTTI, no recursion, no writable module statics.
-- Weights are either raw quantized bytes or compressed with the improved
+- Weights are either raw quantized bits or compressed with the improved
   packlow range coder (bounded 64-byte window).
-- int8, int4, float8 (`e4m3fn`, `e5m2`) and float4 (`e2m1`) weights are all
-  reduced to int8 × int8 MACs; float formats use a Flash-resident LUT.
-- Norm, activations, softmax and single-head attention are built in.
+- int8, int4, int3, int2, float8 (`e4m3fn`, `e5m2`), float4 (`e2m1`) and
+  float3 (`e1m1`) weights are all reduced to int8 × int8 MACs; float formats
+  use a Flash-resident LUT and packed formats expand in SIMD groups.
+- Norm, activations, softmax and multi-head attention (causal mask, RoPE) are
+  built in.
 
 ```
 OFFLINE                                      RUNTIME (Cortex-M)
 PyTorch model + calibration                  Core::run(model, len, input, in_len)
-  → quantize (i8 / i4 / f8 / f4)               for each Flash descriptor:
-  → pack nibbles + scales/biases                 decode weight stream (64 B ring)
+  → quantize (i8/i4/i3/i2/f8/f4/f3)            for each Flash descriptor:
+  → pack codes + scales/biases                   decode weight stream (64 B ring)
   → packlow encode (host-only)                   MAC int8 × int8 → int32
   → model blob (Flash / .rodata)                 requantize → int8 arena
                                                return pointer into arena
@@ -36,7 +38,7 @@ can put on the caller's stack:
 
 | Writable static region                                        |                            Bytes |
 |---------------------------------------------------------------|---------------------------------:|
-| `PacklowState` — range/code, probabilities, 64 B ring, reader |                              124 |
+| `PacklowState` — range/code, probabilities, 64 B ring, reader |                    124 (128 on 64-bit hosts) |
 | `Header` — parsed model metadata                              |                               20 |
 | `Layer` — active 48-byte descriptor                           |                               48 |
 | Activation arena                                              |                              444 |
@@ -49,9 +51,9 @@ Flash (not counted against the 1024 B):
 
 | Flash item                                                         |                      Bytes |
 |--------------------------------------------------------------------|---------------------------:|
-| Core + ops + codec + asm `.text`                                   |                     10 574 |
-| Activation / exp / CRC LUTs (`.rodata`)                            |                      1 536 |
-| **Total code + tables**                                            | **12 110** (budget 16 KiB) |
+| Core + ops + codec + asm `.text`                                   |                     14 718 |
+| Activation / exp / CRC LUTs (`.rodata`)                            |                      1 659 |
+| **Total code + tables**                                            | **16 377** (budget 16 KiB) |
 | Layer descriptors, scales, biases, model LUTs, dictionary, weights |            model-dependent |
 
 ### How the 1024 bytes are split
@@ -63,14 +65,16 @@ RAM the module touches while running:
 | Region | Bytes |
 |---|---:|
 | Core object (static) | 640 |
-| Worst core stack chain (`run → _S_execute → _S_conv1d → _S_pk_next`) | 304 |
-| **Total RAM at run time** | **944** of 1024 |
+| Worst core stack chain (`run → _S_execute → _S_linear → _S_rd_row_dot_packed → _S_packed_dot`) | 376 |
+| **Total RAM at run time** | **1016** of 1024 |
 
 The chain is gated on its own by `ZZS_MLLEE_STACK_LIMIT` (default 384) and the
 sum by `ZZS_MLLEE_RAM_BUDGET` (default 1024); per-frame numbers are printed by
-the gate script. Frames of interest: `_S_conv1d` 160, `_S_attention` 136,
-`_S_batch_norm` / `_S_group_norm` 104, `_S_embedding` 96, `_S_linear` 88,
-`_S_norm` 88, `_S_pool` 64, `_S_matmul` 56, `_S_binary` 48, `_S_pk_next` 48.
+the gate script. Frames of interest: `_S_conv1d` 200, `_S_attention` 216,
+`_S_linear` 152, `_S_embedding` 104, `_S_batch_norm` / `_S_group_norm` 104,
+`_S_norm` 96, `parse_layer` 96, `_S_pool` 80, `_S_rd_row_dot_packed` 80,
+`_S_pk_next` 48, `_S_matmul` 56, `_S_binary` 48, `_S_rd_row_dot_i8` 32,
+`_S_packed_dot` 32.
 
 The arena is derived from the budget (`_S_arena_bytes = _S_core_budget_bytes -
 196`, where 196 is the workspace plus status footprint), so lowering
@@ -115,10 +119,19 @@ Each layer descriptor is 48 bytes:
 `in_off == 0xFFFF` marks an external input (the caller's feature buffer).
 Layers write activations into the 444-byte arena at `out_off`.
 
+The norm and attention flags are op-local: `NORM_RMS` drops the mean,
+`NORM_INSTANCE` normalizes `group_size`-wide windows, and `NORM_RESIDUAL`
+makes the op read a second arena span (named in the weight slot) and normalize
+`input + residual` in one pass. `ATTN_CAUSAL` limits key `j ≤ query i`, and
+`ATTN_ROPE` rotates adjacent Q/K pairs by `pos * 10000^(-2i/d)` using a
+33-entry Q15 quarter-sine table and a Q16 per-pair step; the head dimension
+must then be even. Both paths stay integer-only and share their code with the
+training twins, so a model that trains cannot drift from the codes deployed.
+
 Scale tables hold `rows × groups` int32 Q15 multipliers (per-channel or
 per-group); norm layers use int16 gamma instead. Biases are int16 and are
 pre-scaled to the output quantization scale. Float weights point at a LUT:
-256 bytes for e4m3/e5m2, 16 bytes for e2m1.
+256 bytes for e4m3/e5m2, 16 bytes for e2m1, 8 bytes for e1m1.
 
 Compressed weights begin with a 12-byte stream header:
 
@@ -148,9 +161,18 @@ Symmetric weights use `zero_point = 0` and `scale = max(|x|) / qmax`.
 |--------|-------------------------------------------------|--------------------------|----------------|
 | int8   | two's complement, 1/byte                        | per-channel / per-tensor | [-127, 127]    |
 | int4   | two's complement, 2/byte, **low nibble first**  | per-group (32)           | [-7, 7]        |
+| int3   | two's complement, bit-packed LSB-first, 8/3 B   | per-group                | [-3, 3]        |
+| int2   | two's complement, 4/byte, **low pair first**    | per-group                | [-1, 1]        |
 | e4m3fn | 1-4-3, bias 7, max 448, no inf, `0x7F/0xFF` NaN | per-channel              | via LUT → int8 |
 | e5m2   | 1-5-2, bias 15, max 57344                       | per-channel              | via LUT → int8 |
 | e2m1   | {0, ±0.5, ±1, ±1.5, ±2, ±3, ±4, ±6}             | shared E8M0 per 32       | via LUT → int8 |
+| e1m1   | {0, ±0.5, ±1, ±1.5}, bias 1, negative zero = 4  | shared per tensor        | via LUT → int8 |
+
+Packing is defined bit-exactly in `quant.hpp`: int2/int4 fill a byte from the
+lowest bits up, and 3-bit codes are a continuous LSB-first bit stream (eight
+codes occupy three bytes). The 3-bit grid does not divide a byte, so a packed
+3-bit weight row must contain a multiple of eight codes; the validator rejects
+anything else, which keeps every row byte-terminated.
 
 Requantization uses one Q15 multiplier folding `s_weight · s_input / s_output`:
 
@@ -204,25 +226,32 @@ and per-delta allocations.
 |--------------|-------------------------------------------------------------|
 | `LINEAR`     | per-output weight stream, group scales, bias, activation    |
 | `CONV1D`     | causal or valid, stride, groups; one row staged in the ring |
-| `NORM`       | LayerNorm / RMSNorm with int16 gamma and bias               |
+| `NORM`       | LayerNorm / RMSNorm with int16 gamma and bias; `NORM_RESIDUAL` normalizes `input + residual` |
 | `ACTIVATION` | ReLU, ReLU6, sigmoid, tanh, GELU via 512-byte LUTs          |
 | `SOFTMAX`    | two-pass integer exp table over the row                     |
-| `ATTENTION`  | single-head, online normalisation, no score buffer          |
+| `ATTENTION`  | multi-head scaled dot-product, optional causal mask and RoPE, online normalisation, no score buffer |
 
 Arena limits with the default 444-byte arena:
 
 - One activation row (linear / norm / softmax / activation) ≤ 444 values.
-- Attention consumes `4 · seq · head_dim` bytes (Q, K, V and output), so
-  `seq · head_dim ≤ 47`; `head_dim` itself is limited to 8.
-- A Conv1D weight row must fit the 64-byte ring: `in_channels · kernel ≤ 64`
-  int8 codes, or ≤ 128 int4/e2m1 codes (packed two per byte).
+- Attention consumes `4 · seq · heads · head_dim` bytes (packed Q/K/V plus
+  output), so `seq · heads · head_dim ≤ 111`; `head_dim` itself is limited to
+  8. The packed attention input is three concatenated `[seq, heads*head_dim]`
+  blocks — Q, then K, then V — which is also the layout the training module
+  expects when it joins its three projection tensors for deployment.
+- `NORM_RESIDUAL` reads its second operand from the arena span named in the
+  weight slot, so both rows must fit the arena at once.
+- A Conv1D weight row must fit the 64-byte ring: at most 64 int8 codes,
+  128 int4/e2m1 codes (two per byte), 256 int2 codes (four per byte), or 168
+  int3/e1m1 codes (eight per three-byte group, so the row length must be a
+  multiple of eight).
 
 These are validation failures (`ARENA_OVERFLOW` / `UNSUPPORTED`), never
 out-of-bounds accesses.
 
 ## Training path
 
-`mllee/train.hpp` is the aggregate include for the 31 training headers. Every
+`mllee/train.hpp` is the aggregate include for the 33 training headers. Every
 one of them keeps the inference invariants: no heap, no writable module
 statics, no exceptions, no recursion, errors returned as `Status`, all
 numerics in fixed point (int8 codes on the `[-127, 127]` grid, Q15 `int16_t`
@@ -234,6 +263,7 @@ caller-owned pool.
 | Vocabulary | `train_fixed` (Q15 mul/div/sqrt, rounding, rails), `train_tensor` (views, shapes, flags), `train_pool` (8 KiB carve arena), `train_random` (deterministic engines, masks, index permutations) |
 | Autograd | `train_graph` (reverse-mode tape over caller storage), `train_backward_kernels` (matmul / reduction / elementwise backward), `train_grad_check` (torch.autograd.gradcheck without a heap) |
 | Layers | `train_linear`, `train_conv` (1-D/2-D, stride, padding, dilation, groups), `train_pooling` (max, avg, adaptive-avg, L2, global), `train_embedding` (tied views, embedding bags), `train_running_stats` (BN/GN buffers) |
+| Transformer | `train_norm` (norm + residual, save-slot backward), `train_attention` (multi-head scaled dot-product, causal mask, RoPE, saved probabilities) — both run the same integer kernel as the inference op they mirror, so the deployed codes match the trained ones |
 | Numerics | `train_softmax` (masked, temperature, log path), `train_activations`, `train_dropout` (inverted, saved mask), `train_fake_quant` (QAT and the STE), `train_init` (code-space initializers that report their scale) |
 | Objective | `train_loss` (MSE, MAE, Huber, quantile, BCE-with-logits, cross-entropy, soft CE, NLL, cosine, hinge, multiclass hinge), `train_label_smoothing`, `train_regularization` (installable post-grad hooks), `train_distill` (temperature, KL, alpha blend), `train_loss_scale` (static and dynamic) |
 | Optimizer | `train_optim` (SGD + momentum/dampening/nesterov/weight-decay, Adam, AdamW, Adagrad, RMSprop, Adadelta, Lion), `train_lr_schedule` (constexpr per-step arithmetic), `train_grad_clip` (value, global-norm, per-group, L1), `train_model_averaging` (uniform, EMA, SWA, gated) |
@@ -257,14 +287,15 @@ module (`tools/check_mllee_train_ram.sh`):
 | Deepest backward chain (step + tape node) | 264 | — |
 | Module stack (worst chain, siblings share frames) | 424 | 512 |
 | Probe stack (caller hook included) | 912 | 1 024 |
-| Flash, one training op | 6 286 text + 1 282 rodata = 7 568 | 8 192 |
+| Conv probe (conv + pool, caller hook included) | 1 096 | 2 048 |
+| Flash, one training op | 6 234 text + 1 282 rodata = 7 516 | 8 192 |
 | Writable statics | `.data=0 .bss=0` | must be 0 |
-| **Training RAM at run time** | **9 516** | **10 240** |
+| **Training RAM at run time** | **9 700** | **10 240** |
 
 The closed form is `pool + control limit + full-stack limit = 8192 + 512 +
-1024 = 9728 ≤ 10240`; the gate reports the measured 9 516 against it, which is
-the 8192-byte pool plus the 412-byte control plane plus the 912-byte probe
-stack. A tape node is 264 B, so 28 nodes fit beside 16 parameters in the
+1024 = 9728 ≤ 10240`; the gate reports the measured 9 700 against it, which is
+the 8192-byte pool plus the 412-byte control plane plus the 1 096-byte conv
+probe stack. A tape node is 264 B, so 28 nodes fit beside 16 parameters in the
 default pool.
 `ZZS_MLLEE_TRAIN_POOL_BYTES`, `ZZS_MLLEE_TRAIN_CONTROL_LIMIT`,
 `ZZS_MLLEE_TRAIN_STACK_LIMIT` and `ZZS_MLLEE_TRAIN_FULL_STACK_LIMIT` retarget
@@ -278,15 +309,25 @@ on. The portable C++ path stays compiled-in whenever the option is off.
 
 | Target | Sources | Macro |
 |---|---|---|
-| x86-64 baseline (SSE2) | `mllee_int8_dot_sse2.S`, `mllee_int8_reduce_sse2.S`, `mllee_int8_stats_sse2.S`, `mllee_train_q15_sse2.S` | `ZZS_MLLEE_ASM_X86_64` |
+| x86-64 baseline (SSE2) | `mllee_int8_dot_sse2.S`, `mllee_int8_reduce_sse2.S`, `mllee_int8_stats_sse2.S`, `mllee_train_q15_sse2.S`, `mllee_onnx_wire_x86_64.S` | `ZZS_MLLEE_ASM_X86_64` |
 | x86-64 SSSE3 (opt-in, default on) | `mllee_packlow_shuffle_ssse3.S` (`pshufb` nibble expand, no sequential bit extraction) | `ZZS_MLLEE_ASM_SSSE3` |
-| x86-64 AVX2 (opt-in, default off) | `mllee_int8_dot_avx2.S` | `ZZS_MLLEE_ASM_AVX2` |
-| Cortex-M4 (ARMv7E-M DSP) | `mllee_int8_mac_cortex_m4.S` (SMLAD), `mllee_int8_reduce_cortex_m4.S`, `mllee_int4_expand_cortex_m4.S` (SXTB16/USADA8), `mllee_train_q15_lanes_cortex_m4.S`, `mllee_train_q15_mac_cortex_m4.S` | `ZZS_MLLEE_ASM_CORTEX_M4` |
+| x86-64 AVX2 (opt-in, default on) | `mllee_int8_dot_avx2.S` (int8 dot), `mllee_packed_dot_avx2.S` (int4/int2 dot with in-register expansion), `mllee_elementwise_avx2.S` (clamp, masked fill, sum of squares) | `ZZS_MLLEE_ASM_AVX2` |
+| x86-64 AVX-VNNI (opt-in, default off) | `mllee_int8_dot_avx_vnni.S` (`vpdpbusd`, one dot product per 4 bytes) | `ZZS_MLLEE_ASM_AVX_VNNI` |
+| x86-64 AVX-512 (opt-in, default off) | `mllee_int8_dot_avx512.S` (`vpdpbusd` on 64-byte lanes, unrolled 4×) | `ZZS_MLLEE_ASM_AVX512` |
+| Cortex-M4 (ARMv7E-M DSP) | `mllee_int8_mac_cortex_m4.S` (SMLAD), `mllee_int8_reduce_cortex_m4.S`, `mllee_int4_expand_cortex_m4.S` (SXTB16/USADA8), `mllee_train_q15_lanes_cortex_m4.S`, `mllee_train_q15_mac_cortex_m4.S`, `mllee_onnx_wire_cortex_m4.S` | `ZZS_MLLEE_ASM_CORTEX_M4` |
+
+The SIMD tier is chosen at compile time; there is deliberately no runtime CPUID
+dispatch. AVX2 is on by default because Haswell is the assumed floor, while
+AVX-VNNI and AVX-512 stay opt-in (`-DOPENZZS_MLLEE_AVX_VNNI=ON`,
+`-DOPENZZS_MLLEE_AVX512=ON`, both requiring `OPENZZS_MLLEE_AVX2=ON`) so a build
+still runs on older hardware.
 
 ```sh
 cmake -S . -B build -DOPENZZS_MLLEE_ASM=OFF                        # portable only
 cmake -S . -B build -DOPENZZS_MLLEE_ASM_TARGET=cortex-m4           # force a target
 cmake -S . -B build -DOPENZZS_MLLEE_AVX2=ON -DOPENZZS_MLLEE_SSSE3=OFF
+cmake -S . -B build -DOPENZZS_MLLEE_AVX2=ON -DOPENZZS_MLLEE_AVX_VNNI=ON  # Ice Lake+
+cmake -S . -B build -DOPENZZS_MLLEE_AVX2=ON -DOPENZZS_MLLEE_AVX512=ON    # AVX-512
 ```
 
 `OPENZZS_MLLEE_ASM_TARGET=auto` picks from `CMAKE_SYSTEM_PROCESSOR` and the
@@ -315,9 +356,128 @@ as the C++ path.
 tools/run_mllee_m4_qemu.sh            # prints CAPS, then M4-SELFTEST: PASS
 ```
 
+The ONNX wire kernels (varint, FNV-1a, copy) run in the same image and are
+checked against the portable references from `onnx_asm.hpp`.
+
 The reference side is compiled for baseline ARMv7-M on purpose: GCC will
 happily turn a dot product into SMLABB (which this model faults on), and then
 the harness would be checking the compiler against itself.
+
+## Streaming ONNX loader
+
+`mllee/onnx.hpp` reads a `ModelProto` straight from a caller-owned byte stream.
+The file is never mapped, buffered or copied: the caller hands over chunks on
+demand, and the parser keeps only the headers it needs to report. The
+device-side use is to inspect or select a model and to learn the absolute spans
+of weights that already live in Flash; the host-side converter turns those
+spans into the blob format above.
+
+The reader is split into 29 headers (`onnx_config`, `onnx_status`,
+`onnx_types`, `onnx_hash`, `onnx_asm`, `onnx_chunk`, `onnx_stream`,
+`onnx_bounded`, `onnx_varint`, `onnx_wire`, `onnx_scope`, `onnx_model_info`,
+`onnx_node_info`, `onnx_tensor_info`, `onnx_event`, `onnx_reader`,
+`onnx_string`, `onnx_ops`, `onnx_validate`, `onnx_external`, `onnx_shape`,
+`onnx_value`, `onnx_tensor`, `onnx_attribute`, `onnx_node`, `onnx_graph`,
+`onnx_model`, `onnx_loader`, `onnx_trace`). `onnx_trace.hpp` is a separate
+include because it logs through `std/log.hpp` and therefore needs lock-free
+64-bit atomics that a bare-metal target may not have.
+
+### Resident budget
+
+| Region | 64-bit | 32-bit |
+|---|---:|---:|
+| `Stream` — cursor and one cached caller chunk | 40 | 28 |
+| `ModelInfo` — model header and loader flags ("static" part) | 32 | 32 |
+| `NodeInfo` — active node | 28 | 28 |
+| `TensorInfo` — active tensor (packed to 28 bytes) | 28 | 28 |
+| **`Loader` total** | **128** | **116** |
+
+There is no heap, no writable static and no hidden scratch buffer. A chunk may
+be as small as one byte: the test suite replays the whole fixture corpus with a
+one-byte callback, so every varint and every payload boundary is exercised.
+`Stream` clamps a chunk that claims to run past the declared model size instead
+of trusting a buggy Flash driver.
+
+### Usage
+
+```cpp
+#include "mllee/onnx.hpp"
+namespace onnx = zzs::mllee::onnx;
+
+// Return the bytes starting at `offset`, or an empty Chunk at EOF.
+onnx::Chunk fetch (void *ctx, uint32_t offset) noexcept;
+
+onnx::Loader loader;
+loader.begin (fetch, &flash, size);            // tolerant defaults
+const onnx::OnnxError error = loader.run (visitor);
+if (error)
+    report (error.code (), error.offset ());   // absolute offset of the fault
+
+uint8_t row[64];
+uint32_t copied = 0;
+loader.copy (tensor._M_data_offset, row, sizeof row, copied);
+```
+
+`run()` returns `OnnxCode::STOPPED` when the visitor returns `false`; the loader
+stays valid and can be run again. `model()`, `node()` and `tensor()` expose the
+current headers after (or between) runs. `copy()` and `copy_string()` do not
+touch the parse cursor, so they can be called from inside the visitor; the
+source callback may return short chunks and `copy()` loops until the requested
+range is filled. `begin()` takes the flags described below; `loader_default_flags()`
+allows trailing bytes after the root message and otherwise parses tolerantly.
+
+### Events
+
+| Event | Meaning |
+|---|---|
+| `MODEL_BEGIN` / `MODEL_END` | root message span, model hash, IR version |
+| `OPSET` | one opset import (domain hash + version) |
+| `GRAPH_BEGIN` / `GRAPH_END` | graph span, name hash, node/input/output counts |
+| `NODE_BEGIN` / `NODE_INPUT` / `NODE_OUTPUT` / `NODE_END` | node header, one event per input/output name hash, operator lookup |
+| `ATTRIBUTE_BEGIN` / `ATTRIBUTE_ELEMENT` / `ATTRIBUTE_END` | attribute name hash, type and one element per scalar/repeated value |
+| `VALUE_BEGIN` / `VALUE_DIM` / `VALUE_END` | `ValueInfoProto` name, dtype and shape |
+| `TENSOR_BEGIN` / `TENSOR_DIM` / `TENSOR_DATA` / `TENSOR_END` | tensor header, one event per dim, one per payload occurrence, final shape hash and element count |
+| `EXTERNAL_DATA` | one `external_data` key/value entry (gated, see below) |
+| `DONE` | the walk reached the end of the model |
+
+Strings are never retained. Every name is reduced to FNV-1a + djb2 + length
+while it streams past, and string payloads are reported as `(offset, length)`
+spans. `TENSOR_DATA` carries the absolute span of each payload occurrence (a
+`raw_data` run, one packed typed field, or one string element), so a weight
+table never enters RAM. Attribute and tensor types are cross-checked against the
+declared dtype before any size is reported.
+
+### Flags and rejections
+
+| Flag | Effect |
+|---|---|
+| `LOADER_STRICT` | reject a subgraph or sparse initializer with `UNSUPPORTED` instead of skipping it |
+| `LOADER_ALLOW_SUBGRAPHS` | recurse into `GRAPH`/`GRAPHS` attributes (message depth ≤ 8) |
+| `LOADER_ALLOW_SPARSE` | parse `SparseTensorProto` values/indices instead of skipping |
+| `LOADER_ALLOW_EXTERNAL` | accept `external_data` entries and emit `EXTERNAL_DATA` |
+| `LOADER_ALLOW_TRAILING_BYTES` | ignore bytes after the root message (on by default) |
+
+External data has no silent-skip mode: without the flag the tensor is rejected,
+because a loader that quietly drops weights is worse than one that fails.
+Tolerant mode records `MODEL_FLAG_SUBGRAPH_SKIPPED` when it skips a subgraph.
+Independently of the flags the parser rejects protobuf groups (the wire skipper
+is non-recursive), field/wire-type conflicts, negative or overflowing shapes,
+payload sizes that disagree with dtype and shape, IR > 14, default-domain
+opset > 25, rank > 64, more than 2³²−1 elements, and names longer than 16 MiB.
+Every failure is an `OnnxCode` plus the absolute byte offset.
+
+### Assembly kernels
+
+`mllee/asm-x86_64/mllee_onnx_wire_x86_64.S` and
+`mllee/asm-cortex-m4/mllee_onnx_wire_cortex_m4.S` implement the four leaf
+routines the hot path uses: `varint32`, `varint64`, FNV-1a `hash32` and `copy`.
+They are selected by the same configure-time macros as the other kernels (no
+CPUID, no dispatch table) and the portable fallbacks in `onnx_asm.hpp` have
+identical contracts. The x86-64 file is exercised by the host suite; the
+Cortex-M4 file is executed by `tools/run_mllee_m4_qemu.sh`, which checks it
+against the same references as the inference kernels. The header static
+asserts the 128-byte (64-bit) / 116-byte (32-bit) layout, and
+`tools/check_mllee_ram.sh` prints and gates `sizeof(onnx::Loader)`.
 
 ## API
 
@@ -400,6 +560,12 @@ and dictionary paths, every op, the arena/error paths, and an end-to-end
 Conv1D → attention → dense → softmax pipeline. It also passes under
 AddressSanitizer and UndefinedBehaviorSanitizer.
 
+The ONNX suite (`tests/test_mllee_onnx.cpp`) builds its protobuf fixtures by
+hand and replays them through whole-image, one-byte and discontiguous chunk
+sources. It pins the 128-byte layout, every event count, the shape and payload
+checks, packed and unpacked dims, sparse/external/subgraph gating, the IR and
+opset ceilings, visitor stops, and `copy()`/`copy_string()` bounds.
+
 The training suite (`tests/test_mllee_training_*.cpp`, auto-globbed) pins the
 fixed-point vocabulary against hand-computed integers, the pool's alignment and
 overflow accounting, the tape order, each optimizer's recurrence, bias
@@ -412,10 +578,10 @@ The RAM gate prints:
 ```
 layout: 32-bit assertions passed (Core == 640, Workspace == 192, PacklowState == 124)
 writable statics : .data=0 .bss=0 (must be 0)
-core stack       : 304 B (worst chain: conv1d+codec, limit 384)
-flash (code+lut) : 10574 B text + 1536 B rodata = 12110 B (limit 16384)
+core stack       : 368 B (worst chain: linear+codec, limit 384)
+flash (code+lut) : 14020 B text + 1553 B rodata = 15573 B (limit 16384)
 static RAM       : 640 B (Core object)
-module RAM       : 944 B (Core + deepest chain, budget 1024)
+module RAM       : 1008 B (Core + deepest chain, budget 1024)
 mllee RAM gate: PASS
 ```
 

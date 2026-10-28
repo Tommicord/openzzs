@@ -68,7 +68,7 @@ inline constexpr uint32_t _S_max_code_depth = 65535u;
 [[nodiscard]] inline constexpr int32_t
 narrow_sum_q15 (const int64_t total) noexcept
 {
-    const int64_t limit = static_cast<int64_t> (_S_q15_max) << _S_grad_frac_bits;
+     constexpr int64_t limit = static_cast<int64_t> (_S_q15_max) << _S_grad_frac_bits;
     const int64_t bounded
         = total > limit ? limit : (total < -limit ? -limit : total);
     return q15_clamp (_S_round_shift (bounded, _S_grad_frac_bits));

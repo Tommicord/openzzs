@@ -323,9 +323,17 @@ q15_sigmoid_grad (const int32_t s_q15) noexcept
     return q15_mul (s_q15, _S_q15_one - 1 - s_q15);
 }
 
-/** @brief log(p) in Q7 for a positive Q15 p; p <= 0 maps to the -inf sentinel. */
+/**
+ * @brief ln(p / 2^15) in Q15 for a positive Q15 p.
+ *
+ * The value is normalized into the [0.5, 1) window, the mantissa log comes
+ * from the atanh series, and the octave count contributes whole multiples of
+ * the Q15 ln 2.  Keeping the whole result in Q15 lets every caller narrow
+ * exactly once, so a power of two is `n * ln 2` to within one Q7 lsb instead
+ * of accumulating the rounding of a narrowed per-octave constant.
+ */
 [[nodiscard]] inline constexpr int32_t
-q7_log_q15 (const int32_t p_q15) noexcept
+q15_log_q15 (const int32_t p_q15) noexcept
 {
     if (p_q15 <= 0)
         return _S_q15_min;
@@ -349,11 +357,18 @@ q7_log_q15 (const int32_t p_q15) noexcept
     const int32_t inner = q15_mul (u2, 6554) + 10923;   /* u2/5 + 1/3 */
     const int32_t bracket = q15_mul (u2, inner) + _S_q15_one; /* 1 + u2/3 + u2^2/5 */
     const int32_t ln_m = 2 * q15_mul (u, bracket);
-    /* ln p = ln m - n * ln 2, accumulated in Q15 so the octave count does not
-       multiply the rounding error of a Q7 ln 2, then narrowed to Q7. */
-    const int32_t total_q15 = ln_m - n * _S_ln2_q15;
-    const int32_t result
-        = _S_round_shift (static_cast<int64_t> (total_q15) * _S_q7_one, 15u);
+    /* ln p = ln m - n * ln 2, still in Q15. */
+    return ln_m - n * _S_ln2_q15;
+}
+
+/** @brief log(p) in Q7 for a positive Q15 p; p <= 0 maps to the -inf sentinel. */
+[[nodiscard]] inline constexpr int32_t
+q7_log_q15 (const int32_t p_q15) noexcept
+{
+    if (p_q15 <= 0)
+        return _S_q15_min;
+    const int32_t result = _S_round_shift (
+        static_cast<int64_t> (q15_log_q15 (p_q15)) * _S_q7_one, 15u);
     return result < _S_q15_min ? _S_q15_min : result;
 }
 

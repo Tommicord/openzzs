@@ -556,8 +556,9 @@ linear_run (Tape &tape, const LinearSpec &spec, const Trainable &input,
     operands[operand_count++] = weight;
     if (spec.has_bias ())
         operands[operand_count++] = bias;
-    for (uint32_t index = operand_count; index < _S_max_operands; ++index)
-        slots[index] = Saved{};
+    /* The four saved slots are independent of the operand count: a slot this call
+       did not carve is still the zero handle it started as, and `saved_as` reads
+       that as absent. */
     return tape.record (linear_backward, spec._M_op_id, output, operands,
                         operand_count, slots, _S_max_operands);
 }

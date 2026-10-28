@@ -28,6 +28,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <utility>
 #include <vector>
@@ -205,6 +206,169 @@ TEST_CASE ("linear float4 e2m1 weights use the flash LUT", "[mllee][ops]")
     REQUIRE (executed._M_values == std::vector<std::int8_t>{ 106, 127 });
 }
 
+TEST_CASE ("linear int2 weights", "[mllee][ops]")
+{
+    mllee_test::LayerSpec layer = external_layer (Op::LINEAR, 4, 2);
+    layer._M_dtype = Dtype::I2;
+    layer._M_weights = { 1, -2, 1, -1, -1, -1, 1, 1 };
+    const Executed executed = execute ({ layer }, { 2, 3, 4, 5 });
+    REQUIRE (executed._M_ok);
+    REQUIRE (executed._M_values == std::vector<std::int8_t>{ -5, 4 });
+}
+
+TEST_CASE ("linear int3 weights", "[mllee][ops]")
+{
+    mllee_test::LayerSpec layer = external_layer (Op::LINEAR, 8, 1);
+    layer._M_dtype = Dtype::I3;
+    layer._M_weights = { -4, -3, -2, -1, 0, 1, 2, 3 };
+    const Executed executed = execute ({ layer }, { 1, 2, 3, 4, 5, 6, 7, 8 });
+    REQUIRE (executed._M_ok);
+    REQUIRE (executed._M_values == std::vector<std::int8_t>{ 24 });
+}
+
+TEST_CASE ("linear int3 group scales", "[mllee][ops]")
+{
+    mllee_test::LayerSpec layer = external_layer (Op::LINEAR, 8, 1);
+    layer._M_dtype = Dtype::I3;
+    layer._M_group_size = 4;
+    layer._M_groups = 2;
+    layer._M_multipliers = { 32768, 16384 };
+    layer._M_weights = { 1, 1, 1, 1, 1, 1, 1, 1 };
+    /* 4 + (4 >> 1) = 6: the second group runs at half the requant multiplier. */
+    const Executed executed = execute ({ layer }, { 1, 1, 1, 1, 1, 1, 1, 1 });
+    REQUIRE (executed._M_ok);
+    REQUIRE (executed._M_values == std::vector<std::int8_t>{ 6 });
+}
+
+TEST_CASE ("linear float3 e1m1 weights use the flash LUT", "[mllee][ops]")
+{
+    mllee_test::LayerSpec layer = external_layer (Op::LINEAR, 8, 2);
+    layer._M_dtype = Dtype::F3E1M1;
+    layer._M_lut.resize (8);
+    zzs::mllee::build_weight_lut_e1m1 (1.5f, layer._M_lut.data ());
+    layer._M_weights = { 0, 1, 2, 3, 0, 0, 0, 0, 4, 5, 6, 7, 0, 0, 0, 0 };
+    const Executed executed = execute ({ layer }, std::vector<std::int8_t> (8, 1));
+    REQUIRE (executed._M_ok);
+    REQUIRE (executed._M_values == std::vector<std::int8_t>{ 127, -127 });
+}
+
+TEST_CASE ("embedding reads sub-byte rows", "[mllee][ops]")
+{
+    mllee_test::LayerSpec layer = external_layer (Op::EMBEDDING, 3, 24);
+    layer._M_head_dim = 8;
+    layer._M_dtype = Dtype::I2;
+    /* Rows 0..2 of eight int2 codes. */
+    layer._M_weights = { 1,  1,  1,  1,  -1, -1, -1, -1,  0, 0, 0, 0, 1, 1, 1, 1,
+                         -2, -2, -2, -2, 0,  0,  0,  0 };
+    const Executed executed = execute ({ layer }, { 0, 1, 2 });
+    REQUIRE (executed._M_ok);
+    REQUIRE (executed._M_values == std::vector<std::int8_t>{ 1,  1,  1,  1,  -1, -1, -1, -1,
+                                                             0,  0,  0,  0,  1,  1,  1,  1,
+                                                             -2, -2, -2, -2, 0,  0,  0,  0 });
+}
+
+TEST_CASE ("embedding reads bit-packed 3-bit rows", "[mllee][ops]")
+{
+    mllee_test::LayerSpec layer = external_layer (Op::EMBEDDING, 2, 16);
+    layer._M_head_dim = 8;
+    layer._M_dtype = Dtype::I3;
+    layer._M_weights = { -4, -3, -2, -1, 0, 1, 2, 3, 3, 2, 1, 0, -1, -2, -3, -4 };
+    const Executed executed = execute ({ layer }, { 0, 1 });
+    REQUIRE (executed._M_ok);
+    REQUIRE (executed._M_values == std::vector<std::int8_t>{ -4, -3, -2, -1, 0, 1, 2, 3,
+                                                             3,  2,  1,  0,  -1, -2, -3, -4 });
+}
+
+TEST_CASE ("embedding applies the float3 flash LUT", "[mllee][ops]")
+{
+    mllee_test::LayerSpec layer = external_layer (Op::EMBEDDING, 2, 16);
+    layer._M_head_dim = 8;
+    layer._M_dtype = Dtype::F3E1M1;
+    layer._M_lut.resize (8);
+    zzs::mllee::build_weight_lut_e1m1 (1.5f, layer._M_lut.data ());
+    layer._M_weights = { 0, 1, 2, 3, 4, 5, 6, 7, 7, 6, 5, 4, 3, 2, 1, 0 };
+    const Executed executed = execute ({ layer }, { 0, 1 });
+    REQUIRE (executed._M_ok);
+    REQUIRE (executed._M_values
+             == std::vector<std::int8_t>{ 0, 42, 85, 127, 0, -42, -85, -127,
+                                          -127, -85, -42, 0, 127, 85, 42, 0 });
+}
+
+TEST_CASE ("conv1d int4 weights", "[mllee][ops]")
+{
+    mllee_test::LayerSpec layer = external_layer (Op::CONV1D, 4, 4);
+    layer._M_head_dim = 4;
+    layer._M_seq = 4;
+    layer._M_kernel = 2;
+    layer._M_dtype = Dtype::I4;
+    layer._M_weights = { 2, -3 };
+    const Executed executed = execute ({ layer }, { 1, 2, 3, 4 });
+    REQUIRE (executed._M_ok);
+    REQUIRE (executed._M_values == std::vector<std::int8_t>{ -4, -5, -6, 8 });
+}
+
+TEST_CASE ("conv1d bit-packed int3 weights", "[mllee][ops]")
+{
+    mllee_test::LayerSpec layer = external_layer (Op::CONV1D, 8, 8);
+    layer._M_head_dim = 8;
+    layer._M_seq = 8;
+    layer._M_kernel = 8;
+    layer._M_dtype = Dtype::I3;
+    layer._M_weights = { 1, 2, 3, -4, -3, -2, -1, 3 };
+    const Executed executed = execute ({ layer }, std::vector<std::int8_t> (8, 1));
+    REQUIRE (executed._M_ok);
+    REQUIRE (executed._M_values
+             == std::vector<std::int8_t>{ -1, -4, -3, -1, 2, 6, 3, 1 });
+}
+
+TEST_CASE ("linear packed int4 packlow rows match raw", "[mllee][ops]")
+{
+    mllee_test::LayerSpec layer = external_layer (Op::LINEAR, 64, 8);
+    layer._M_dtype = Dtype::I4;
+    for (std::uint32_t out = 0; out < 8; ++out)
+        for (std::uint32_t i = 0; i < 64; ++i)
+            layer._M_weights.push_back (
+                static_cast<std::int8_t> (static_cast<std::int32_t> ((out + i) % 8u) - 4));
+    std::vector<std::int8_t> input (64);
+    for (std::uint32_t i = 0; i < 64; ++i)
+        input[i] = static_cast<std::int8_t> (static_cast<std::int32_t> (i % 7u) - 3);
+
+    const Executed raw = execute ({ layer }, input);
+    REQUIRE (raw._M_ok);
+
+    layer._M_use_packlow = true;
+    const std::vector<uint8_t> blob = single_blob (layer);
+    REQUIRE (blob[zzs::mllee::_S_model_header_size + 3]
+             == static_cast<uint8_t> (Codec::PACKLOW));
+    const Executed packed = execute ({ layer }, input);
+    REQUIRE (packed._M_ok);
+    REQUIRE (packed._M_values == raw._M_values);
+}
+
+TEST_CASE ("linear bit-packed int3 packlow rows match raw", "[mllee][ops]")
+{
+    mllee_test::LayerSpec layer = external_layer (Op::LINEAR, 64, 8);
+    layer._M_dtype = Dtype::I3;
+    for (std::uint32_t out = 0; out < 8; ++out)
+        for (std::uint32_t i = 0; i < 64; ++i)
+            layer._M_weights.push_back (
+                static_cast<std::int8_t> (static_cast<std::int32_t> ((out + i) % 8u) - 4));
+    std::vector<std::int8_t> input (64);
+    for (std::uint32_t i = 0; i < 64; ++i)
+        input[i] = static_cast<std::int8_t> (static_cast<std::int32_t> (i % 5u) - 2);
+
+    const Executed raw = execute ({ layer }, input);
+    REQUIRE (raw._M_ok);
+
+    layer._M_use_packlow = true;
+    const std::vector<uint8_t> blob = single_blob (layer);
+    REQUIRE (blob[zzs::mllee::_S_model_header_size + 3]
+             == static_cast<uint8_t> (Codec::PACKLOW));
+    const Executed packed = execute ({ layer }, input);
+    REQUIRE (packed._M_ok);
+    REQUIRE (packed._M_values == raw._M_values);
+}
+
 TEST_CASE ("conv1d causal and valid padding", "[mllee][ops]")
 {
     mllee_test::LayerSpec causal = external_layer (Op::CONV1D, 4, 4);
@@ -280,6 +444,53 @@ TEST_CASE ("conv1d int4 staging buffer", "[mllee][ops]")
     const Executed executed = execute ({ layer }, { 1, 2, 3, 4 });
     REQUIRE (executed._M_ok);
     REQUIRE (executed._M_values == std::vector<std::int8_t>{ -2, -1, 0, 1 });
+}
+
+// The packlow CONV1D path re-reads a staged row from the 64-byte ring once per
+// output position, so a window that starts past the ring wrap exercises the
+// tail branch of the staged dot.  This pins it to the raw stream, which reads
+// the same codes straight from Flash.
+TEST_CASE ("conv1d packlow staged row matches raw across ring wrap", "[mllee][ops]")
+{
+    // Depthwise causal, kernel 5: 26 rows of 5 codes are decoded into one ring,
+    // so the row window wraps and many positions start inside the wrapped tail.
+    const std::vector<std::int8_t> weights
+        = [] {
+              std::vector<std::int8_t> codes (26u * 5u);
+              for (std::size_t i = 0; i < codes.size (); ++i)
+                  codes[i] = static_cast<std::int8_t> ((i / 5u) % 9u) - 4;
+              return codes;
+          } ();
+    const std::vector<std::int8_t> input
+        = [] {
+              std::vector<std::int8_t> values (26u * 16u);
+              for (std::size_t i = 0; i < values.size (); ++i)
+                  values[i] = static_cast<std::int8_t> ((i % 11u) * 9 - 45);
+              return values;
+          } ();
+
+    mllee_test::LayerSpec raw = external_layer (Op::CONV1D, 26 * 16, 26 * 16);
+    raw._M_head_dim = 16;
+    raw._M_seq = 16;
+    raw._M_kernel = 5;
+    raw._M_stride = 1;
+    raw._M_flags |= zzs::mllee::CONV_DEPTHWISE | zzs::mllee::CONV_CAUSAL;
+    raw._M_weights = weights;
+
+    mllee_test::LayerSpec packed = raw;
+    packed._M_use_packlow = true;
+
+    // Only a real packlow blob exercises the ring reader; a fallback to raw
+    // would silently pass without testing the staged path.
+    const std::vector<uint8_t> blob = single_blob (packed);
+    REQUIRE (blob[zzs::mllee::_S_model_header_size + 3]
+             == static_cast<uint8_t> (Codec::PACKLOW));
+
+    const Executed raw_executed = execute ({ raw }, input);
+    const Executed packed_executed = execute ({ packed }, input);
+    REQUIRE (raw_executed._M_ok);
+    REQUIRE (packed_executed._M_ok);
+    REQUIRE (raw_executed._M_values == packed_executed._M_values);
 }
 
 TEST_CASE ("layernorm matches integer reference", "[mllee][ops]")
@@ -402,6 +613,154 @@ TEST_CASE ("attention rejects head dimensions above eight", "[mllee][ops]")
     REQUIRE (executed._M_status == Status::UNSUPPORTED);
 }
 
+/* Double-precision twin of the rotary attention path: the kernel quantizes the
+   rotation and the exp table at 1/8 steps, so the test compares within a few
+   codes rather than bit-exactly. */
+std::vector<std::int8_t>
+rope_reference (const std::vector<std::int8_t> &input, const uint32_t sequence,
+                const uint32_t head_dim, const bool causal)
+{
+    const uint32_t stride = head_dim;
+    const uint32_t pairs = head_dim / 2u;
+    const auto rotate = [&] (const uint32_t base, const uint32_t position) {
+        std::vector<double> row (head_dim, 0.0);
+        for (uint32_t pair = 0; pair < pairs; ++pair)
+            {
+                const double theta
+                    = static_cast<double> (position)
+                      * std::pow (10000.0,
+                                  -2.0 * static_cast<double> (pair)
+                                      / static_cast<double> (head_dim));
+                const double cosine = std::cos (theta);
+                const double sine = std::sin (theta);
+                const double x = input[base + position * stride + 2u * pair];
+                const double y = input[base + position * stride + 2u * pair + 1u];
+                row[2u * pair] = x * cosine - y * sine;
+                row[2u * pair + 1u] = x * sine + y * cosine;
+            }
+        return row;
+    };
+    const uint32_t q_base = 0u;
+    const uint32_t k_base = sequence * stride;
+    const uint32_t v_base = 2u * sequence * stride;
+    std::vector<std::int8_t> out (sequence * stride, 0);
+    for (uint32_t query = 0; query < sequence; ++query)
+        {
+            const std::vector<double> q = rotate (q_base, query);
+            const uint32_t limit = causal ? query + 1u : sequence;
+            std::vector<double> scores (limit, 0.0);
+            double maximum = -1e300;
+            for (uint32_t key = 0; key < limit; ++key)
+                {
+                    const std::vector<double> k = rotate (k_base, key);
+                    for (uint32_t d = 0; d < head_dim; ++d)
+                        scores[key] += q[d] * k[d];
+                    maximum = std::max (maximum, scores[key]);
+                }
+            double sum = 0.0;
+            for (uint32_t key = 0; key < limit; ++key)
+                {
+                    scores[key] = std::exp ((scores[key] - maximum)
+                                             / std::sqrt (static_cast<double> (head_dim)));
+                    sum += scores[key];
+                }
+            for (uint32_t d = 0; d < head_dim; ++d)
+                {
+                    double mixed = 0.0;
+                    for (uint32_t key = 0; key < limit; ++key)
+                        mixed += scores[key]
+                                 * input[v_base + key * stride + d];
+                    mixed /= sum;
+                    const int32_t code = std::lround (mixed);
+                    out[query * stride + d] = static_cast<std::int8_t> (
+                        code < -127 ? -127 : (code > 127 ? 127 : code));
+                }
+        }
+    return out;
+}
+
+TEST_CASE ("rotary attention rotates queries and keys per position", "[mllee][ops]")
+{
+    const std::vector<std::int8_t> input = {
+        60, 0,   0, 60,    /* queries */
+        60, 0,   60, 60,   /* keys */
+        100, 0,  0, 100,   /* values */
+    };
+    mllee_test::LayerSpec plain = external_layer (Op::ATTENTION, 12, 4);
+    plain._M_head_dim = 2;
+    plain._M_seq = 2;
+    const Executed plain_out = execute ({ plain }, input);
+    REQUIRE (plain_out._M_ok);
+
+    mllee_test::LayerSpec rotated = plain;
+    rotated._M_flags |= zzs::mllee::ATTN_ROPE;
+    const Executed rotated_out = execute ({ rotated }, input);
+    REQUIRE (rotated_out._M_ok);
+    REQUIRE (rotated_out._M_values != plain_out._M_values);
+
+    const std::vector<std::int8_t> want
+        = rope_reference (input, 2u, 2u, false);
+    REQUIRE (rotated_out._M_values.size () == want.size ());
+    for (std::size_t i = 0; i < want.size (); ++i)
+        CHECK (std::abs (rotated_out._M_values[i] - want[i]) <= 3);
+
+    /* A causal row at position 0 can only see its own value, rotation or not. */
+    mllee_test::LayerSpec causal = rotated;
+    causal._M_flags |= zzs::mllee::ATTN_CAUSAL;
+    const Executed causal_out = execute ({ causal }, input);
+    REQUIRE (causal_out._M_ok);
+    REQUIRE (causal_out._M_values[0] == want[0]);
+    REQUIRE (causal_out._M_values[1] == want[1]);
+}
+
+TEST_CASE ("rotary attention rejects an odd head dimension", "[mllee][ops]")
+{
+    mllee_test::LayerSpec layer = external_layer (Op::ATTENTION, 9, 3);
+    layer._M_head_dim = 3;
+    layer._M_seq = 1;
+    layer._M_flags |= zzs::mllee::ATTN_ROPE;
+    const Executed executed = execute ({ layer }, std::vector<std::int8_t> (9, 0));
+    REQUIRE (!executed._M_ok);
+    REQUIRE (executed._M_status == Status::BAD_LAYOUT);
+}
+
+TEST_CASE ("residual norm normalizes the sum of both operands", "[mllee][ops]")
+{
+    /* Layer 0 copies the external row into the arena; layer 1 normalizes the
+       external row plus that residual, which must equal a plain norm of the
+       element-wise sum. */
+    mllee_test::LayerSpec copy = external_layer (Op::ACTIVATION, 4, 4);
+    copy._M_out_off = 0;
+    copy._M_out_len = 4;
+
+    mllee_test::LayerSpec residual_norm = external_layer (Op::NORM, 4, 4);
+    residual_norm._M_out_off = 4;
+    residual_norm._M_out_len = 4;
+    residual_norm._M_flags |= zzs::mllee::NORM_RESIDUAL;
+    residual_norm._M_in2_off = 0;
+    residual_norm._M_in2_len = 4;
+
+    const Executed residual = execute ({ copy, residual_norm }, { -3, -1, 1, 3 });
+    REQUIRE (residual._M_ok);
+
+    mllee_test::LayerSpec plain = external_layer (Op::NORM, 4, 4);
+    const Executed summed = execute ({ plain }, { -6, -2, 2, 6 });
+    REQUIRE (summed._M_ok);
+    REQUIRE (residual._M_values == summed._M_values);
+
+    /* The same composition with RMSNorm, so the residual feed is exercised on
+       both variance paths. */
+    mllee_test::LayerSpec rms_residual = residual_norm;
+    rms_residual._M_flags |= zzs::mllee::NORM_RMS;
+    const Executed rms = execute ({ copy, rms_residual }, { -3, -1, 1, 3 });
+    REQUIRE (rms._M_ok);
+    mllee_test::LayerSpec rms_plain = plain;
+    rms_plain._M_flags |= zzs::mllee::NORM_RMS;
+    const Executed rms_summed = execute ({ rms_plain }, { -6, -2, 2, 6 });
+    REQUIRE (rms_summed._M_ok);
+    REQUIRE (rms._M_values == rms_summed._M_values);
+}
+
 TEST_CASE ("packlow path matches raw weights", "[mllee][ops]")
 {
     mllee_test::LayerSpec raw = external_layer (Op::LINEAR, 16, 4);
@@ -509,7 +868,7 @@ TEST_CASE ("core reports packlow CRC failure", "[mllee][ops]")
     REQUIRE (status_of (blob, std::vector<std::int8_t> (16, 1)) == Status::CORRUPT_STREAM);
 }
 
-TEST_CASE ("readme pipeline runs end to end", "[mllee][ops][golden]")
+TEST_CASE ("pipeline runs end to end", "[mllee][ops][golden]")
 {
     const std::vector<mllee_test::LayerSpec> layers = mllee_test::make_pipeline ();
     const std::vector<uint8_t> blob = mllee_test::BlobBuilder (layers).build (

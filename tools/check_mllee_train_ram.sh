@@ -117,6 +117,39 @@ frame () {
     echo "${value:-0}"
 }
 
+# Read one frame out of a named .su file.
+frame_in () {
+    local value
+    value=$(awk -v needle="$2" -F'\t' 'index($1, needle) { print $2; exit }' "$1")
+    echo "${value:-0}"
+}
+
+# A frame the compiler inlined away would silently shrink the chain it belongs
+# to, so a chain is only measured once every name it adds up is present.
+require_frames () {
+    local file=$1
+    shift
+    local needle
+    for needle in "$@"; do
+        if ! grep -qF -- "$needle" "$file"; then
+            echo "FAIL: $file has no frame for '$needle'; the gate cannot bound that chain" >&2
+            exit 1
+        fi
+    done
+}
+
+max_of () {
+    local best=0 value
+    for value in "$@"; do
+        (( value > best )) && best=$value
+    done
+    echo "$best"
+}
+
+require_frames "$su" "Trainer::step(" "linear_run(" "linear_forward(" \
+    "linear_backward(" "mse_backward(" "act_backward_codes(" "Tape::record(" \
+    "Tape::save(" "Pool::carve(" "probe_forward(" "mllee_train_worst_step("
+
 step=$(frame "Trainer::step(")
 configure=$(frame "Trainer::configure(")
 linear_run=$(frame "linear_run(")
@@ -177,6 +210,107 @@ if (( full > full_limit )); then
 fi
 
 # ---------------------------------------------------------------------------
+# 2b. The convolutional chain: conv -> max-pool -> dropout -> MSE.
+#
+# The linear chain above is the cheapest model that reaches the trainer, and it
+# is not what a device runs.  A conv layer, a max-pool that stages its window
+# and a dropout that re-reads its mask are separate, larger frames, so a gate
+# that only adds `linear_backward` reports a model that never exists.
+# ---------------------------------------------------------------------------
+"$cxx" "${target[@]}" "${flags[@]}" -c "$root/tools/mllee_train_deep_stack_check.cpp" \
+    -o "$out/mllee_train_deep_stack_check.o"
+
+dsu="$out/mllee_train_deep_stack_check.su"
+if [[ ! -f $dsu ]]; then
+    echo "FAIL: $dsu was not produced" >&2
+    exit 1
+fi
+
+require_frames "$dsu" "Trainer::step(" "mllee_train_worst_deep_step(" \
+    "deep_forward(" "conv_run(" "conv_record(" "conv_forward(" "conv_backward(" \
+    "act_backward_codes(" "pool_run(" "pool_forward(" "pool_backward(" \
+    "pool_backward_max(" "pool_backward_window(" \
+    "dropout_run(" "dropout_backward(" "mse_backward(" "Tape::record(" \
+    "Tape::save(" "Pool::carve("
+
+dstep=$(frame_in "$dsu" "Trainer::step(")
+dentry=$(frame_in "$dsu" "mllee_train_worst_deep_step(")
+dhook=$(frame_in "$dsu" "deep_forward(")
+dconv_run=$(frame_in "$dsu" "conv_run(")
+dconv_record=$(frame_in "$dsu" "conv_record(")
+dconv_forward=$(frame_in "$dsu" "conv_forward(")
+dconv_backward=$(frame_in "$dsu" "conv_backward(")
+dact_backward=$(frame_in "$dsu" "act_backward_codes(")
+dpool_run=$(frame_in "$dsu" "pool_run(")
+dpool_forward=$(frame_in "$dsu" "pool_forward(")
+dpool_backward=$(frame_in "$dsu" "pool_backward(")
+dpool_backward_max=$(frame_in "$dsu" "pool_backward_max(")
+dpool_backward_window=$(frame_in "$dsu" "pool_backward_window(")
+ddrop_run=$(frame_in "$dsu" "dropout_run(")
+ddrop_backward=$(frame_in "$dsu" "dropout_backward(")
+dmse_backward=$(frame_in "$dsu" "mse_backward(")
+dtape_record=$(frame_in "$dsu" "Tape::record(")
+dtape_save=$(frame_in "$dsu" "Tape::save(")
+dpool_carve=$(frame_in "$dsu" "Pool::carve(")
+
+# The tape walks its nodes in the trainer's frame, so every backward is a direct
+# child of step; forward ops nest one level deeper inside their own run.
+# `pool_backward` is a dispatcher: the max scatter and the window broadcast are
+# siblings that never run together, so the chain is the dispatch frame plus the
+# deeper of the two, exactly like a run frame plus its forward.
+dpool_backward_chain=$(( dpool_backward \
+                         + $(max_of "$dpool_backward_max" "$dpool_backward_window") ))
+dtape_child=$(max_of "$dtape_record" "$dtape_save" "$dpool_carve")
+# `conv_run` writes the node from its own `conv_record` helper, so the tape frame
+# nests one level below that helper instead of below the run frame the forward
+# shares with it.
+dconv_record_chain=$(( dconv_record + dtape_record ))
+dconv_chain=$(( dconv_run \
+                + $(max_of "$dconv_forward" "$dtape_child" "$dconv_record_chain") ))
+dpool_chain=$(( dpool_run + $(max_of "$dpool_forward" "$dtape_child") ))
+ddrop_chain=$(( ddrop_run + dtape_child ))
+dforward=$(( dstep + $(max_of "$dconv_chain" "$dpool_chain" "$ddrop_chain") ))
+dbackward=$(( dstep + $(max_of $(( dconv_backward + dact_backward )) \
+                            "$dpool_backward_chain" "$ddrop_backward" "$dmse_backward") ))
+
+deep_module=$(max_of "$dforward" "$dbackward")
+deep_name="conv+pool forward"
+if (( dbackward > deep_module )); then
+    deep_module=$dbackward
+    deep_name="pool_backward"
+fi
+
+# The caller's hook owns three spec structs and eight arena pointers, so a
+# convolutional probe sits above the single-op budget by design; it is bounded
+# separately and only the module chain is compared against the 512-byte limit.
+deep_full=$(( dentry + dhook + deep_module ))
+deep_full_limit=${ZZS_MLLEE_TRAIN_DEEP_FULL_STACK_LIMIT:-2048}
+
+printf 'conv forward     : %d B (step %d + deepest op chain %d)\n' \
+    "$dforward" "$dstep" "$(( dforward - dstep ))"
+printf 'conv backward    : %d B (step %d + pool %d|%d | conv %d + act %d)\n' \
+    "$dbackward" "$dstep" "$dpool_backward" "$dpool_backward_window" \
+    "$dconv_backward" "$dact_backward"
+printf 'conv module      : %d B (worst chain: %s, limit %d)\n' \
+    "$deep_module" "$deep_name" "$stack_limit"
+if (( deep_module > stack_limit )); then
+    echo "FAIL: a convolutional training step exceeds the $stack_limit-byte module budget" >&2
+    status=1
+fi
+printf 'conv probe       : %d B (caller hook included, limit %d)\n' \
+    "$deep_full" "$deep_full_limit"
+if (( deep_full > deep_full_limit )); then
+    echo "FAIL: the convolutional probe chain exceeds $deep_full_limit bytes" >&2
+    status=1
+fi
+
+if (( deep_full > full )); then
+    worst_full=$deep_full
+else
+    worst_full=$full
+fi
+
+# ---------------------------------------------------------------------------
 # 3. Statics, flash, and the total.
 # ---------------------------------------------------------------------------
 sections=$("$size_tool" -A "$out/mllee_train_stack_check.o")
@@ -201,7 +335,7 @@ if (( flash > flash_limit )); then
 fi
 
 ram_budget=${ZZS_MLLEE_TRAIN_RAM_BUDGET:-10240}
-total=$((pool_bytes + control_bytes + full))
+total=$((pool_bytes + control_bytes + worst_full))
 printf 'training RAM     : %d B (pool + control + deepest chain, budget %d)\n' \
     "$total" "$ram_budget"
 if (( total > ram_budget )); then

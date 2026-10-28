@@ -191,7 +191,7 @@ Status
 _S_run_norm (OpsCase &c) noexcept
 {
     return zzs::mllee::_S_norm (c._M_ws._M_layer, c._M_model.data (), c._M_input.data (),
-                                c._M_output.data ());
+                                nullptr, c._M_output.data ());
 }
 
 Status

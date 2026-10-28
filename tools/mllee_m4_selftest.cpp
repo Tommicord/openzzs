@@ -73,6 +73,15 @@ extern "C"
     void zzs_mllee_shm_write0 (const char *text);
     void zzs_mllee_shm_exit (uint32_t failing);
 
+    /* ONNX wire primitives (mllee/asm-cortex-m4/mllee_onnx_wire_cortex_m4.S).
+       Same ABI as the portable fallbacks in mllee/onnx_asm.hpp. */
+    uint32_t zzs_mllee_onnx_varint32 (const uint8_t *src, uint32_t available,
+                                      uint32_t *out);
+    uint32_t zzs_mllee_onnx_varint64 (const uint8_t *src, uint32_t available,
+                                      uint64_t *out);
+    uint32_t zzs_mllee_onnx_hash32 (const uint8_t *src, uint32_t length);
+    void zzs_mllee_onnx_copy (uint8_t *dst, const uint8_t *src, uint32_t length);
+
     /* One guarded instruction each; 1 = the model executes it, 0 = it faults. */
     int zzs_m4_probe_sxtb16 (void);
     int zzs_m4_probe_smlad (void);
@@ -450,6 +459,255 @@ test_stats () noexcept
                     _S_stats[0][1]);
     });
 }
+/* --- ONNX wire primitives.  The host suite links only the x86-64 file, so the
+       Thumb varint/hash/copy routines are executed for the first time here.
+       References are the documented fallbacks from mllee/onnx_asm.hpp. */
+
+[[nodiscard]] uint32_t
+encode_varint32 (uint8_t *const out, uint32_t value) noexcept
+{
+    uint32_t length = 0;
+    do
+        {
+            uint8_t byte = static_cast<uint8_t> (value & 0x7Fu);
+            value >>= 7u;
+            if (value != 0u)
+                byte = static_cast<uint8_t> (byte | 0x80u);
+            out[length++] = byte;
+        }
+    while (value != 0u);
+    return length;
+}
+
+[[nodiscard]] uint32_t
+encode_varint64 (uint8_t *const out, uint64_t value) noexcept
+{
+    uint32_t length = 0;
+    do
+        {
+            uint8_t byte = static_cast<uint8_t> (value & 0x7Fu);
+            value >>= 7u;
+            if (value != 0u)
+                byte = static_cast<uint8_t> (byte | 0x80u);
+            out[length++] = byte;
+        }
+    while (value != 0u);
+    return length;
+}
+
+[[nodiscard]] uint32_t
+ref_varint32 (const uint8_t *const data, const uint32_t available,
+              uint32_t &out) noexcept
+{
+    uint32_t value = 0;
+    const uint32_t limit = available < 5u ? available : 5u;
+    for (uint32_t i = 0; i < limit; ++i)
+        {
+            const uint8_t byte = data[i];
+            if (i == 4u && (byte & 0xF0u) != 0u)
+                return 0;
+            value |= static_cast<uint32_t> (byte & 0x7Fu) << (7u * i);
+            if ((byte & 0x80u) == 0u)
+                {
+                    out = value;
+                    return i + 1u;
+                }
+        }
+    return 0;
+}
+
+[[nodiscard]] uint32_t
+ref_varint64 (const uint8_t *const data, const uint32_t available,
+              uint64_t &out) noexcept
+{
+    uint64_t value = 0;
+    const uint32_t limit = available < 10u ? available : 10u;
+    for (uint32_t i = 0; i < limit; ++i)
+        {
+            const uint8_t byte = data[i];
+            if (i == 9u && (byte & 0xFEu) != 0u)
+                return 0;
+            value |= static_cast<uint64_t> (byte & 0x7Fu) << (7u * i);
+            if ((byte & 0x80u) == 0u)
+                {
+                    out = value;
+                    return i + 1u;
+                }
+        }
+    return 0;
+}
+
+[[nodiscard]] uint32_t
+ref_hash (const uint8_t *const data, const uint32_t length) noexcept
+{
+    uint32_t hash = 2166136261u;
+    for (uint32_t i = 0; i < length; ++i)
+        {
+            hash = (hash ^ data[i]) * 16777619u;
+        }
+    return hash;
+}
+
+void
+report_u64 (const char *const name, const uint32_t available,
+            const uint64_t expected, const uint64_t got) noexcept
+{
+    ++_S_failures;
+    _S_pos = 0;
+    put_text ("FAIL ");
+    put_text (name);
+    put_text (" available=");
+    put_dec (static_cast<int32_t> (available));
+    put_text (" expected=");
+    put_dec (static_cast<int32_t> (static_cast<uint32_t> (expected >> 32u)));
+    put (':');
+    put_dec (static_cast<int32_t> (static_cast<uint32_t> (expected)));
+    put_text (" got=");
+    put_dec (static_cast<int32_t> (static_cast<uint32_t> (got >> 32u)));
+    put (':');
+    put_dec (static_cast<int32_t> (static_cast<uint32_t> (got)));
+    put ('\n');
+    flush_line ();
+}
+
+void
+test_onnx_varint32 () noexcept
+{
+    static constexpr uint32_t _S_values[]
+        = { 0u,      1u,       127u,      128u,      300u,
+            16383u,  16384u,   0x0FFFFFFFu, 0x7FFFFFFFu, 0xFFFFFFFFu };
+    for (const uint32_t value : _S_values)
+        {
+            const uint32_t encoded = encode_varint32 (_S_packed, value);
+            for (uint32_t available = 0; available <= encoded + 2u; ++available)
+                {
+                    uint32_t got = 0xA5A5A5A5u;
+                    uint32_t want = 0xA5A5A5A5u;
+                    const uint32_t got_used
+                        = zzs_mllee_onnx_varint32 (_S_packed, available, &got);
+                    const uint32_t want_used
+                        = ref_varint32 (_S_packed, available, want);
+                    ++_S_checks;
+                    if (got_used != want_used || got != want)
+                        report ("onnx_varint32", available, value,
+                                static_cast<int32_t> (want),
+                                static_cast<int32_t> (got));
+                }
+        }
+
+    static constexpr uint8_t _S_malformed[][5] = {
+        { 0x80u, 0x80u, 0x80u, 0x80u, 0x10u }, /* fifth byte > 4 bits */
+        { 0x80u, 0x80u, 0x80u, 0x80u, 0x80u }, /* never terminates    */
+        { 0xFFu, 0xFFu, 0xFFu, 0xFFu, 0x1Fu },
+    };
+    for (const uint8_t(&bytes)[5] : _S_malformed)
+        {
+            uint32_t got = 0x5A5A5A5Au;
+            const uint32_t used = zzs_mllee_onnx_varint32 (bytes, 5u, &got);
+            ++_S_checks;
+            if (used != 0u || got != 0x5A5A5A5Au)
+                report ("onnx_varint32_bad", 5u, used, 0,
+                        static_cast<int32_t> (used));
+        }
+}
+
+void
+test_onnx_varint64 () noexcept
+{
+    static constexpr uint64_t _S_values[]
+        = { 0ull,
+            1ull,
+            127ull,
+            128ull,
+            300ull,
+            0xFFFFFFFFull,
+            0x100000000ull,
+            0x123456789ABCDEFull,
+            0x7FFFFFFFFFFFFFFFull,
+            0xFFFFFFFFFFFFFFFFull };
+    for (const uint64_t value : _S_values)
+        {
+            const uint32_t encoded = encode_varint64 (_S_packed, value);
+            for (uint32_t available = 0; available <= encoded + 2u; ++available)
+                {
+                    uint64_t got = 0xA5A5A5A5A5A5A5A5ull;
+                    uint64_t want = 0xA5A5A5A5A5A5A5A5ull;
+                    const uint32_t got_used
+                        = zzs_mllee_onnx_varint64 (_S_packed, available, &got);
+                    const uint32_t want_used
+                        = ref_varint64 (_S_packed, available, want);
+                    ++_S_checks;
+                    if (got_used != want_used || got != want)
+                        report_u64 ("onnx_varint64", available, want, got);
+                }
+        }
+
+    static constexpr uint8_t _S_malformed[][10] = {
+        { 0x80u, 0x80u, 0x80u, 0x80u, 0x80u, 0x80u, 0x80u, 0x80u, 0x80u,
+          0x02u }, /* tenth byte > 1 bit */
+        { 0x80u, 0x80u, 0x80u, 0x80u, 0x80u, 0x80u, 0x80u, 0x80u, 0x80u,
+          0x80u }, /* never terminates   */
+    };
+    for (const uint8_t(&bytes)[10] : _S_malformed)
+        {
+            uint64_t got = 0x5A5A5A5A5A5A5A5Aull;
+            const uint32_t used = zzs_mllee_onnx_varint64 (bytes, 10u, &got);
+            ++_S_checks;
+            if (used != 0u || got != 0x5A5A5A5A5A5A5A5Aull)
+                report_u64 ("onnx_varint64_bad", 10u, 0x5A5A5A5A5A5A5A5Aull,
+                            got);
+        }
+}
+
+void
+test_onnx_hash32 () noexcept
+{
+    for (uint32_t offset = 0; offset < 4u; ++offset)
+        for (const uint32_t length : _S_lengths)
+            {
+                if (offset + length > _S_cap)
+                    continue;
+                const uint32_t got
+                    = zzs_mllee_onnx_hash32 (_S_packed + offset, length);
+                const uint32_t want = ref_hash (_S_packed + offset, length);
+                ++_S_checks;
+                if (got != want)
+                    report ("onnx_hash32", offset, length,
+                            static_cast<int32_t> (want),
+                            static_cast<int32_t> (got));
+            }
+}
+
+void
+test_onnx_copy () noexcept
+{
+    constexpr uint8_t _S_sentinel = 0x5Au;
+    for (uint32_t offset = 0; offset < 4u; ++offset)
+        for (const uint32_t length : _S_lengths)
+            {
+                if (offset + length > _S_cap)
+                    continue;
+                for (uint32_t i = 0; i < _S_cap; ++i)
+                    _S_out[i] = static_cast<int8_t> (_S_sentinel);
+                zzs_mllee_onnx_copy (reinterpret_cast<uint8_t *> (_S_out + offset),
+                                     _S_packed + offset, length);
+                for (uint32_t i = 0; i < _S_cap; ++i)
+                    {
+                        const bool inside
+                            = i >= offset && i < offset + length;
+                        const int8_t want
+                            = inside ? _S_packed[i]
+                                     : static_cast<int8_t> (_S_sentinel);
+                        ++_S_checks;
+                        if (_S_out[i] != want)
+                            {
+                                report ("onnx_copy", offset, length, want,
+                                        _S_out[i]);
+                                break;
+                            }
+                    }
+            }
+}
 } // namespace
 
 extern "C" void *
@@ -823,6 +1081,10 @@ main ()
     test_sat (false);
     test_sum_max ();
     test_stats ();
+    test_onnx_varint32 ();
+    test_onnx_varint64 ();
+    test_onnx_hash32 ();
+    test_onnx_copy ();
     fill_lanes ();
     test_train_lanes ();
 

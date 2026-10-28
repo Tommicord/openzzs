@@ -72,12 +72,8 @@ _S_clamp (const Layer &layer, const int8_t *const input, int8_t *const output) n
     const int32_t high = static_cast<int8_t> (layer._M_stride);
     if (low > high)
         return Status::BAD_LAYOUT;
-    const uint32_t count = layer._M_in_dim;
-    for (uint32_t i = 0; i < count; ++i)
-        {
-            const int32_t value = input[i];
-            output[i] = static_cast<int8_t> (value < low ? low : (value > high ? high : value));
-        }
+    simd::clamp_i8 (input, output, layer._M_in_dim, static_cast<int8_t> (low),
+                    static_cast<int8_t> (high));
     return Status::OK;
 }
 
@@ -120,6 +116,7 @@ _S_batch_norm (const Layer &layer, const uint8_t *const model, const int8_t *con
             int32_t mean = 0;
             uint32_t deviation = 0;
             _S_window_stats (input + channel * window, window, rms, mean, deviation);
+            const _S_Div32 deviation_div = _S_div32_make (deviation);
             const int32_t gamma = layer._M_scale_off != 0
                                       ? _S_i16 (model + layer._M_scale_off + channel * 2u)
                                       : 128;
@@ -131,8 +128,8 @@ _S_batch_norm (const Layer &layer, const uint8_t *const model, const int8_t *con
                     const uint32_t index = channel * window + i;
                     output[index] = _S_i8_code (
                         _S_apply_act (layer._M_act,
-                                      _S_norm_value (input[index], mean, deviation, rms, gamma,
-                                                    layer._M_requant_mult, beta),
+                                      _S_norm_value (input[index], mean, deviation_div, rms,
+                                                     gamma, layer._M_requant_mult, beta),
                                       aux));
                 }
         }
@@ -157,6 +154,7 @@ _S_group_norm (const Layer &layer, const uint8_t *const model, const int8_t *con
             int32_t mean = 0;
             uint32_t deviation = 0;
             _S_window_stats (input + base, window, rms, mean, deviation);
+            const _S_Div32 deviation_div = _S_div32_make (deviation);
             const int32_t gamma
                 = layer._M_scale_off != 0 ? _S_i16 (model + layer._M_scale_off + group * 2u) : 128;
             const int32_t beta
@@ -164,8 +162,8 @@ _S_group_norm (const Layer &layer, const uint8_t *const model, const int8_t *con
             for (uint32_t i = 0; i < window; ++i)
                 output[base + i] = _S_i8_code (
                     _S_apply_act (layer._M_act,
-                                  _S_norm_value (input[base + i], mean, deviation, rms, gamma,
-                                                 layer._M_requant_mult, beta),
+                                  _S_norm_value (input[base + i], mean, deviation_div, rms,
+                                                 gamma, layer._M_requant_mult, beta),
                                   aux));
         }
     return Status::OK;
@@ -181,16 +179,15 @@ _S_l2_normalize (const Layer &layer, const int8_t *const input, int8_t *const ou
         return Status::BAD_LAYOUT;
     for (uint32_t base = 0; base < count; base += window)
         {
-            int64_t square_sum = 0;
-            for (uint32_t i = 0; i < window; ++i)
-                square_sum += static_cast<int64_t> (input[base + i]) * input[base + i];
-            const int32_t norm
-                = square_sum > 0 ? static_cast<int32_t> (_S_isqrt (static_cast<uint32_t> (
-                                       square_sum > 0xFFFFFFFFLL ? 0xFFFFFFFFLL : square_sum)))
-                                 : 0;
+            const int32_t square_sum = simd::sum_sq_i8 (input + base, window);
+            const uint32_t norm
+                = square_sum > 0 ? _S_isqrt (static_cast<uint32_t> (square_sum)) : 0u;
+            const _S_Div32 norm_div = _S_div32_make (norm);
             for (uint32_t i = 0; i < window; ++i)
                 output[base + i]
-                    = norm != 0 ? _S_i8_code (input[base + i] * 127 / norm) : 0;
+                    = norm != 0 ? _S_i8_code (
+                          _S_div32_i (input[base + i] * 127, norm_div))
+                                : 0;
         }
     return Status::OK;
 }
@@ -216,6 +213,8 @@ _S_pool (const Layer &layer, const int8_t *const input, int8_t *const output) no
     for (uint32_t channel = 0; channel < channels; ++channel)
         {
             const int8_t *const row = input + channel * in_length;
+            uint32_t cached_samples = 0;
+            _S_Div32 average_div{ 0u, 0u };
             for (uint32_t position = 0; position < out_length; ++position)
                 {
                     const uint32_t start
@@ -235,11 +234,22 @@ _S_pool (const Layer &layer, const int8_t *const input, int8_t *const output) no
                             if (maximize && value > best)
                                 best = value;
                         }
-                    const int32_t result
-                        = samples == 0 ? 0
-                          : maximize ? best
-                                     : (total * 2 + static_cast<int32_t> (samples))
-                                           / (2 * static_cast<int32_t> (samples));
+                    int32_t result = 0;
+                    if (maximize)
+                        result = samples == 0 ? 0 : best;
+                    else if (samples != 0)
+                        {
+                            /* The divisor only changes on the padded edge, so a
+                               whole interior row reuses one reciprocal. */
+                            if (samples != cached_samples)
+                                {
+                                    cached_samples = samples;
+                                    average_div
+                                        = _S_div32_make (2u * samples);
+                                }
+                            result = _S_div32_i (
+                                total * 2 + static_cast<int32_t> (samples), average_div);
+                        }
                     output[channel * out_length + position] = _S_i8_code (result);
                 }
         }
@@ -249,11 +259,14 @@ _S_pool (const Layer &layer, const int8_t *const input, int8_t *const output) no
 /**
  * @brief Token embedding: gather head_dim codes per input index.
  *
- * An embedding row is contiguous in the weight table, so each row is read in
- * 16-code tiles: packed int4/float4 rows go through the shuffle-table kernel
- * and byte-code rows through the 256-entry gather kernel, neither of which
- * extracts a nibble or indexes a table one code at a time.  The codes are still
- * closed with _S_i8_code, so a -128 entry behaves exactly as in the scalar form.
+ * A 3-bit row is byte-aligned (the validator requires a multiple of eight
+ * codes); 2/4-bit rows are a continuous bit stream, so a row of odd dimension
+ * starts in the high half of a shared byte.  Each row is expanded in 16-code
+ * tiles by the width-specific kernel: nibble pshufb for I4/F4E2M1, four-way
+ * extraction for I2, three-byte groups for the bit-packed I3/F3E1M1, and the
+ * 256-entry gather for byte-wide codes.  No path extracts a packed code one at
+ * a time.  The codes are still closed with _S_i8_code, so a -128 entry behaves
+ * exactly as in the scalar form.
  */
 [[nodiscard]] ZZS_MLLEE_NOINLINE inline Status
 _S_embedding (const Layer &layer, const uint8_t *const model, const int8_t *const input,
@@ -263,42 +276,60 @@ _S_embedding (const Layer &layer, const uint8_t *const model, const int8_t *cons
     if (dimension == 0)
         return Status::BAD_LAYOUT;
     const int8_t *const lut = _S_weight_lut (model, layer);
-    const bool packed = layer._M_dtype == Dtype::I4 || layer._M_dtype == Dtype::F4E2M1;
+    const Dtype dtype = layer._M_dtype;
+    const uint32_t bits = _S_code_bits (dtype);
+    const uint8_t *const weights = model + layer._M_weight_off;
     for (uint32_t token = 0; token < layer._M_in_dim; ++token)
         {
             const int32_t index = input[token];
             if (index < 0)
                 return Status::OUT_OF_RANGE;
             int8_t *const row = output + token * dimension;
-            const uint32_t first = static_cast<uint32_t> (index) * dimension;
-            if (!packed)
+            const uint32_t first_code = static_cast<uint32_t> (index) * dimension;
+            const uint32_t first_bit = first_code * bits;
+            const uint32_t first_byte = first_bit >> 3;
+            const uint32_t row_end_bit = (first_code + dimension) * bits;
+            if (((row_end_bit + 7u) >> 3) > layer._M_weight_len)
+                return Status::OUT_OF_RANGE;
+            const uint8_t *const source = weights + first_byte;
+            if (bits == 8u)
                 {
-                    if (first + dimension > layer._M_weight_len)
-                        return Status::OUT_OF_RANGE;
-                    const uint8_t *const codes = model + layer._M_weight_off + first;
                     if (lut == nullptr)
                         {
                             for (uint32_t d = 0; d < dimension; ++d)
-                                row[d] = _S_i8_code (static_cast<int8_t> (codes[d]));
+                                row[d] = _S_i8_code (static_cast<int8_t> (source[d]));
                             continue;
                         }
-                    simd::gather_lut8 (lut, codes, row, dimension);
+                    simd::gather_lut8 (lut, source, row, dimension);
                     for (uint32_t d = 0; d < dimension; ++d)
                         row[d] = _S_i8_code (row[d]);
                     continue;
                 }
+            /* 2/4-bit rows share a byte with the next row when the dimension is
+               odd, so the code offset inside the first byte is kept; a 3-bit
+               row is byte-aligned (the validator requires a multiple of 8). */
             for (uint32_t done = 0; done < dimension; done += 16u)
                 {
                     const uint32_t want = dimension - done < 16u ? dimension - done : 16u;
-                    const uint32_t code0 = first + done;
-                    const uint32_t bytes = (want + (code0 & 1u) + 1u) >> 1u;
-                    if ((code0 >> 1u) + bytes > layer._M_weight_len)
-                        return Status::OUT_OF_RANGE;
+                    const uint32_t start_bit = first_bit + done * bits;
+                    const uint32_t shift = start_bit & 7u;
+                    const uint8_t *const tile_source = weights + (start_bit >> 3);
                     int8_t tile[18];
-                    simd::expand_codes (model + layer._M_weight_off + (code0 >> 1u), tile,
-                                        bytes, lut);
+                    if (bits == 4u)
+                        {
+                            const uint32_t bytes = (shift + want * 4u + 7u) >> 3;
+                            simd::expand_codes (tile_source, tile, bytes, lut);
+                        }
+                    else if (bits == 2u)
+                        {
+                            const uint32_t bytes = (shift + want * 2u + 7u) >> 3;
+                            simd::expand_codes2 (tile_source, tile, bytes, lut);
+                        }
+                    else
+                        simd::expand_codes3 (tile_source, tile, want, lut);
+                    const uint32_t skip = shift / bits;
                     for (uint32_t d = 0; d < want; ++d)
-                        row[done + d] = _S_i8_code (tile[(code0 & 1u) + d]);
+                        row[done + d] = _S_i8_code (tile[skip + d]);
                 }
         }
     return Status::OK;
@@ -312,32 +343,27 @@ _S_shape_op (const Layer &layer, const int8_t *const input, const int8_t *const 
     switch (layer._M_op)
         {
         case Op::FLATTEN:
-            for (uint32_t i = 0; i < layer._M_in_dim; ++i)
-                output[i] = input[i];
+            _S_copy_bytes (output, input, layer._M_in_dim);
             return Status::OK;
         case Op::SLICE:
-            for (uint32_t i = 0; i < layer._M_out_dim; ++i)
-                output[i] = input[layer._M_kernel + i];
+            _S_copy_bytes (output, input + layer._M_kernel, layer._M_out_dim);
             return Status::OK;
         case Op::CONCAT:
             {
                 const uint32_t second = _S_in2_len (layer);
-                for (uint32_t i = 0; i < layer._M_in_dim; ++i)
-                    output[i] = input[i];
-                for (uint32_t i = 0; i < second; ++i)
-                    output[layer._M_in_dim + i] = rhs[i];
+                _S_copy_bytes (output, input, layer._M_in_dim);
+                _S_copy_bytes (output + layer._M_in_dim, rhs, second);
                 return Status::OK;
             }
         case Op::PAD1D:
             {
-                const int8_t fill = static_cast<int8_t> (layer._M_aux);
-                for (uint32_t i = 0; i < layer._M_kernel; ++i)
-                    output[i] = fill;
-                for (uint32_t i = 0; i < layer._M_in_dim; ++i)
-                    output[layer._M_kernel + i] = input[i];
-                const uint32_t tail = layer._M_in_dim + layer._M_kernel;
-                for (uint32_t i = tail; i < layer._M_out_dim; ++i)
-                    output[i] = fill;
+                const uint8_t fill = layer._M_aux;
+                const uint32_t head = layer._M_kernel;
+                const uint32_t tail = layer._M_in_dim + head;
+                _S_fill_bytes (output, fill, head);
+                _S_copy_bytes (output + head, input, layer._M_in_dim);
+                if (layer._M_out_dim > tail)
+                    _S_fill_bytes (output + tail, fill, layer._M_out_dim - tail);
                 return Status::OK;
             }
         default:
@@ -399,10 +425,27 @@ _S_upsample (const Layer &layer, const int8_t *const input, int8_t *const output
     if (in_length == 0 || out_length == 0)
         return Status::BAD_LAYOUT;
     const uint32_t channels = layer._M_in_dim / in_length;
+    /* Nearest-neighbour source index is floor(pos * in / out).  Walking a
+       Bresenham residue keeps the exact quotient without one hardware divide
+       per output sample; the total carry work over the row is bounded by
+       `in_length`, so the kernel stays linear. */
     for (uint32_t channel = 0; channel < channels; ++channel)
-        for (uint32_t position = 0; position < out_length; ++position)
-            output[channel * out_length + position]
-                = input[channel * in_length + position * in_length / out_length];
+        {
+            const int8_t *const source = input + channel * in_length;
+            int8_t *const destination = output + channel * out_length;
+            uint32_t index = 0;
+            uint32_t residue = 0;
+            for (uint32_t position = 0; position < out_length; ++position)
+                {
+                    destination[position] = source[index];
+                    residue += in_length;
+                    while (residue >= out_length)
+                        {
+                            residue -= out_length;
+                            ++index;
+                        }
+                }
+        }
     return Status::OK;
 }
 
@@ -412,8 +455,7 @@ _S_masked_fill (const Layer &layer, const int8_t *const input, const int8_t *con
                 int8_t *const output) noexcept
 {
     const int8_t fill = static_cast<int8_t> (layer._M_aux);
-    for (uint32_t i = 0; i < layer._M_in_dim; ++i)
-        output[i] = mask[i] != 0 ? fill : input[i];
+    simd::masked_fill_i8 (input, mask, output, layer._M_in_dim, fill);
     return Status::OK;
 }
 
@@ -431,6 +473,8 @@ _S_dropout (const Layer &layer, const int8_t *const input, int8_t *const output)
     if (drop < 0)
         return Status::BAD_LAYOUT;
     const int32_t keep = 127 - drop;
+    const int32_t keep_half = keep >> 1;
+    const _S_Div32 keep_div = _S_div32_make (static_cast<uint32_t> (keep));
     uint32_t state = static_cast<uint32_t> (layer._M_requant_mult) | 1u;
     for (uint32_t i = 0; i < layer._M_in_dim; ++i)
         {
@@ -445,7 +489,7 @@ _S_dropout (const Layer &layer, const int8_t *const input, int8_t *const output)
             const int32_t value = input[i];
             const int32_t scaled = value * 127;
             output[i] = _S_i8_code (
-                (scaled + (scaled >= 0 ? keep / 2 : -keep / 2)) / keep);
+                _S_div32_i (scaled + (scaled >= 0 ? keep_half : -keep_half), keep_div));
         }
     return Status::OK;
 }
@@ -466,13 +510,14 @@ _S_log_probability (const int32_t probability_q15) noexcept
     uint32_t high = 255;
     while (low < high)
         {
-            const uint32_t middle = (low + high + 1u) / 2u;
+            const uint32_t middle = (low + high + 1u) >> 1;
             if (_S_exp_table._M_value[middle] >= static_cast<uint32_t> (probability_q15))
                 low = middle;
             else
                 high = middle - 1u;
         }
-    const int32_t code = -static_cast<int32_t> ((low * 127u + 32u) / 64u);
+    /* 64 = 2^6: the quarter-step rounding is a shift, never a divide. */
+    const int32_t code = -static_cast<int32_t> ((low * 127u + 32u) >> 6);
     return code < -127 ? -127 : code;
 }
 
@@ -500,6 +545,7 @@ _S_reduce (const Layer &layer, const int8_t *const input, int8_t *const output) 
     const uint32_t window = _S_group_len (layer);
     if (window == 0 || layer._M_in_dim % window != 0)
         return Status::BAD_LAYOUT;
+    const _S_Div32 window_div = _S_div32_make (window);
     for (uint32_t group = 0; group < layer._M_in_dim / window; ++group)
         {
             const int8_t *const row = input + group * window;
@@ -511,7 +557,7 @@ _S_reduce (const Layer &layer, const int8_t *const input, int8_t *const output) 
                     break;
                 case _S_reduce_mean:
                     output[group] = _S_i8_code (
-                        simd::sum_i8 (row, window) / static_cast<int32_t> (window));
+                        _S_div32_i (simd::sum_i8 (row, window), window_div));
                     break;
                 case _S_reduce_max:
                     output[group] = simd::max_i8 (row, window);
@@ -542,10 +588,16 @@ _S_argmax (const Layer &layer, const int8_t *const input, int8_t *const output) 
     for (uint32_t group = 0; group < layer._M_in_dim / window; ++group)
         {
             const int8_t *const row = input + group * window;
-            const int8_t best = simd::max_i8 (row, window);
+            /* One pass: the first strict improvement is exactly the first
+               maximum `max_i8` would select, so the second scan disappears. */
+            int8_t best = row[0];
             uint32_t index = 0;
-            while (index < window && row[index] != best)
-                ++index;
+            for (uint32_t i = 1; i < window; ++i)
+                if (row[i] > best)
+                    {
+                        best = row[i];
+                        index = i;
+                    }
             output[group] = static_cast<int8_t> (index);
         }
     return Status::OK;
@@ -561,8 +613,12 @@ _S_execute (Workspace &ws, const uint8_t *model, const int8_t *arena, const int8
             int8_t *output) noexcept
 {
     const Layer &layer = ws._M_layer;
+    const bool residual_norm
+        = layer._M_op == Op::NORM && (layer._M_flags & NORM_RESIDUAL) != 0;
     const int8_t *const rhs
-        = _S_two_operand (layer._M_op) ? arena + _S_in2_off (layer) : nullptr;
+        = (_S_two_operand (layer._M_op) || residual_norm)
+              ? arena + _S_in2_off (layer)
+              : nullptr;
 
     switch (layer._M_op)
         {
@@ -571,7 +627,7 @@ _S_execute (Workspace &ws, const uint8_t *model, const int8_t *arena, const int8
         case Op::CONV1D:
             return _S_conv1d (ws, model, input, output);
         case Op::NORM:
-            return _S_norm (layer, model, input, output);
+            return _S_norm (layer, model, input, residual_norm ? rhs : nullptr, output);
         case Op::ACTIVATION:
             return _S_activation (layer, input, output);
         case Op::SOFTMAX:

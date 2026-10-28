@@ -19,6 +19,7 @@
  * SOFTWARE. */
 
 #include "mllee/mllee.hpp"
+#include "mllee/onnx.hpp"
 
 #include <cstdio>
 
@@ -40,6 +41,11 @@ main ()
     print_size<zzs::mllee::Layer> ("Layer");
     print_size<zzs::mllee::Header> ("Header");
     print_size<zzs::mllee::Core::Output> ("Output");
+    print_size<zzs::mllee::onnx::Loader> ("onnx::Loader");
+    print_size<zzs::mllee::onnx::Stream> ("onnx::Stream");
+    print_size<zzs::mllee::onnx::ModelInfo> ("onnx::ModelInfo");
+    print_size<zzs::mllee::onnx::NodeInfo> ("onnx::NodeInfo");
+    print_size<zzs::mllee::onnx::TensorInfo> ("onnx::TensorInfo");
     std::printf ("arena=%u\n", static_cast<unsigned int> (zzs::mllee::_S_arena_bytes));
     std::printf ("fixed=%zu\n", sizeof (zzs::mllee::Core) - zzs::mllee::_S_arena_bytes);
     std::printf ("budget=%u core=%zu chain=%u\n",
@@ -61,6 +67,15 @@ main ()
     static_assert (!_S_32bit || sizeof (zzs::mllee::Workspace) == 192u);
     static_assert (!_S_32bit || sizeof (zzs::mllee::PacklowState) == 124u);
     static_assert (!_S_32bit || alignof (zzs::mllee::Core) == 4u);
+    // The streaming reader keeps its whole resident state in Loader; the header
+    // already asserts these sizes, and repeating them here makes a 32-bit gate
+    // run of tools/check_mllee_ram.sh cover the ONNX budget as well.
+    static_assert (!_S_32bit || sizeof (zzs::mllee::onnx::Loader) == 116u);
+    static_assert (_S_32bit || sizeof (zzs::mllee::onnx::Loader) == 128u);
+    static_assert (!_S_32bit || sizeof (zzs::mllee::onnx::Stream) == 28u);
+    static_assert (sizeof (zzs::mllee::onnx::ModelInfo) == 32u);
+    static_assert (sizeof (zzs::mllee::onnx::NodeInfo) == 28u);
+    static_assert (sizeof (zzs::mllee::onnx::TensorInfo) == 28u);
 
     bool ok = true;
     if (sizeof (zzs::mllee::Core) > _S_core_budget)
@@ -81,6 +96,12 @@ main ()
     if (sizeof (zzs::mllee::Workspace) > _S_ws_budget)
         {
             std::printf ("FAIL: Workspace exceeds %zu bytes\n", _S_ws_budget);
+            ok = false;
+        }
+    if (sizeof (zzs::mllee::onnx::Loader)
+        > zzs::mllee::onnx::_S_ram_budget_bytes)
+        {
+            std::printf ("FAIL: onnx::Loader exceeds its 128-byte budget\n");
             ok = false;
         }
     if (sizeof (zzs::mllee::Layer) != zzs::mllee::_S_layer_desc_size)

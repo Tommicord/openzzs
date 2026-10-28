@@ -61,7 +61,11 @@ set_target_properties(openzzs-std PROPERTIES LINKER_LANGUAGE CXX)
 # ---------------------------------------------------------------------------
 option(OPENZZS_MLLEE_ASM "Build mllee hand-written assembly kernels" ON)
 option(OPENZZS_MLLEE_SSSE3 "Use SSSE3 pshufb kernels on x86-64 (2006+ parts)" ON)
-option(OPENZZS_MLLEE_AVX2 "Use AVX2 mllee kernels on x86-64" OFF)
+option(OPENZZS_MLLEE_AVX2 "Use AVX2 mllee kernels on x86-64 (Haswell 2013+)" ON)
+option(OPENZZS_MLLEE_AVX_VNNI
+  "Use AVX-VNNI vpdpbusd kernels on x86-64 (Ice Lake 2019+ parts)" OFF)
+option(OPENZZS_MLLEE_AVX512
+  "Use AVX-512 VNNI/BW kernels on x86-64 (Skylake-X 2017+ / Ice Lake+)" OFF)
 set(OPENZZS_MLLEE_ASM_TARGET "auto" CACHE STRING
   "mllee assembly target: auto, x86_64, cortex-m4, none")
 
@@ -85,6 +89,7 @@ if (OPENZZS_MLLEE_ASM AND NOT _zzs_mllee_asm_target STREQUAL "none")
       mllee/asm-x86_64/mllee_int8_dot_sse2.S
       mllee/asm-x86_64/mllee_int8_reduce_sse2.S
       mllee/asm-x86_64/mllee_int8_stats_sse2.S
+      mllee/asm-x86_64/mllee_onnx_wire_x86_64.S
       mllee/asm-x86_64/mllee_train_q15_sse2.S)
     set(_zzs_mllee_asm_features "sse2")
     if (OPENZZS_MLLEE_SSSE3)
@@ -94,10 +99,43 @@ if (OPENZZS_MLLEE_ASM AND NOT _zzs_mllee_asm_target STREQUAL "none")
       list(APPEND _zzs_mllee_asm_features "ssse3")
     endif ()
     if (OPENZZS_MLLEE_AVX2)
-      list(APPEND _zzs_mllee_asm_sources mllee/asm-x86_64/mllee_int8_dot_avx2.S)
+      list(APPEND _zzs_mllee_asm_sources
+        mllee/asm-x86_64/mllee_int8_dot_avx2.S
+        mllee/asm-x86_64/mllee_packed_dot_avx2.S
+        mllee/asm-x86_64/mllee_elementwise_avx2.S)
       set_source_files_properties(mllee/asm-x86_64/mllee_int8_dot_avx2.S
         PROPERTIES COMPILE_OPTIONS "-mavx2")
+      set_source_files_properties(mllee/asm-x86_64/mllee_packed_dot_avx2.S
+        PROPERTIES COMPILE_OPTIONS "-mavx2")
+      set_source_files_properties(mllee/asm-x86_64/mllee_elementwise_avx2.S
+        PROPERTIES COMPILE_OPTIONS "-mavx2")
       list(APPEND _zzs_mllee_asm_features "avx2")
+    endif ()
+    # vpdpbusd needs both -mavxvnni and an AVX2 baseline, and it is the only
+    # kernel that requires a CPU newer than AVX2, so it stays opt-in: a host
+    # without it must still build and run the whole suite.
+    if (OPENZZS_MLLEE_AVX_VNNI)
+      if (NOT OPENZZS_MLLEE_AVX2)
+        message(FATAL_ERROR "OPENZZS_MLLEE_AVX_VNNI requires OPENZZS_MLLEE_AVX2")
+      endif ()
+      list(APPEND _zzs_mllee_asm_sources
+        mllee/asm-x86_64/mllee_int8_dot_avx_vnni.S)
+      set_source_files_properties(mllee/asm-x86_64/mllee_int8_dot_avx_vnni.S
+        PROPERTIES COMPILE_OPTIONS "-mavxvnni;-mavx2")
+      list(APPEND _zzs_mllee_asm_features "avxvnni")
+    endif ()
+    # AVX-512 VNNI folds 64 codes per vpdpbusd.  It is opt-in for the same
+    # reason as AVX-VNNI: the emitted binary faults on older hosts, and the
+    # module deliberately has no run-time CPUID dispatch.
+    if (OPENZZS_MLLEE_AVX512)
+      if (NOT OPENZZS_MLLEE_AVX2)
+        message(FATAL_ERROR "OPENZZS_MLLEE_AVX512 requires OPENZZS_MLLEE_AVX2")
+      endif ()
+      list(APPEND _zzs_mllee_asm_sources
+        mllee/asm-x86_64/mllee_int8_dot_avx512.S)
+      set_source_files_properties(mllee/asm-x86_64/mllee_int8_dot_avx512.S
+        PROPERTIES COMPILE_OPTIONS "-mavx512f;-mavx512bw;-mavx512vnni")
+      list(APPEND _zzs_mllee_asm_features "avx512vnni")
     endif ()
     add_library(openzzs-mllee-asm STATIC ${_zzs_mllee_asm_sources})
     target_compile_definitions(openzzs-mllee-asm PUBLIC ZZS_MLLEE_ASM_X86_64=1)
@@ -107,12 +145,19 @@ if (OPENZZS_MLLEE_ASM AND NOT _zzs_mllee_asm_target STREQUAL "none")
     if (OPENZZS_MLLEE_AVX2)
       target_compile_definitions(openzzs-mllee-asm PUBLIC ZZS_MLLEE_ASM_AVX2=1)
     endif ()
+    if (OPENZZS_MLLEE_AVX_VNNI)
+      target_compile_definitions(openzzs-mllee-asm PUBLIC ZZS_MLLEE_ASM_AVX_VNNI=1)
+    endif ()
+    if (OPENZZS_MLLEE_AVX512)
+      target_compile_definitions(openzzs-mllee-asm PUBLIC ZZS_MLLEE_ASM_AVX512=1)
+    endif ()
     list(JOIN _zzs_mllee_asm_features "+" _zzs_mllee_asm_features)
   elseif (_zzs_mllee_asm_target STREQUAL "cortex-m4")
     add_library(openzzs-mllee-asm STATIC
       mllee/asm-cortex-m4/mllee_int8_mac_cortex_m4.S
       mllee/asm-cortex-m4/mllee_int8_reduce_cortex_m4.S
       mllee/asm-cortex-m4/mllee_int4_expand_cortex_m4.S
+      mllee/asm-cortex-m4/mllee_onnx_wire_cortex_m4.S
       mllee/asm-cortex-m4/mllee_train_q15_lanes_cortex_m4.S
       mllee/asm-cortex-m4/mllee_train_q15_mac_cortex_m4.S)
     target_compile_definitions(openzzs-mllee-asm PUBLIC ZZS_MLLEE_ASM_CORTEX_M4=1)
@@ -129,6 +174,7 @@ else ()
 endif ()
 
 add_library(openzzs-mllee INTERFACE)
+target_compile_options(openzzs-mllee INTERFACE -fno-exceptions -fno-rtti)
 target_include_directories(openzzs-mllee INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_features(openzzs-mllee INTERFACE cxx_std_23)
 target_link_libraries(openzzs-mllee INTERFACE openzzs-std)

@@ -1156,7 +1156,7 @@ template <class T, unsigned int Sz> class TlsfAllocator
     }
     static constexpr size_type _S_alignment = _S_alignment_helper ();
 
-    struct block_header
+    struct _S_BlockHeader
     {
         size_type _M_size; // total block size in bytes; bit 0: this block is
                            // free, bit 1: previous block is free
@@ -1186,7 +1186,7 @@ template <class T, unsigned int Sz> class TlsfAllocator
     static constexpr size_type
     _S_header_bytes () noexcept
     {
-        return _S_align_up (sizeof (block_header));
+        return _S_align_up (sizeof (_S_BlockHeader));
     }
     static constexpr size_type
     _S_min_block () noexcept
@@ -1245,22 +1245,22 @@ template <class T, unsigned int Sz> class TlsfAllocator
         const size_type width = size_type{1} << (_S_msb (size) - _S_sl_bits);
         return (size + width - 1) & ~(width - 1);
     }
-    static block_header *
+    static _S_BlockHeader *
     _S_header_at (void *base, const size_type offset) noexcept
     {
         // Every offset is a multiple of _S_alignment, so the reconstructed
         // header pointer is correctly aligned and stays inside the pool.
-        return static_cast<block_header *> (
+        return static_cast<_S_BlockHeader *> (
             static_cast<void *> (static_cast<unsigned char *> (base) + offset));
     }
-    static block_header *
+    static _S_BlockHeader *
     _S_emplace_header (void *base, const size_type offset) noexcept
     {
-        // block_header is trivially copyable: placement-new starts its
+        // _S_BlockHeader is trivially copyable: placement-new starts its
         // lifetime in pool bytes that otherwise hold T elements; the pool
         // is treated as a raw byte arena from the allocator's viewpoint.
         return ::new (static_cast<void *> (static_cast<unsigned char *> (base)
-                                           + offset)) block_header ();
+                                           + offset)) _S_BlockHeader ();
     }
 
     void *
@@ -1729,7 +1729,7 @@ TlsfAllocator<T, Sz>::_S_construct_pool () noexcept
     const size_type usable = _S_usable_bytes ();
     if (usable >= _S_min_block ())
         {
-            block_header *const initial =
+            _S_BlockHeader *const initial =
                 _S_emplace_header (this->_S_base (), 0);
             initial->_M_size = usable | _S_free_bit;
             initial->_M_prev_size = 0;
@@ -1743,7 +1743,7 @@ template <class T, unsigned int Sz>
 void
 TlsfAllocator<T, Sz>::_S_insert_free (const size_type offset) noexcept
 {
-    block_header *const header = _S_header_at (this->_S_base (), offset);
+    _S_BlockHeader *const header = _S_header_at (this->_S_base (), offset);
     const size_type size = header->_M_size & ~_S_flag_mask;
     const size_type fl = _S_fl_index (size);
     const size_type sl = _S_sl_index (size);
@@ -1761,7 +1761,7 @@ template <class T, unsigned int Sz>
 void
 TlsfAllocator<T, Sz>::_S_remove_free (const size_type offset) noexcept
 {
-    block_header *const header = _S_header_at (this->_S_base (), offset);
+    _S_BlockHeader *const header = _S_header_at (this->_S_base (), offset);
     const size_type size = header->_M_size & ~_S_flag_mask;
     const size_type fl = _S_fl_index (size);
     const size_type sl = _S_sl_index (size);
@@ -1832,7 +1832,7 @@ TlsfAllocator<T, Sz>::allocate (const size_type count) noexcept
     if (block_off == _S_none)
         return result_type (AllocError (AllocError::Kind::OUT_OF_MEMORY));
     void *base = this->_S_base ();
-    block_header *const header = this->_S_header_at (base, block_off);
+    _S_BlockHeader *const header = this->_S_header_at (base, block_off);
     const size_type block_size = header->_M_size & ~_S_flag_mask;
     const size_type prev_flags = header->_M_size & _S_prev_free_bit;
     this->_S_remove_free (block_off);
@@ -1844,14 +1844,14 @@ TlsfAllocator<T, Sz>::allocate (const size_type count) noexcept
             // push the tail back onto its size-class free list.
             const size_type remainder_off = block_off + needed;
             const size_type remainder_size = block_size - needed;
-            block_header *const remainder =
+            _S_BlockHeader *const remainder =
                 this->_S_emplace_header (base, remainder_off);
             remainder->_M_size = remainder_size | _S_free_bit | prev_flags;
             remainder->_M_prev_size = header->_M_prev_size;
             header->_M_size = needed | prev_flags;
             if (successor_off < usable)
                 {
-                    block_header *const successor =
+                    _S_BlockHeader *const successor =
                         this->_S_header_at (base, successor_off);
                     successor->_M_prev_size = remainder_size;
                     successor->_M_size |= _S_prev_free_bit;
@@ -1895,7 +1895,7 @@ TlsfAllocator<T, Sz>::deallocate (pointer p) noexcept
     if ((block_off & (_S_alignment - 1)) != 0)
         return;
     void *base = this->_S_base ();
-    block_header *const header = this->_S_header_at (base, block_off);
+    _S_BlockHeader *const header = this->_S_header_at (base, block_off);
     const size_type size = header->_M_size & ~_S_flag_mask;
     if (size < this->_S_min_block () || (size & (_S_alignment - 1)) != 0
         || size > usable || block_off > usable - size)
@@ -1915,7 +1915,7 @@ TlsfAllocator<T, Sz>::deallocate (pointer p) noexcept
                 || (prev_size & (_S_alignment - 1)) != 0
                 || prev_size > block_off)
                 return;
-            const block_header *const prev =
+            const _S_BlockHeader *const prev =
                 this->_S_header_at (base, block_off - prev_size);
             prev_prev_flags = prev->_M_size & _S_prev_free_bit;
             prev_prev_size = prev->_M_prev_size;
@@ -1926,7 +1926,7 @@ TlsfAllocator<T, Sz>::deallocate (pointer p) noexcept
     const size_type successor_off = block_off + size;
     if (successor_off < usable)
         {
-            block_header *const successor =
+            _S_BlockHeader *const successor =
                 this->_S_header_at (base, successor_off);
             if ((successor->_M_size & _S_free_bit) != 0)
                 {
@@ -1941,7 +1941,7 @@ TlsfAllocator<T, Sz>::deallocate (pointer p) noexcept
             merged_size += prev_size;
             this->_S_remove_free (merged_off);
         }
-    block_header *const merged = this->_S_emplace_header (base, merged_off);
+    _S_BlockHeader *const merged = this->_S_emplace_header (base, merged_off);
     const size_type merged_prev_flags =
         prev_flags != 0 ? prev_prev_flags : prev_flags;
     merged->_M_size = merged_size | _S_free_bit | merged_prev_flags;
@@ -1949,7 +1949,7 @@ TlsfAllocator<T, Sz>::deallocate (pointer p) noexcept
     if (const size_type merged_successor = merged_off + merged_size;
         merged_successor < usable)
         {
-            block_header *const successor =
+            _S_BlockHeader *const successor =
                 this->_S_header_at (base, merged_successor);
             successor->_M_prev_size = merged_size;
             successor->_M_size |= _S_prev_free_bit;

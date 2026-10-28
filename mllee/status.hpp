@@ -37,6 +37,60 @@
 #define ZZS_MLLEE_INLINE inline
 #endif
 
+/**
+ * @brief Non-aliasing hint for the hot kernel pointer pairs.
+ *
+ * A dot product, an unpack and a saturating add each read one buffer and write
+ * another that provably cannot overlap, but the compiler cannot see that across
+ * a call boundary and so keeps the loads and stores ordered.  GCC/Clang and
+ * MSVC spell the qualifier differently; an unknown compiler gets the empty
+ * expansion and identical semantics.
+ */
+#if defined(__GNUC__) || defined(__clang__)
+#define ZZS_MLLEE_RESTRICT __restrict__
+#else
+#define ZZS_MLLEE_RESTRICT
+#endif
+
+/**
+ * @brief Assert a buffer's alignment where it is aligned by construction.
+ *
+ * The weight LUTs, the activation arena and the staged conv rows are all
+ * `alignas`-qualified, but a kernel taking a caller pointer cannot prove that
+ * to the generator, which is what costs the extra unaligned-load forms.  The
+ * result is `void *`, so the caller casts back to its own element type.
+ */
+#if defined(__GNUC__) || defined(__clang__)
+#define ZZS_MLLEE_ASSUME_ALIGNED(pointer, bytes)                         \
+    __builtin_assume_aligned ((pointer), (bytes))
+#else
+#define ZZS_MLLEE_ASSUME_ALIGNED(pointer, bytes) (pointer)
+#endif
+
+/**
+ * @brief State an invariant the surrounding checks already established.
+ *
+ * Used only where a `Status` test above the loop already made the fact true, so
+ * a build without the hint loses speed but never safety.
+ */
+#if defined(__clang__)
+#define ZZS_MLLEE_ASSUMPTION(expression) __builtin_assume (expression)
+#elif defined(__GNUC__)
+#define ZZS_MLLEE_ASSUMPTION(expression)                                 \
+    do                                                                   \
+        {                                                                \
+            if (!(expression))                                           \
+                __builtin_unreachable ();                                \
+        }                                                                \
+    while (false)
+#else
+#define ZZS_MLLEE_ASSUMPTION(expression)                                 \
+    do                                                                   \
+        {                                                                \
+        }                                                                \
+    while (false)
+#endif
+
 namespace zzs::mllee
 {
 /**
