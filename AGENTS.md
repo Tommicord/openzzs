@@ -22,7 +22,7 @@ Supported platforms: Linux, macOS, Windows, Zephyr, Cortex-M4 (`arm-none-eabi`, 
 
 ## 2. How to build
 
-CMake 3.20+, Ninja, C++23 (`set(CMAKE_CXX_STANDARD 23)` in `CMakeLists.txt`). `README.md` says C++26 — that is a known discrepancy; **CMake is the source of truth: C++23; align README when reconciling.**
+CMake 3.20+, Ninja, C++23 (`set(CMAKE_CXX_STANDARD 23)` in `CMakeLists.txt`). `README.md` now states C++23, matching `CMakeLists.txt`; **CMake is the source of truth: C++23.**
 
 ### Host Debug build
 
@@ -75,7 +75,7 @@ ctest --test-dir build -R test_mllee --output-on-failure
 
 ### 3.1 C++ standard and where it's declared
 
-`set(CMAKE_CXX_STANDARD 23)` and `set(CMAKE_CXX_STANDARD_REQUIRED ON)` live in the root `CMakeLists.txt` (line 4–5). `openzzs-mllee` declares `cxx_std_23` via `target_compile_features`. **CMake is the source of truth: C++23.** `README.md` says C++26 — that is a known discrepancy (see §7). Do not use C++26-only features.
+`set(CMAKE_CXX_STANDARD 23)` and `set(CMAKE_CXX_STANDARD_REQUIRED ON)` live in the root `CMakeLists.txt` (line 4–5). `openzzs-mllee` declares `cxx_std_23` via `target_compile_features`. **CMake is the source of truth: C++23.** `README.md` states C++23, matching `CMakeLists.txt` (see §7). Do not use C++26-only features.
 
 ### 3.2 clang-format (must run before commit)
 
@@ -315,8 +315,8 @@ ctest --test-dir build -R test_mllee --output-on-failure
 
 These exist in the repo today. Do not replicate them in new code; fix them deliberately when reconciling.
 
-1. **C++ standard:** `README.md` says C++26; `CMakeLists.txt` sets C++23. **CMake is the source of truth: C++23.** Align README when reconciling.
-2. **License:** `README.md` says GPL 3.0; every source file header says MIT ("Copyright(c) 2026 Tommicord", SPDX). File headers (MIT) are authoritative until a `LICENSE` file is added. Do not change headers without first deciding the license.
+1. **C++ standard:** Resolved — `README.md` now states C++23, matching `CMakeLists.txt`. **CMake is the source of truth: C++23.**
+2. **License:** Resolved — `LICENSE` (MIT, Copyright(c) 2026 Tommicord) added and `README.md` points to it; file headers and README now agree.
 3. **`android/` directory:** removed in the working tree (staged deletions). Do not reference it as an active platform target.
 4. **`bootstrap/main.cpp`:** currently a stub returning 0. The real `openzzs` executable entry is not yet implemented.
 5. **`mllee/status.hpp`:** deleted in the working tree (moved into `mllee/core_status.hpp`); do not `#include "mllee/status.hpp"`.
@@ -324,6 +324,5 @@ These exist in the repo today. Do not replicate them in new code; fix them delib
 ## 8. License note
 
 - Every source file carries an MIT license block: "Copyright(c) 2026 Tommicord" with the MIT permission text and SPDX.
-- `README.md` says GPL 3.0 and references a `LICENSE` file that does not exist — that is a known discrepancy (§7).
-- **File headers (MIT) are authoritative until a `LICENSE` file is added and the license is decided.**
-- Add a `LICENSE` file matching the file headers. Do not change file headers without first deciding the license and updating `README.md` to match.
+- A `LICENSE` file (MIT, Copyright(c) 2026 Tommicord) exists at the repo root and `README.md` points to it; file headers and README now agree.
+- **File headers (MIT) and the `LICENSE` file are authoritative.**

@@ -1,6 +1,6 @@
 OpenZZS - ML/Power Outage Detection
 
-A machine learning infrastructure for detecting power outages using environmental sensor data from embedded devices and mobile phones. Built with C++26 and optimized for edge deployment with limited memory and compute resources.
+A machine learning infrastructure for detecting power outages using environmental sensor data from embedded devices and mobile phones. Built with C++23 and optimized for edge deployment with limited memory and compute resources.
 Architecture Overview
 Layered Architecture
 
@@ -50,7 +50,7 @@ Pattern Analysis → Prediction
 
 Data Flow
 
-    Sensor Data Collection: Multi-sensor data from accelerometer, gyroscope, light, sound, battery
+    Sensor Data Collection: Multi-sensor data from accelerometer, gyroscope, light, sound, battery, magnometer
     Preprocessing: Noise filtering, normalization, sensor fusion
     Feature Extraction: Temporal and spectral features
     Time Series Windowing: Sliding window for sequence processing
@@ -138,4 +138,4 @@ Platform Technologies
 
 License
 
-GPL License 3.0 - See LICENSE file for details
+MIT License - See LICENSE file for details

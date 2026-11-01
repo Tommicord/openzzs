@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(openzzs VERSION 1.0.0 LANGUAGES CXX)
+project(openzzs VERSION 1.0.0 LANGUAGES CXX ASM)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -29,7 +29,7 @@ set(ZZS_STD_SOURCES
   std/io.hpp
   std/log.hpp
   std/maybe.hpp
-  std/sighand.hpp
+  std/signal_handler.hpp
   std/string_view.hpp
   std/sunwind.hpp
 )
@@ -44,7 +44,7 @@ set_target_properties(openzzs-std PROPERTIES LINKER_LANGUAGE CXX)
 # time (never probed at run time) so the hot path stays free of CPUID branches,
 # dispatch tables and hidden module state.  That is what makes the instruction
 # count of a layer run predictable on a Cortex-M4 and repeatable on a host.
-# The portable C++ fallback in mllee/simd.hpp is used when this is disabled or
+# The portable C++ fallback in mllee/core_simd.hpp is used when this is disabled or
 # when the selected target has no kernel for a primitive.
 #
 # File names describe the instruction they depend on:
@@ -88,8 +88,6 @@ if (OPENZZS_MLLEE_ASM AND NOT _zzs_mllee_asm_target STREQUAL "none")
     set(_zzs_mllee_asm_sources
       mllee/asm-x86_64/mllee_int8_dot_sse2.S
       mllee/asm-x86_64/mllee_int8_reduce_sse2.S
-      mllee/asm-x86_64/mllee_int8_stats_sse2.S
-      mllee/asm-x86_64/mllee_onnx_wire_x86_64.S
       mllee/asm-x86_64/mllee_train_q15_sse2.S)
     set(_zzs_mllee_asm_features "sse2")
     if (OPENZZS_MLLEE_SSSE3)
@@ -101,13 +99,10 @@ if (OPENZZS_MLLEE_ASM AND NOT _zzs_mllee_asm_target STREQUAL "none")
     if (OPENZZS_MLLEE_AVX2)
       list(APPEND _zzs_mllee_asm_sources
         mllee/asm-x86_64/mllee_int8_dot_avx2.S
-        mllee/asm-x86_64/mllee_packed_dot_avx2.S
-        mllee/asm-x86_64/mllee_elementwise_avx2.S)
+        mllee/asm-x86_64/mllee_packed_dot_avx2.S)
       set_source_files_properties(mllee/asm-x86_64/mllee_int8_dot_avx2.S
         PROPERTIES COMPILE_OPTIONS "-mavx2")
       set_source_files_properties(mllee/asm-x86_64/mllee_packed_dot_avx2.S
-        PROPERTIES COMPILE_OPTIONS "-mavx2")
-      set_source_files_properties(mllee/asm-x86_64/mllee_elementwise_avx2.S
         PROPERTIES COMPILE_OPTIONS "-mavx2")
       list(APPEND _zzs_mllee_asm_features "avx2")
     endif ()
@@ -157,7 +152,6 @@ if (OPENZZS_MLLEE_ASM AND NOT _zzs_mllee_asm_target STREQUAL "none")
       mllee/asm-cortex-m4/mllee_int8_mac_cortex_m4.S
       mllee/asm-cortex-m4/mllee_int8_reduce_cortex_m4.S
       mllee/asm-cortex-m4/mllee_int4_expand_cortex_m4.S
-      mllee/asm-cortex-m4/mllee_onnx_wire_cortex_m4.S
       mllee/asm-cortex-m4/mllee_train_q15_lanes_cortex_m4.S
       mllee/asm-cortex-m4/mllee_train_q15_mac_cortex_m4.S)
     target_compile_definitions(openzzs-mllee-asm PUBLIC ZZS_MLLEE_ASM_CORTEX_M4=1)
@@ -173,6 +167,29 @@ else ()
   message(STATUS "mllee: assembly kernels disabled, using the portable C++ path")
 endif ()
 
+# ---------------------------------------------------------------------------
+# secure_channel x86_64 AES-NI assembly.
+#
+# std/secure_channel_aes_gcm_x86_64.S provides the AES-256-GCM hot-path
+# primitives (key schedule, single-block encrypt, GHASH via PCLMULQDQ) for
+# x86-64 hosts.  It is selected at build time (never run-time CPUID); on every
+# other target the portable constant-time C++ in std/secure_channel.hpp is
+# used.  The file declares `.intel_syntax noprefix` itself, so no -masm flag is
+# required.  The object is folded into openzzs-std so callers link it
+# transparently.
+# ---------------------------------------------------------------------------
+if (CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64")
+  enable_language(ASM)
+  add_library(openzzs-secure-channel-asm STATIC std/secure_channel_aes_gcm_x86_64.S)
+  target_compile_definitions(openzzs-secure-channel-asm PUBLIC ZZS_SECURE_CHANNEL_ASM_X86_64=1)
+  set_target_properties(openzzs-secure-channel-asm PROPERTIES LINKER_LANGUAGE CXX)
+  target_include_directories(openzzs-secure-channel-asm PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+  target_link_libraries(openzzs-std PRIVATE openzzs-secure-channel-asm)
+  message(STATUS "secure_channel: x86_64 AES-NI assembly enabled")
+else ()
+  message(STATUS "secure_channel: using the portable C++ AES-256-GCM path")
+endif ()
+
 add_library(openzzs-mllee INTERFACE)
 target_compile_options(openzzs-mllee INTERFACE -fno-exceptions -fno-rtti)
 target_include_directories(openzzs-mllee INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -181,6 +198,35 @@ target_link_libraries(openzzs-mllee INTERFACE openzzs-std)
 if (TARGET openzzs-mllee-asm)
   target_link_libraries(openzzs-mllee INTERFACE openzzs-mllee-asm)
 endif ()
+
+# Sensor-driver submodule: defines the bus assembly primitives and the
+# openzzs-sensor-driver library.  See kernel/sensor-driver/bus/CMakeLists.txt.
+add_subdirectory(kernel/sensor-driver/bus)
+
+set(_zzs_sensor_driver_sources
+  kernel/sensor-driver/bus/i2c/i2c_bitbang.cpp
+  kernel/sensor-driver/bus/spi/spi_bitbang.cpp)
+
+# Host platform HAL: only the translation unit matching this target compiles.
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  list(APPEND _zzs_sensor_driver_sources
+    kernel/sensor-driver/platforms/linux/platform_hal.hpp)
+endif ()
+
+add_library(openzzs-sensor-driver STATIC ${_zzs_sensor_driver_sources})
+target_include_directories(openzzs-sensor-driver PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}/kernel/sensor-driver)
+target_link_libraries(openzzs-sensor-driver PRIVATE
+  openzzs-std
+  openzzs-mllee)
+if (TARGET openzzs-sensor-driver-bus-asm)
+  target_link_libraries(openzzs-sensor-driver PRIVATE openzzs-sensor-driver-bus-asm)
+endif ()
+if (TARGET openzzs-sensor-driver-bus-cpp)
+  target_link_libraries(openzzs-sensor-driver PRIVATE openzzs-sensor-driver-bus-cpp)
+endif ()
+set_target_properties(openzzs-sensor-driver PROPERTIES LINKER_LANGUAGE CXX)
 
 if (NOT CMAKE_CROSSCOMPILING)
   add_executable(mllee_bench tools/mllee_bench.cpp)

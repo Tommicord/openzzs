@@ -64,8 +64,10 @@ as_str (const LogLevel level) noexcept {
 }
 
 /* Global minimum level; messages below it are dropped (relaxed atomics, like
- * Rust). */
-static std::atomic<uint8_t> log_min_level{0};
+ * Rust).  Defaults to INFO (1) so noisy per-row DEBUG logs (e.g. kernel
+ * feature packing on ~100 Hz grid ticks) are filtered out by default.
+ * Callers can re-enable DEBUG with set_min_log_level (LogLevel::DEBUG). */
+static std::atomic<uint8_t> log_min_level{1};
 
 inline void
 set_min_log_level (const LogLevel level) noexcept {
