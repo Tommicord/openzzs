@@ -1044,12 +1044,174 @@ multitask_backward_fn (const Trainable &output, const Trainable &grad_output, Gr
     return Status::OK;
 }
 
-/** @brief Distill forward hook: stub (returns Status::OK, does nothing). */
+/** @brief Distill forward hook: student CONV1D+Attention+3-head forward with a
+ *         teacher-blended soft target and MSE distillation loss.
+ *
+ * Param layout: 0=conv_w 1=conv_b 2=qkv_w 3=qkv_b
+ *               4=head1_w 5=head1_b 6=head2_w 7=head2_b
+ *               8=head3_w 9=head3_b 10=output 11=loss
+ *
+ * All activations are code-only stack arrays (no grad lanes in forward):
+ * conv_out[40] + qkv_out[120] + attn_out[40] + pool_out[8] +
+ * head1_out[3] + head2_out[1] + head3_out[1] + soft_target[3] ~ 216 bytes.
+ */
 [[nodiscard]] inline Status
 distill_forward_hook (StepContext &context, const int8_t *teacher_logits, uint32_t teacher_count) noexcept {
-    (void) context;
-    (void) teacher_logits;
-    (void) teacher_count;
+    const int8_t *const input = context._M_input;
+    const int8_t *const target = context._M_target;
+    const uint32_t target_count = context._M_target_count;
+
+    /* Layer weights: 0=conv_w 1=conv_b 2=qkv_w 3=qkv_b
+     *              4=head1_w 5=head1_b 6=head2_w 7=head2_b
+     *              8=head3_w 9=head3_b */
+    const Trainable &conv_w = context._M_params[0];
+    const Trainable &conv_b = context._M_params[1];
+    const Trainable &qkv_w = context._M_params[2];
+    const Trainable &qkv_b = context._M_params[3];
+    const Trainable &head1_w = context._M_params[4];
+    const Trainable &head1_b = context._M_params[5];
+    const Trainable &head2_w = context._M_params[6];
+    const Trainable &head2_b = context._M_params[7];
+    const Trainable &head3_w = context._M_params[8];
+    const Trainable &head3_b = context._M_params[9];
+
+    /* ---------- Activations: code-only stack arrays (no grad in forward) ---------- */
+    alignas (4) int8_t conv_out[ConvAttnDefaultConfig::conv_output]{};   /* 40 */
+    alignas (4) int8_t qkv_out[ConvAttnDefaultConfig::qkv_output]{};     /* 120 */
+    alignas (4) int8_t attn_out[ConvAttnDefaultConfig::attn_output]{};   /* 40 */
+    alignas (4) int8_t pool_out[ConvAttnDefaultConfig::pooled]{};        /* 8 */
+    alignas (4) int8_t head1_out[ConvAttnDefaultConfig::output_dim]{};   /* 3 */
+    int8_t head2_out[1]{};                                               /* 1 */
+    int8_t head3_out[1]{};                                               /* 1 */
+    alignas (4) int8_t soft_target[ConvAttnDefaultConfig::output_dim]{}; /* 3 */
+
+    Pool &pool = *context._M_pool;
+    Tape &tape = *context._M_tape;
+
+    /* ---------- Layer 1: CONV1D(38->8, k=3, causal): 190 -> 40 ---------- */
+    Trainable conv_input = Trainable::make (
+        const_cast<int8_t *> (input), nullptr,
+        zzs::mllee::train::Shape::tensor3 (1u, ConvAttnDefaultConfig::feature_count, ConvAttnDefaultConfig::seq_len),
+        0u);
+    Trainable conv_out_t = Trainable::make (
+        conv_out, nullptr,
+        zzs::mllee::train::Shape::tensor3 (1u, ConvAttnDefaultConfig::conv_channels, ConvAttnDefaultConfig::seq_len),
+        0u);
+    const ConvSpec conv_spec = make_conv_spec (1);
+    {
+        Status st = conv_run (tape, conv_spec, conv_input, conv_w, conv_b, conv_out_t);
+        if (!status_ok (st))
+            return st;
+    }
+
+    /* ---------- Layer 2: LINEAR(40->120) QKV projection: 40 -> 120 ---------- */
+    Trainable qkv_input = conv_out_t;
+    qkv_input._M_shape = zzs::mllee::train::Shape::matrix (1u, ConvAttnDefaultConfig::conv_output);
+    Trainable qkv_out_t = Trainable::make (
+        qkv_out, nullptr, zzs::mllee::train::Shape::matrix (1u, ConvAttnDefaultConfig::qkv_output), 0u);
+    const LinearSpec qkv_spec = make_qkv_spec (1);
+    {
+        Status st = linear_run (tape, qkv_spec, qkv_input, qkv_w, qkv_b, qkv_out_t);
+        if (!status_ok (st))
+            return st;
+    }
+
+    /* ---------- Layer 3: ATTENTION(seq=5, head_dim=4, heads=2): 120 -> 40 ----------
+     * Q/K/V split: qkv_out is [Q[0..39] | K[40..79] | V[80..119]].  Forward only
+     * needs the code streams, so grad lanes are null. */
+    const uint32_t attn_stride = ConvAttnDefaultConfig::attn_heads * ConvAttnDefaultConfig::attn_head_dim; /* 8 */
+    const uint32_t attn_elements = ConvAttnDefaultConfig::attn_output;                                     /* 40 */
+
+    Trainable q_view = Trainable::make (
+        qkv_out, nullptr, zzs::mllee::train::Shape::matrix (ConvAttnDefaultConfig::seq_len, attn_stride), 0u);
+    Trainable k_view =
+        Trainable::make (qkv_out + attn_elements, nullptr,
+                         zzs::mllee::train::Shape::matrix (ConvAttnDefaultConfig::seq_len, attn_stride), 0u);
+    Trainable v_view =
+        Trainable::make (qkv_out + 2 * attn_elements, nullptr,
+                         zzs::mllee::train::Shape::matrix (ConvAttnDefaultConfig::seq_len, attn_stride), 0u);
+    Trainable attn_out_t = Trainable::make (
+        attn_out, nullptr, zzs::mllee::train::Shape::matrix (1u, ConvAttnDefaultConfig::attn_output), 0u);
+    const AttentionSpec attn_spec = make_attention_spec ();
+    {
+        Status st = attention_run (tape, attn_spec, q_view, k_view, v_view, attn_out_t);
+        if (!status_ok (st))
+            return st;
+    }
+
+    /* ---------- Layer 4: GLOBAL_AVG_POOL(seq=5, channels=8): 40 -> 8 ---------- */
+    Trainable pool_input = attn_out_t;
+    pool_input._M_shape =
+        zzs::mllee::train::Shape::tensor3 (1u, ConvAttnDefaultConfig::conv_channels, ConvAttnDefaultConfig::seq_len);
+    Trainable pool_out_t = Trainable::make (
+        pool_out, nullptr, zzs::mllee::train::Shape::tensor3 (1u, ConvAttnDefaultConfig::conv_channels, 1u), 0u);
+    const PoolSpec pool_spec = make_pool_spec (1);
+    {
+        Status st = pool_run (tape, pool_spec, pool_input, pool_out_t);
+        if (!status_ok (st))
+            return st;
+    }
+
+    /* ---------- Layer 5: LINEAR(8->3) head1 / LINEAR(8->1) head2 / head3 ---------- */
+    Trainable head_input = pool_out_t;
+    head_input._M_shape = zzs::mllee::train::Shape::matrix (1u, ConvAttnDefaultConfig::pooled);
+    Trainable head1_out_t = Trainable::make (
+        head1_out, nullptr, zzs::mllee::train::Shape::matrix (1u, ConvAttnDefaultConfig::output_dim), 0u);
+    const LinearSpec head1_spec = make_output_spec (1);
+    {
+        Status st = linear_run (tape, head1_spec, head_input, head1_w, head1_b, head1_out_t);
+        if (!status_ok (st))
+            return st;
+    }
+
+    Trainable head2_out_t = Trainable::make (head2_out, nullptr, zzs::mllee::train::Shape::matrix (1u, 1u), 0u);
+    LinearSpec head2_spec = make_output_spec (1);
+    head2_spec._M_out_features = 1u;
+    {
+        Status st = linear_run (tape, head2_spec, head_input, head2_w, head2_b, head2_out_t);
+        if (!status_ok (st))
+            return st;
+    }
+
+    Trainable head3_out_t = Trainable::make (head3_out, nullptr, zzs::mllee::train::Shape::matrix (1u, 1u), 0u);
+    LinearSpec head3_spec = make_output_spec (1);
+    head3_spec._M_out_features = 1u;
+    {
+        Status st = linear_run (tape, head3_spec, head_input, head3_w, head3_b, head3_out_t);
+        if (!status_ok (st))
+            return st;
+    }
+
+    /* ---------- Layer 6: SOFTMAX(3->3) on head1, in-place ---------- */
+    {
+        Status st = softmax_run (tape, make_softmax_spec (), head1_out_t, nullptr, head1_out_t);
+        if (!status_ok (st))
+            return st;
+    }
+
+    /* ---------- Soft target: (7 * teacher + 3 * one_hot_target) / 10, clamp [-127,127] ---------- */
+    const uint32_t n = static_cast<uint32_t> (teacher_count < target_count ? teacher_count : target_count);
+    for (uint32_t k = 0; k < n && k < ConvAttnDefaultConfig::output_dim; ++k) {
+        const int32_t v = (7 * static_cast<int32_t> (teacher_logits[k]) + 3 * static_cast<int32_t> (target[k])) / 10;
+        soft_target[k] = static_cast<int8_t> (v > 127 ? 127 : (v < -127 ? -127 : v));
+    }
+
+    /* ---------- MSE loss: head1_out (softmax) vs soft_target ---------- */
+    Trainable pred = head1_out_t;
+    Trainable target_t = Trainable::make (
+        soft_target, nullptr,
+        zzs::mllee::train::Shape::vector (static_cast<uint16_t> (ConvAttnDefaultConfig::output_dim)), 0u);
+    LossResult loss_result;
+    {
+        Status st = mse_forward (pool, &tape, pred, target_t, loss_result);
+        if (!status_ok (st))
+            return st;
+    }
+
+    /* Publish the loss node to the trainer context. */
+    context._M_loss = loss_result._M_node;
+    context._M_loss_q7 = loss_result._M_loss_q7;
+
     return Status::OK;
 }
 
