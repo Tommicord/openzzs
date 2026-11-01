@@ -82,14 +82,12 @@
  * Total 3 * elements + 8 rounded to the pool alignment; @ref dropout_run
  * reports the exact figure through the tape's saved-byte counter.
  */
-namespace zzs::mllee::train
-{
+namespace zzs::mllee::train {
 /** @brief Which dropout pattern a layer applies. */
-enum class DropoutKind : uint8_t
-{
-    Elementwise = 0u,
-    Spatial = 1u,
-    Alpha = 2u,
+enum class DropoutKind : uint8_t {
+        Elementwise = 0u,
+        Spatial = 1u,
+        Alpha = 2u,
 };
 
 /** @brief Saved-slot index of the mask. */
@@ -107,24 +105,22 @@ inline constexpr uint32_t _S_dropout_op_id = 0x0D01u;
  * @c _M_units times @c _M_inner equals @c _M_elements for the spatial kind and
  * is unused (1 times elements) for the other two.
  */
-struct DropoutConfig
-{
-    uint64_t _M_seed = 0u;
-    int32_t _M_drop_q15 = 0;
-    int32_t _M_keep_q15 = _S_q15_one;
-    int32_t _M_gain_q14 = 16384;
-    int32_t _M_alpha_wide_q15 = 0;
-    int32_t _M_fill_wide_q15 = 0;
-    uint32_t _M_elements = 0u;
-    uint32_t _M_units = 0u;
-    uint32_t _M_inner = 0u;
-    uint8_t _M_kind = 0u;
-    uint8_t _M_train = 0u;
-    uint16_t _M_reserved = 0u;
+struct DropoutConfig {
+        uint64_t _M_seed = 0u;
+        int32_t _M_drop_q15 = 0;
+        int32_t _M_keep_q15 = _S_q15_one;
+        int32_t _M_gain_q14 = 16384;
+        int32_t _M_alpha_wide_q15 = 0;
+        int32_t _M_fill_wide_q15 = 0;
+        uint32_t _M_elements = 0u;
+        uint32_t _M_units = 0u;
+        uint32_t _M_inner = 0u;
+        uint8_t _M_kind = 0u;
+        uint8_t _M_train = 0u;
+        uint16_t _M_reserved = 0u;
 };
 
-static_assert (sizeof (DropoutConfig) == 48u,
-               "the dropout parameters must stay one aligned 48-byte block");
+static_assert (sizeof (DropoutConfig) == 48u, "the dropout parameters must stay one aligned 48-byte block");
 
 /**
  * @brief Runtime dropout state: what was drawn and what saturated.
@@ -132,24 +128,20 @@ static_assert (sizeof (DropoutConfig) == 48u,
  * Sized for pool carving (24 bytes, a multiple of the pool alignment) and holds
  * the engine state so a resumed step continues the same stream.
  */
-struct DropoutState
-{
-    uint64_t _M_engine_state = 0u;
-    uint32_t _M_kept = 0u;
-    uint32_t _M_draws = 0u;
-    uint32_t _M_saturated = 0u;
-    uint32_t _M_drop_code = 0u;
+struct DropoutState {
+        uint64_t _M_engine_state = 0u;
+        uint32_t _M_kept = 0u;
+        uint32_t _M_draws = 0u;
+        uint32_t _M_saturated = 0u;
+        uint32_t _M_drop_code = 0u;
 };
 
-static_assert (sizeof (DropoutState) == 24u,
-               "the dropout state is one 64-bit word plus four counts");
+static_assert (sizeof (DropoutState) == 24u, "the dropout state is one 64-bit word plus four counts");
 
 /** @brief Pool bytes one recorded dropout layer costs, mask and scratch both in. */
 [[nodiscard]] inline constexpr uint32_t
-dropout_bytes (const uint32_t elements) noexcept
-{
-    return align_up (elements, _S_pool_alignment)
-           + align_up (2u * elements, _S_pool_alignment) + 4u;
+dropout_bytes (const uint32_t elements) noexcept {
+        return align_up (elements, _S_pool_alignment) + align_up (2u * elements, _S_pool_alignment) + 4u;
 }
 
 /**
@@ -159,12 +151,11 @@ dropout_bytes (const uint32_t elements) noexcept
  *        so the caller writes a zero tensor instead of dividing by zero.
  */
 [[nodiscard]] inline constexpr int32_t
-dropout_gain_q14 (const int32_t keep_q15) noexcept
-{
-    if (keep_q15 <= 0)
-        return 0;
-    const int64_t gain = (static_cast<int64_t> (1) << 29) / keep_q15;
-    return gain > 0x40000000ll ? 0x40000000 : static_cast<int32_t> (gain);
+dropout_gain_q14 (const int32_t keep_q15) noexcept {
+        if (keep_q15 <= 0)
+                return 0;
+        const int64_t gain = (static_cast<int64_t> (1) << 29) / keep_q15;
+        return gain > 0x40000000ll ? 0x40000000 : static_cast<int32_t> (gain);
 }
 
 /**
@@ -175,24 +166,17 @@ dropout_gain_q14 (const int32_t keep_q15) noexcept
  * saturation and counts it.
  */
 [[nodiscard]] inline constexpr int32_t
-dropout_alpha_fill_q15 (const int32_t alpha_wide_q15, const int32_t drop_q15,
-                        const int32_t keep_q15) noexcept
-{
-    if (keep_q15 <= 0 || alpha_wide_q15 == 0)
-        return 0;
-    const int64_t fill = -(static_cast<int64_t> (alpha_wide_q15) * drop_q15)
-                         / keep_q15;
-    return fill > 0x40000000ll
-               ? 0x40000000
-               : (fill < -0x40000000ll ? -0x40000000 : static_cast<int32_t> (fill));
+dropout_alpha_fill_q15 (const int32_t alpha_wide_q15, const int32_t drop_q15, const int32_t keep_q15) noexcept {
+        if (keep_q15 <= 0 || alpha_wide_q15 == 0)
+                return 0;
+        const int64_t fill = -(static_cast<int64_t> (alpha_wide_q15) * drop_q15) / keep_q15;
+        return fill > 0x40000000ll ? 0x40000000 : (fill < -0x40000000ll ? -0x40000000 : static_cast<int32_t> (fill));
 }
 
 /** @brief Per-step mask seed: a distinct stream for every (epoch, step) pair. */
 [[nodiscard]] inline constexpr uint64_t
-dropout_step_seed (const uint64_t base, const uint32_t epoch,
-                   const uint32_t step) noexcept
-{
-    return rng_mix_seed (rng_derive_seed (base, epoch), step);
+dropout_step_seed (const uint64_t base, const uint32_t epoch, const uint32_t step) noexcept {
+        return rng_mix_seed (rng_derive_seed (base, epoch), step);
 }
 
 /**
@@ -203,38 +187,32 @@ dropout_step_seed (const uint64_t base, const uint32_t epoch,
  *        block (H*W); both must be 1 times elements for the other kinds.
  */
 [[nodiscard]] inline Status
-dropout_config_init (DropoutConfig &out, const DropoutKind kind,
-                     const bool train, const int32_t drop_q15,
-                     const uint64_t seed, const uint32_t elements,
-                     const uint32_t units, const uint32_t inner,
-                     const int32_t alpha_wide_q15) noexcept
-{
-    if (elements == 0u || elements > _S_max_elements)
-        return Status::OUT_OF_RANGE;
-    if (drop_q15 < 0 || drop_q15 > _S_q15_max)
-        return Status::OUT_OF_RANGE;
-    const uint32_t want_units = kind == DropoutKind::Spatial ? units : 1u;
-    const uint32_t want_inner = kind == DropoutKind::Spatial ? inner : elements;
-    if (want_units == 0u || want_inner == 0u)
-        return Status::BAD_LAYOUT;
-    if (static_cast<uint64_t> (want_units) * want_inner != elements)
-        return Status::BAD_LAYOUT;
-    out._M_seed = seed;
-    out._M_kind = static_cast<uint8_t> (kind);
-    out._M_train = train ? 1u : 0u;
-    out._M_drop_q15 = drop_q15;
-    out._M_keep_q15 = _S_q15_one - drop_q15;
-    out._M_gain_q14 = dropout_gain_q14 (out._M_keep_q15);
-    out._M_alpha_wide_q15 = kind == DropoutKind::Alpha ? alpha_wide_q15 : 0;
-    out._M_fill_wide_q15 = kind == DropoutKind::Alpha
-                               ? dropout_alpha_fill_q15 (alpha_wide_q15,
-                                                         drop_q15,
-                                                         out._M_keep_q15)
-                               : 0;
-    out._M_elements = elements;
-    out._M_units = want_units;
-    out._M_inner = want_inner;
-    return Status::OK;
+dropout_config_init (DropoutConfig &out, const DropoutKind kind, const bool train, const int32_t drop_q15,
+                     const uint64_t seed, const uint32_t elements, const uint32_t units, const uint32_t inner,
+                     const int32_t alpha_wide_q15) noexcept {
+        if (elements == 0u || elements > _S_max_elements)
+                return Status::OUT_OF_RANGE;
+        if (drop_q15 < 0 || drop_q15 > _S_q15_max)
+                return Status::OUT_OF_RANGE;
+        const uint32_t want_units = kind == DropoutKind::Spatial ? units : 1u;
+        const uint32_t want_inner = kind == DropoutKind::Spatial ? inner : elements;
+        if (want_units == 0u || want_inner == 0u)
+                return Status::BAD_LAYOUT;
+        if (static_cast<uint64_t> (want_units) * want_inner != elements)
+                return Status::BAD_LAYOUT;
+        out._M_seed = seed;
+        out._M_kind = static_cast<uint8_t> (kind);
+        out._M_train = train ? 1u : 0u;
+        out._M_drop_q15 = drop_q15;
+        out._M_keep_q15 = _S_q15_one - drop_q15;
+        out._M_gain_q14 = dropout_gain_q14 (out._M_keep_q15);
+        out._M_alpha_wide_q15 = kind == DropoutKind::Alpha ? alpha_wide_q15 : 0;
+        out._M_fill_wide_q15 =
+            kind == DropoutKind::Alpha ? dropout_alpha_fill_q15 (alpha_wide_q15, drop_q15, out._M_keep_q15) : 0;
+        out._M_elements = elements;
+        out._M_units = want_units;
+        out._M_inner = want_inner;
+        return Status::OK;
 }
 
 /**
@@ -246,22 +224,18 @@ dropout_config_init (DropoutConfig &out, const DropoutKind kind,
  */
 template <typename Engine>
 [[nodiscard]] inline Status
-dropout_generate_mask (const DropoutConfig &config, Engine &engine,
-                       uint8_t *const mask, uint32_t &kept,
-                       uint32_t &draws) noexcept
-{
-    if (mask == nullptr)
-        return Status::BAD_LAYOUT;
-    if (config._M_kind == static_cast<uint8_t> (DropoutKind::Spatial))
-        {
-            kept = fill_mask_blocked (engine, config._M_keep_q15,
-                                      config._M_units, config._M_inner, mask);
-            draws = config._M_units;
-            return Status::OK;
+dropout_generate_mask (const DropoutConfig &config, Engine &engine, uint8_t *const mask, uint32_t &kept,
+                       uint32_t &draws) noexcept {
+        if (mask == nullptr)
+                return Status::BAD_LAYOUT;
+        if (config._M_kind == static_cast<uint8_t> (DropoutKind::Spatial)) {
+                kept = fill_mask_blocked (engine, config._M_keep_q15, config._M_units, config._M_inner, mask);
+                draws = config._M_units;
+                return Status::OK;
         }
-    kept = fill_mask (engine, config._M_keep_q15, mask, config._M_elements);
-    draws = config._M_elements;
-    return Status::OK;
+        kept = fill_mask (engine, config._M_keep_q15, mask, config._M_elements);
+        draws = config._M_elements;
+        return Status::OK;
 }
 
 /**
@@ -273,67 +247,54 @@ dropout_generate_mask (const DropoutConfig &config, Engine &engine,
  * saturated counts those lanes.
  */
 [[nodiscard]] inline Status
-dropout_forward_codes (const DropoutConfig &config, const int8_t *const in,
-                       const uint8_t *const mask, int8_t *const out,
-                       uint32_t &saturated) noexcept
-{
-    if (in == nullptr || out == nullptr)
-        return Status::BAD_LAYOUT;
-    if (config._M_train == 0u)
-        {
-            for (uint32_t i = 0; i < config._M_elements; ++i)
-                out[i] = in[i];
-            return Status::OK;
+dropout_forward_codes (const DropoutConfig &config, const int8_t *const in, const uint8_t *const mask,
+                       int8_t *const out, uint32_t &saturated) noexcept {
+        if (in == nullptr || out == nullptr)
+                return Status::BAD_LAYOUT;
+        if (config._M_train == 0u) {
+                for (uint32_t i = 0; i < config._M_elements; ++i)
+                        out[i] = in[i];
+                return Status::OK;
         }
-    if (mask == nullptr)
-        return Status::BAD_LAYOUT;
-    const int8_t fill = q15_to_code (config._M_fill_wide_q15);
-    for (uint32_t i = 0; i < config._M_elements; ++i)
-        {
-            if (mask[i] != 0u)
-                {
-                    const int32_t scaled
-                        = q15_scale_shift (in[i], config._M_gain_q14, 14u);
-                    if (scaled > 127 || scaled < -127)
-                        ++saturated;
-                    out[i] = _S_i8_code (scaled);
-                    continue;
+        if (mask == nullptr)
+                return Status::BAD_LAYOUT;
+        const int8_t fill = q15_to_code (config._M_fill_wide_q15);
+        for (uint32_t i = 0; i < config._M_elements; ++i) {
+                if (mask[i] != 0u) {
+                        const int32_t scaled = q15_scale_shift (in[i], config._M_gain_q14, 14u);
+                        if (scaled > 127 || scaled < -127)
+                                ++saturated;
+                        out[i] = _S_i8_code (scaled);
+                        continue;
                 }
-            out[i] = fill;
+                out[i] = fill;
         }
-    return Status::OK;
+        return Status::OK;
 }
 
 /** @brief Backward lanes: grad_in = mask ? gain * grad_out : 0. */
 [[nodiscard]] inline Status
-dropout_route_grad_q15 (const DropoutConfig &config,
-                        const int16_t *const grad_out,
-                        const uint8_t *const mask, int16_t *const grad_in,
-                        uint32_t &saturated) noexcept
-{
-    if (grad_out == nullptr || grad_in == nullptr || mask == nullptr)
-        return Status::BAD_LAYOUT;
-    /* Foundation primitive first: the mask is a pure route, then the gain. */
-    route_by_mask (grad_out, mask, grad_in, config._M_elements);
-    if (config._M_gain_q14 == 16384)
-        return Status::OK; /* p == 0: the gain is the identity */
-    for (uint32_t i = 0; i < config._M_elements; ++i)
-        {
-            const int32_t scaled = q15_scale_shift (grad_in[i],
-                                                    config._M_gain_q14, 14u);
-            if (scaled > _S_q15_max || scaled < _S_q15_min)
-                ++saturated;
-            grad_in[i] = q15_to_i16_sat (scaled);
+dropout_route_grad_q15 (const DropoutConfig &config, const int16_t *const grad_out, const uint8_t *const mask,
+                        int16_t *const grad_in, uint32_t &saturated) noexcept {
+        if (grad_out == nullptr || grad_in == nullptr || mask == nullptr)
+                return Status::BAD_LAYOUT;
+        /* Foundation primitive first: the mask is a pure route, then the gain. */
+        route_by_mask (grad_out, mask, grad_in, config._M_elements);
+        if (config._M_gain_q14 == 16384)
+                return Status::OK; /* p == 0: the gain is the identity */
+        for (uint32_t i = 0; i < config._M_elements; ++i) {
+                const int32_t scaled = q15_scale_shift (grad_in[i], config._M_gain_q14, 14u);
+                if (scaled > _S_q15_max || scaled < _S_q15_min)
+                        ++saturated;
+                grad_in[i] = q15_to_i16_sat (scaled);
         }
-    return Status::OK;
+        return Status::OK;
 }
 
 /** @brief The inference op's drop parameter: p as a code-domain count in 1/127. */
 [[nodiscard]] inline constexpr int32_t
-dropout_aux_code (const int32_t drop_q15) noexcept
-{
-    return _S_round_shift (static_cast<int64_t> (drop_q15) * 127,
-                            _S_grad_frac_bits);
+dropout_aux_code (const int32_t drop_q15) noexcept {
+        return _S_round_shift (static_cast<int64_t> (drop_q15) * 127, _S_grad_frac_bits);
 }
 
 /**
@@ -344,15 +305,14 @@ dropout_aux_code (const int32_t drop_q15) noexcept
  * 1/127 quantization of p itself (below 0.4 % of the gain for p <= 0.5).
  */
 [[nodiscard]] inline constexpr int32_t
-dropout_inference_code (const int32_t code, const int32_t drop_code) noexcept
-{
-    if (drop_code <= 0)
-        return code;
-    const int32_t keep = 127 - drop_code;
-    if (keep <= 0)
-        return 0;
-    const int32_t scaled = code * 127;
-    return _S_i8_code ((scaled + (scaled >= 0 ? keep / 2 : -keep / 2)) / keep);
+dropout_inference_code (const int32_t code, const int32_t drop_code) noexcept {
+        if (drop_code <= 0)
+                return code;
+        const int32_t keep = 127 - drop_code;
+        if (keep <= 0)
+                return 0;
+        const int32_t scaled = code * 127;
+        return _S_i8_code ((scaled + (scaled >= 0 ? keep / 2 : -keep / 2)) / keep);
 }
 
 /**
@@ -364,82 +324,68 @@ dropout_inference_code (const int32_t code, const int32_t drop_code) noexcept
  * input's gradient lanes, which would break the accumulate-only rule.
  */
 [[nodiscard]] inline Status
-dropout_backward (const Trainable &output, const Trainable &grad_output,
-                  GradContext &context) noexcept;
+dropout_backward (const Trainable &output, const Trainable &grad_output, GradContext &context) noexcept;
 
 [[nodiscard]] inline Status
-dropout_run (Tape &tape, const DropoutConfig &config,
-             const Trainable &input, Trainable &output,
-             DropoutState *const state = nullptr) noexcept
-{
-    if (!status_ok (input.validate ()) || !status_ok (output.validate ()))
-        return Status::BAD_LAYOUT;
-    if (input._M_count != config._M_elements
-        || output._M_count != config._M_elements)
-        return Status::BAD_LAYOUT;
-    if (input._M_shape != output._M_shape)
-        return Status::BAD_LAYOUT;
+dropout_run (Tape &tape, const DropoutConfig &config, const Trainable &input, Trainable &output,
+             DropoutState *const state = nullptr) noexcept {
+        if (!status_ok (input.validate ()) || !status_ok (output.validate ()))
+                return Status::BAD_LAYOUT;
+        if (input._M_count != config._M_elements || output._M_count != config._M_elements)
+                return Status::BAD_LAYOUT;
+        if (input._M_shape != output._M_shape)
+                return Status::BAD_LAYOUT;
 
-    XorShift64 engine = XorShift64::seeded (config._M_seed);
-    uint8_t *mask = nullptr;
-    Saved slots[_S_max_operands];
-    int32_t *gain = nullptr;
-    int16_t *scratch = nullptr;
-    uint32_t kept = 0u;
-    uint32_t draws = 0u;
-    Status status = Status::OK;
+        XorShift64 engine = XorShift64::seeded (config._M_seed);
+        uint8_t *mask = nullptr;
+        Saved slots[_S_max_operands];
+        int32_t *gain = nullptr;
+        int16_t *scratch = nullptr;
+        uint32_t kept = 0u;
+        uint32_t draws = 0u;
+        Status status = Status::OK;
 
-    for (uint32_t index = 0u; index < _S_max_operands; ++index)
-        slots[index] = Saved{};
-
-    if (config._M_train != 0u)
-        {
-            if (!tape.is_open ())
-                return Status::INTERNAL;
-            status = tape.save (config._M_elements, slots[_S_dropout_mask],
-                                mask);
-            if (!status_ok (status))
-                return status;
-            status = tape.save (1u, slots[_S_dropout_gain], gain);
-            if (!status_ok (status))
-                return status;
-            status = tape.save (config._M_elements, slots[_S_dropout_scratch],
-                                scratch);
-            if (!status_ok (status))
-                return status;
-            *gain = config._M_gain_q14;
-            status = dropout_generate_mask (config, engine, mask, kept, draws);
-            if (!status_ok (status))
-                return status;
-        }
-    else
-        {
-            for (uint32_t index = 0u; index < _S_max_operands; ++index)
+        for (uint32_t index = 0u; index < _S_max_operands; ++index)
                 slots[index] = Saved{};
+
+        if (config._M_train != 0u) {
+                if (!tape.is_open ())
+                        return Status::INTERNAL;
+                status = tape.save (config._M_elements, slots[_S_dropout_mask], mask);
+                if (!status_ok (status))
+                        return status;
+                status = tape.save (1u, slots[_S_dropout_gain], gain);
+                if (!status_ok (status))
+                        return status;
+                status = tape.save (config._M_elements, slots[_S_dropout_scratch], scratch);
+                if (!status_ok (status))
+                        return status;
+                *gain = config._M_gain_q14;
+                status = dropout_generate_mask (config, engine, mask, kept, draws);
+                if (!status_ok (status))
+                        return status;
+        } else {
+                for (uint32_t index = 0u; index < _S_max_operands; ++index)
+                        slots[index] = Saved{};
         }
 
-    uint32_t saturated = 0u;
-    const Status forward
-        = dropout_forward_codes (config, input._M_code, mask, output._M_code,
-                                 saturated);
-    if (!status_ok (forward))
-        return forward;
-    if (state != nullptr)
-        {
-            state->_M_engine_state = engine._M_state;
-            state->_M_kept = kept;
-            state->_M_draws = draws;
-            state->_M_saturated = saturated;
-            state->_M_drop_code = static_cast<uint32_t> (
-                dropout_aux_code (config._M_drop_q15));
+        uint32_t saturated = 0u;
+        const Status forward = dropout_forward_codes (config, input._M_code, mask, output._M_code, saturated);
+        if (!status_ok (forward))
+                return forward;
+        if (state != nullptr) {
+                state->_M_engine_state = engine._M_state;
+                state->_M_kept = kept;
+                state->_M_draws = draws;
+                state->_M_saturated = saturated;
+                state->_M_drop_code = static_cast<uint32_t> (dropout_aux_code (config._M_drop_q15));
         }
-    if (config._M_train == 0u || !tape.is_open ())
-        return Status::OK;
+        if (config._M_train == 0u || !tape.is_open ())
+                return Status::OK;
 
-    Trainable operands[_S_max_operands];
-    operands[0] = input;
-    return tape.record (dropout_backward, _S_dropout_op_id, output, operands,
-                        1u, slots, 3u);
+        Trainable operands[_S_max_operands];
+        operands[0] = input;
+        return tape.record (dropout_backward, _S_dropout_op_id, output, operands, 1u, slots, 3u);
 }
 
 /**
@@ -452,44 +398,35 @@ dropout_run (Tape &tape, const DropoutConfig &config,
  * context._M_saturation_events.
  */
 [[nodiscard]] inline Status
-dropout_backward (const Trainable &output, const Trainable &grad_output,
-                  GradContext &context) noexcept
-{
-    if (context._M_operands == nullptr || context._M_operand_count < 1u)
-        return Status::BAD_LAYOUT;
-    const uint8_t *const mask
-        = context.saved_as<uint8_t> (_S_dropout_mask);
-    const int32_t *const gain
-        = context.saved_as<int32_t> (_S_dropout_gain);
-    int16_t *const scratch
-        = context.saved_as<int16_t> (_S_dropout_scratch);
-    if (mask == nullptr || gain == nullptr || scratch == nullptr)
-        return Status::BAD_LAYOUT;
-    if (grad_output._M_grad == nullptr || output._M_count == 0u)
-        return Status::BAD_LAYOUT;
-    const Trainable &input = context._M_operands[0];
-    if (input._M_count != output._M_count)
-        return Status::BAD_LAYOUT;
-    if (input._M_grad == nullptr)
-        return Status::OK; /* a frozen branch: nothing to accumulate */
+dropout_backward (const Trainable &output, const Trainable &grad_output, GradContext &context) noexcept {
+        if (context._M_operands == nullptr || context._M_operand_count < 1u)
+                return Status::BAD_LAYOUT;
+        const uint8_t *const mask = context.saved_as<uint8_t> (_S_dropout_mask);
+        const int32_t *const gain = context.saved_as<int32_t> (_S_dropout_gain);
+        int16_t *const scratch = context.saved_as<int16_t> (_S_dropout_scratch);
+        if (mask == nullptr || gain == nullptr || scratch == nullptr)
+                return Status::BAD_LAYOUT;
+        if (grad_output._M_grad == nullptr || output._M_count == 0u)
+                return Status::BAD_LAYOUT;
+        const Trainable &input = context._M_operands[0];
+        if (input._M_count != output._M_count)
+                return Status::BAD_LAYOUT;
+        if (input._M_grad == nullptr)
+                return Status::OK; /* a frozen branch: nothing to accumulate */
 
-    route_by_mask (grad_output._M_grad, mask, scratch, output._M_count);
-    uint32_t saturated = 0u;
-    const int32_t gain_q14 = *gain;
-    for (uint32_t i = 0; i < output._M_count; ++i)
-        {
-            const int32_t scaled = gain_q14 == 16384
-                                       ? scratch[i]
-                                       : q15_scale_shift (scratch[i], gain_q14,
-                                                          14u);
-            const int32_t lane = q15_clamp (scaled);
-            if (lane != scaled)
-                ++saturated;
-            if (input.add_grad (i, lane))
-                ++saturated;
+        route_by_mask (grad_output._M_grad, mask, scratch, output._M_count);
+        uint32_t saturated = 0u;
+        const int32_t gain_q14 = *gain;
+        for (uint32_t i = 0; i < output._M_count; ++i) {
+                const int32_t scaled = gain_q14 == 16384 ? scratch[i] : q15_scale_shift (scratch[i], gain_q14, 14u);
+                const int32_t lane = q15_clamp (scaled);
+                if (lane != scaled)
+                        ++saturated;
+                if (input.add_grad (i, lane))
+                        ++saturated;
         }
-    context._M_saturation_events += saturated;
-    return Status::OK;
+        context._M_saturation_events += saturated;
+        return Status::OK;
 }
 
 /**
@@ -501,32 +438,26 @@ dropout_backward (const Trainable &output, const Trainable &grad_output,
  * on the trained codes without a model file.
  */
 [[nodiscard]] inline Status
-dropout_inference_forward (const int32_t drop_code, const uint32_t stream_seed,
-                           const int8_t *const in, int8_t *const out,
-                           const uint32_t count) noexcept
-{
-    if (in == nullptr || out == nullptr)
-        return Status::BAD_LAYOUT;
-    if (drop_code < 0 || drop_code > 127)
-        return Status::OUT_OF_RANGE;
-    if (count > _S_max_elements)
-        return Status::OUT_OF_RANGE;
-    const int32_t keep = 127 - drop_code;
-    uint32_t state = stream_seed | 1u;
-    for (uint32_t i = 0; i < count; ++i)
-        {
-            state ^= state << 13;
-            state ^= state >> 17;
-            state ^= state << 5;
-            if (static_cast<int32_t> ((state >> 17) & 0x7Fu) < drop_code
-                || keep == 0)
-                {
-                    out[i] = 0;
-                    continue;
+dropout_inference_forward (const int32_t drop_code, const uint32_t stream_seed, const int8_t *const in,
+                           int8_t *const out, const uint32_t count) noexcept {
+        if (in == nullptr || out == nullptr)
+                return Status::BAD_LAYOUT;
+        if (drop_code < 0 || drop_code > 127)
+                return Status::OUT_OF_RANGE;
+        if (count > _S_max_elements)
+                return Status::OUT_OF_RANGE;
+        const int32_t keep = 127 - drop_code;
+        uint32_t state = stream_seed | 1u;
+        for (uint32_t i = 0; i < count; ++i) {
+                state ^= state << 13;
+                state ^= state >> 17;
+                state ^= state << 5;
+                if (static_cast<int32_t> ((state >> 17) & 0x7Fu) < drop_code || keep == 0) {
+                        out[i] = 0;
+                        continue;
                 }
-            out[i] = static_cast<int8_t> (
-                dropout_inference_code (in[i], drop_code));
+                out[i] = static_cast<int8_t> (dropout_inference_code (in[i], drop_code));
         }
-    return Status::OK;
+        return Status::OK;
 }
 } // namespace zzs::mllee::train

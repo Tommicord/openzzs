@@ -1,0 +1,32 @@
+{
+  "buildFiles": [
+    "/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/home/tommicord/Android/Sdk/cmake/3.22.1/bin/ninja",
+      "-C",
+      "/home/tommicord/CLionProjects/openzzs/android/app/.cxx/Debug/6o3g5y5l/arm64-v8a",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/home/tommicord/Android/Sdk/cmake/3.22.1/bin/ninja",
+    "-C",
+    "/home/tommicord/CLionProjects/openzzs/android/app/.cxx/Debug/6o3g5y5l/arm64-v8a",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "gen_model_blob_target::@6890427a1f51a3e7e1df": {
+      "artifactName": "gen_model_blob_target",
+      "abi": "arm64-v8a",
+      "runtimeFiles": []
+    },
+    "openzzs-android::@6890427a1f51a3e7e1df": {
+      "artifactName": "openzzs-android",
+      "abi": "arm64-v8a",
+      "output": "/home/tommicord/CLionProjects/openzzs/android/app/build/intermediates/cxx/Debug/6o3g5y5l/obj/arm64-v8a/libopenzzs-android.so",
+      "runtimeFiles": []
+    }
+  }
+}

@@ -73,7 +73,7 @@ using zzs::mllee_native::model::kOutputDim;
  */
 inline void
 flatten_sample (const TrainingSample &sample, int8_t *const flat) noexcept {
-    zzs::mllee_native::detail::flatten_sample (sample, flat);
+        zzs::mllee_native::detail::flatten_sample (sample, flat);
 }
 
 /**
@@ -84,48 +84,48 @@ flatten_sample (const TrainingSample &sample, int8_t *const flat) noexcept {
  * `Config` (defaults to `DefaultConfig`).
  */
 class InferenceEngine {
-  public:
-    InferenceEngine () noexcept = default;
-    InferenceEngine (const InferenceEngine &) = delete;
-    InferenceEngine &
-    operator= (const InferenceEngine &) = delete;
+      public:
+        InferenceEngine () noexcept = default;
+        InferenceEngine (const InferenceEngine &) = delete;
+        InferenceEngine &
+        operator= (const InferenceEngine &) = delete;
 
-    /** @brief Run inference on one sample.
-     *
-     * Returns the predicted class index (0=normal, 1=outage, 2=transition) and
-     * writes the output_dim softmax output codes into `output`.
-     *
-     * @returns Status::OK on success, BAD_LAYOUT if the model blob is invalid,
-     *          or another mllee Status error.
-     */
-    [[nodiscard]] Status
-    run (const TrainingSample &sample, int8_t *const output, uint32_t *const predicted_class) noexcept {
-        if (output == nullptr || predicted_class == nullptr)
-            return Status::BAD_LAYOUT;
-        if (const Status st = validate_model (g_model_blob, kBlobSize); !status_ok (st))
-            return st;
-        flatten_sample (sample, this->_M_input);
-        Core core;
-        const auto result = core.run (g_model_blob, kBlobSize, this->_M_input, kInputDim);
-        if (!result)
-            return result.error ().kind ();
-        for (uint32_t i = 0; i < kOutputDim; ++i)
-            output[i] = result.value ()._M_data[i];
-        int32_t best_code = output[0];
-        uint32_t best_idx = 0u;
-        for (uint32_t c = 1u; c < kOutputDim; ++c) {
-            if (output[c] > best_code) {
-                best_code = output[c];
-                best_idx = c;
-            }
+        /** @brief Run inference on one sample.
+         *
+         * Returns the predicted class index (0=normal, 1=outage, 2=transition) and
+         * writes the output_dim softmax output codes into `output`.
+         *
+         * @returns Status::OK on success, BAD_LAYOUT if the model blob is invalid,
+         *          or another mllee Status error.
+         */
+        [[nodiscard]] Status
+        run (const TrainingSample &sample, int8_t *const output, uint32_t *const predicted_class) noexcept {
+                if (output == nullptr || predicted_class == nullptr)
+                        return Status::BAD_LAYOUT;
+                if (const Status st = validate_model (g_model_blob, kBlobSize); !status_ok (st))
+                        return st;
+                flatten_sample (sample, this->_M_input);
+                Core core;
+                const auto result = core.run (g_model_blob, kBlobSize, this->_M_input, kInputDim);
+                if (!result)
+                        return result.error ().kind ();
+                for (uint32_t i = 0; i < kOutputDim; ++i)
+                        output[i] = result.value ()._M_data[i];
+                int32_t best_code = output[0];
+                uint32_t best_idx = 0u;
+                for (uint32_t c = 1u; c < kOutputDim; ++c) {
+                        if (output[c] > best_code) {
+                                best_code = output[c];
+                                best_idx = c;
+                        }
+                }
+                *predicted_class = best_idx;
+                return Status::OK;
         }
-        *predicted_class = best_idx;
-        return Status::OK;
-    }
 
-  private:
-    alignas (4) int8_t _M_input[kInputDim] = {};
-    alignas (4) int8_t _M_output[kOutputDim] = {};
+      private:
+        alignas (4) int8_t _M_input[kInputDim] = {};
+        alignas (4) int8_t _M_output[kOutputDim] = {};
 };
 
 /** @brief Run inference on one sample (free-function wrapper).
@@ -137,8 +137,8 @@ class InferenceEngine {
  */
 [[nodiscard]] inline Status
 run_inference (const TrainingSample &sample, int8_t *const output, uint32_t *const predicted_class) noexcept {
-    InferenceEngine engine;
-    return engine.run (sample, output, predicted_class);
+        InferenceEngine engine;
+        return engine.run (sample, output, predicted_class);
 }
 
 /** @brief Run Tier 2 CONV1D + Attention inference on one sample.
@@ -153,28 +153,28 @@ run_inference (const TrainingSample &sample, int8_t *const output, uint32_t *con
 [[nodiscard]] inline Status
 run_conv_attn_inference (const TrainingSample &sample, const uint8_t *model_blob, uint32_t model_blob_size,
                          int8_t *const output, uint32_t *const predicted_class) noexcept {
-    if (output == nullptr || predicted_class == nullptr || model_blob == nullptr)
-        return Status::BAD_LAYOUT;
-    if (const Status st = validate_model (model_blob, model_blob_size); !status_ok (st))
-        return st;
-    alignas (4) int8_t input[kInputDim] = {};
-    flatten_sample (sample, input);
-    Core core;
-    const auto result = core.run (model_blob, model_blob_size, input, kInputDim);
-    if (!result)
-        return result.error ().kind ();
-    for (uint32_t i = 0; i < kOutputDim; ++i)
-        output[i] = result.value ()._M_data[i];
-    int32_t best_code = output[0];
-    uint32_t best_idx = 0u;
-    for (uint32_t c = 1u; c < kOutputDim; ++c) {
-        if (output[c] > best_code) {
-            best_code = output[c];
-            best_idx = c;
+        if (output == nullptr || predicted_class == nullptr || model_blob == nullptr)
+                return Status::BAD_LAYOUT;
+        if (const Status st = validate_model (model_blob, model_blob_size); !status_ok (st))
+                return st;
+        alignas (4) int8_t input[kInputDim] = {};
+        flatten_sample (sample, input);
+        Core core;
+        const auto result = core.run (model_blob, model_blob_size, input, kInputDim);
+        if (!result)
+                return result.error ().kind ();
+        for (uint32_t i = 0; i < kOutputDim; ++i)
+                output[i] = result.value ()._M_data[i];
+        int32_t best_code = output[0];
+        uint32_t best_idx = 0u;
+        for (uint32_t c = 1u; c < kOutputDim; ++c) {
+                if (output[c] > best_code) {
+                        best_code = output[c];
+                        best_idx = c;
+                }
         }
-    }
-    *predicted_class = best_idx;
-    return Status::OK;
+        *predicted_class = best_idx;
+        return Status::OK;
 }
 
 /** @brief Run Tier 3 multi-task inference on one sample.
@@ -199,39 +199,39 @@ run_conv_attn_inference (const TrainingSample &sample, const uint8_t *model_blob
 run_multitask_inference (const TrainingSample &sample, const uint8_t *model_blob, uint32_t model_blob_size,
                          uint32_t *const predicted_class, int8_t *const confidence_code,
                          int8_t *const time_code) noexcept {
-    if (predicted_class == nullptr || confidence_code == nullptr || time_code == nullptr || model_blob == nullptr)
-        return Status::BAD_LAYOUT;
-    if (const Status st = validate_model (model_blob, model_blob_size); !status_ok (st))
-        return st;
-    alignas (4) int8_t input[kInputDim] = {};
-    flatten_sample (sample, input);
-    Core core;
-    const auto result = core.run (model_blob, model_blob_size, input, kInputDim);
-    if (!result)
-        return result.error ().kind ();
+        if (predicted_class == nullptr || confidence_code == nullptr || time_code == nullptr || model_blob == nullptr)
+                return Status::BAD_LAYOUT;
+        if (const Status st = validate_model (model_blob, model_blob_size); !status_ok (st))
+                return st;
+        alignas (4) int8_t input[kInputDim] = {};
+        flatten_sample (sample, input);
+        Core core;
+        const auto result = core.run (model_blob, model_blob_size, input, kInputDim);
+        if (!result)
+                return result.error ().kind ();
 
-    const int8_t *const arena = core.arena ();
-    /* Head 1 classification output: arena[208..211] (3 codes, softmax). */
-    const uint32_t head1_off = kConvOutput + kQKVOutput + kAttnOutput + kPooled; /* 208 */
-    int32_t best_code = arena[head1_off];
-    uint32_t best_idx = 0u;
-    for (uint32_t c = 1u; c < kHead1Out; ++c) {
-        if (arena[head1_off + c] > best_code) {
-            best_code = arena[head1_off + c];
-            best_idx = c;
+        const int8_t *const arena = core.arena ();
+        /* Head 1 classification output: arena[208..211] (3 codes, softmax). */
+        const uint32_t head1_off = kConvOutput + kQKVOutput + kAttnOutput + kPooled; /* 208 */
+        int32_t best_code = arena[head1_off];
+        uint32_t best_idx = 0u;
+        for (uint32_t c = 1u; c < kHead1Out; ++c) {
+                if (arena[head1_off + c] > best_code) {
+                        best_code = arena[head1_off + c];
+                        best_idx = c;
+                }
         }
-    }
-    *predicted_class = best_idx;
+        *predicted_class = best_idx;
 
-    /* Head 2 confidence output: arena[211..212] (1 code). */
-    const uint32_t head2_off = head1_off + kHead1Out; /* 211 */
-    *confidence_code = arena[head2_off];
+        /* Head 2 confidence output: arena[211..212] (1 code). */
+        const uint32_t head2_off = head1_off + kHead1Out; /* 211 */
+        *confidence_code = arena[head2_off];
 
-    /* Head 3 time-to-outage output: arena[212..213] (1 code). */
-    const uint32_t head3_off = head2_off + kHead2Out; /* 212 */
-    *time_code = arena[head3_off];
+        /* Head 3 time-to-outage output: arena[212..213] (1 code). */
+        const uint32_t head3_off = head2_off + kHead2Out; /* 212 */
+        *time_code = arena[head3_off];
 
-    return Status::OK;
+        return Status::OK;
 }
 
 /** @brief Convert an output code to a probability percentage (0-100).
@@ -240,24 +240,24 @@ run_multitask_inference (const TrainingSample &sample, const uint8_t *model_blob
  */
 [[nodiscard]] inline uint32_t
 code_to_probability (const int8_t code) noexcept {
-    const int32_t pct = (static_cast<int32_t> (code) + 127) * 100 + 127;
-    const int32_t v = pct / 254;
-    return static_cast<uint32_t> (v > 100 ? 100 : (v < 0 ? 0 : v));
+        const int32_t pct = (static_cast<int32_t> (code) + 127) * 100 + 127;
+        const int32_t v = pct / 254;
+        return static_cast<uint32_t> (v > 100 ? 100 : (v < 0 ? 0 : v));
 }
 
 /** @brief Class name for a class index. */
 [[nodiscard]] inline SimpleStringView
 class_name (const uint32_t class_index) noexcept {
-    switch (class_index) {
-    case 0:
-        return "normal";
-    case 1:
-        return "outage";
-    case 2:
-        return "transition";
-    default:
-        return "unknown";
-    }
+        switch (class_index) {
+        case 0:
+                return "normal";
+        case 1:
+                return "outage";
+        case 2:
+                return "transition";
+        default:
+                return "unknown";
+        }
 }
 
 /** @} */

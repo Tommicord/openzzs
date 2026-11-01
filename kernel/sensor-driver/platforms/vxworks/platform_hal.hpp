@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "kernel/kernel_sensor_hal.hpp"
 #include "../platform_config.hpp"
+#include "kernel/kernel_sensor_hal.hpp"
 
 #include <cstdint>
 
@@ -34,8 +34,7 @@
  * lives in the platform-specific translation unit.
  * @{
  */
-namespace zzs::kernel::sensor::driver::platform::vxworks
-{
+namespace zzs::kernel::sensor::driver::platform::vxworks {
 
 /** @brief Build the VxWorks sensor HAL vtable. */
 [[nodiscard]] const zzs::kernel::hal::_S_SensorHal *

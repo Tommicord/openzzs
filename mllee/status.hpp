@@ -61,38 +61,12 @@
  * result is `void *`, so the caller casts back to its own element type.
  */
 #if defined(__GNUC__) || defined(__clang__)
-#define ZZS_MLLEE_ASSUME_ALIGNED(pointer, bytes)                         \
-    __builtin_assume_aligned ((pointer), (bytes))
+#define ZZS_MLLEE_ASSUME_ALIGNED(pointer, bytes) __builtin_assume_aligned ((pointer), (bytes))
 #else
 #define ZZS_MLLEE_ASSUME_ALIGNED(pointer, bytes) (pointer)
 #endif
 
-/**
- * @brief State an invariant the surrounding checks already established.
- *
- * Used only where a `Status` test above the loop already made the fact true, so
- * a build without the hint loses speed but never safety.
- */
-#if defined(__clang__)
-#define ZZS_MLLEE_ASSUMPTION(expression) __builtin_assume (expression)
-#elif defined(__GNUC__)
-#define ZZS_MLLEE_ASSUMPTION(expression)                                 \
-    do                                                                   \
-        {                                                                \
-            if (!(expression))                                           \
-                __builtin_unreachable ();                                \
-        }                                                                \
-    while (false)
-#else
-#define ZZS_MLLEE_ASSUMPTION(expression)                                 \
-    do                                                                   \
-        {                                                                \
-        }                                                                \
-    while (false)
-#endif
-
-namespace zzs::mllee
-{
+namespace zzs::mllee {
 /**
  * @brief Result code used by every mllee internal path.
  *
@@ -100,135 +74,104 @@ namespace zzs::mllee
  * code in zzs::base::Maybe<Output, Error>; hot paths return Status directly so
  * no storage beyond a single byte is needed.
  */
-struct Error
-{
-    enum class Kind : uint8_t
-    {
-        OK = 0,
-        TRUNCATED,
-        CORRUPT_STREAM,
-        BAD_MAGIC,
-        BAD_VERSION,
-        BAD_LAYOUT,
-        OUT_OF_RANGE,
-        ARENA_OVERFLOW,
-        UNSUPPORTED,
-        INTERNAL,
-    };
+struct Error {
+        enum class Kind : uint8_t {
+                OK = 0,
+                TRUNCATED,
+                CORRUPT_STREAM,
+                BAD_MAGIC,
+                BAD_VERSION,
+                BAD_LAYOUT,
+                OUT_OF_RANGE,
+                ARENA_OVERFLOW,
+                UNSUPPORTED,
+                INTERNAL,
+        };
 
-    Error () = delete;
-    explicit constexpr Error (const Kind kind) noexcept : _M_kind (kind)
-    {
-    }
+        Error () = delete;
+        explicit constexpr Error (const Kind kind) noexcept : _M_kind (kind) {
+        }
 
-    [[nodiscard]] constexpr Kind
-    kind () const noexcept
-    {
-        return this->_M_kind;
-    }
+        [[nodiscard]] constexpr Kind
+        kind () const noexcept {
+                return this->_M_kind;
+        }
 
-    [[nodiscard]] constexpr bool
-    is_ok () const noexcept
-    {
-        return this->_M_kind == Kind::OK;
-    }
+        [[nodiscard]] constexpr bool
+        is_ok () const noexcept {
+                return this->_M_kind == Kind::OK;
+        }
 
-    [[nodiscard]] constexpr bool
-    operator== (const Error &other) const noexcept
-    {
-        return this->_M_kind == other._M_kind;
-    }
+        [[nodiscard]] constexpr bool
+        operator== (const Error &other) const noexcept {
+                return this->_M_kind == other._M_kind;
+        }
 
-    [[nodiscard]] constexpr explicit
-    operator bool () const noexcept
-    {
-        return this->_M_kind != Kind::OK;
-    }
+        [[nodiscard]] constexpr explicit
+        operator bool () const noexcept {
+                return this->_M_kind != Kind::OK;
+        }
 
-  private:
-    Kind _M_kind;
+      private:
+        Kind _M_kind;
 };
 
 using Status = Error::Kind;
 
 [[nodiscard]] constexpr bool
-status_ok (const Status status) noexcept
-{
-    return status == Status::OK;
+status_ok (const Status status) noexcept {
+        return status == Status::OK;
 }
 
 /**
- * @brief CRC-16/CCITT byte table: the residue of each of the 256 possible
- *        eight-bit shifts, generated at compile time.
+ * @brief CRC-16/CCITT: bit-at-a-time form (polynomial 0x1021, init 0xFFFF).
  *
- * The bit-at-a-time form below it needs eight data-dependent tests per byte,
- * which is the least predictable loop in the module; one load and one xor per
- * byte is the same result with a fixed sequence.  512 bytes of .rodata buys
- * that, and the table is const so it stays out of the RAM budget.
+ * The table-driven form needs 512 bytes of .rodata but one load and one xor per
+ * byte; the bit-at-a-time form below needs eight data-dependent tests per byte
+ * but zero .rodata.  CRC runs only over the model blob at load time (once per
+ * inference), so the per-byte cost is bounded and the flash saving is worth it.
  */
-struct Crc16Table
-{
-    uint16_t _M_bytes[256];
-
-    constexpr Crc16Table () noexcept : _M_bytes ()
-    {
-        for (uint16_t byte = 0; byte < 256; ++byte)
-            {
-                uint16_t value = static_cast<uint16_t> (byte << 8);
-                for (int bit = 0; bit < 8; ++bit)
-                    value = (value & 0x8000u) != 0
-                                ? static_cast<uint16_t> ((value << 1) ^ 0x1021u)
-                                : static_cast<uint16_t> (value << 1);
-                this->_M_bytes[byte] = value;
-            }
-    }
-};
-
-inline constexpr Crc16Table _S_crc16_table{};
-
-/** @brief One table-driven CRC-16/CCITT step (polynomial 0x1021, init 0xFFFF). */
 [[nodiscard]] constexpr uint16_t
-_S_crc16_update (uint16_t crc, const uint8_t byte) noexcept
-{
-    return static_cast<uint16_t> ((crc << 8)
-                                  ^ _S_crc16_table._M_bytes[((crc >> 8) ^ byte) & 0xFFu]);
+_S_crc16_update (uint16_t crc, const uint8_t byte) noexcept {
+        crc = static_cast<uint16_t> (crc ^ (static_cast<uint16_t> (byte) << 8));
+        for (int bit = 0; bit < 8; ++bit)
+                crc = static_cast<uint16_t> ((crc & 0x8000u) != 0 ? static_cast<uint16_t> ((crc << 1) ^ 0x1021u)
+                                                                  : static_cast<uint16_t> (crc << 1));
+        return crc;
 }
 
 [[nodiscard]] constexpr uint16_t
-_S_crc16 (const uint8_t *data, const uint32_t length) noexcept
-{
-    uint16_t crc = 0xFFFFu;
-    for (uint32_t i = 0; i < length; ++i)
-        crc = _S_crc16_update (crc, data[i]);
-    return crc;
+_S_crc16 (const uint8_t *data, const uint32_t length) noexcept {
+        uint16_t crc = 0xFFFFu;
+        for (uint32_t i = 0; i < length; ++i)
+                crc = _S_crc16_update (crc, data[i]);
+        return crc;
 }
 
 [[nodiscard]] constexpr const char *
-status_name (const Status status) noexcept
-{
-    switch (status)
-        {
+status_name (const Status status) noexcept {
+        switch (status) {
         case Status::OK:
-            return "ok";
+                return "ok";
         case Status::TRUNCATED:
-            return "truncated";
+                return "truncated";
         case Status::CORRUPT_STREAM:
-            return "corrupt_stream";
+                return "corrupt_stream";
         case Status::BAD_MAGIC:
-            return "bad_magic";
+                return "bad_magic";
         case Status::BAD_VERSION:
-            return "bad_version";
+                return "bad_version";
         case Status::BAD_LAYOUT:
-            return "bad_layout";
+                return "bad_layout";
         case Status::OUT_OF_RANGE:
-            return "out_of_range";
+                return "out_of_range";
         case Status::ARENA_OVERFLOW:
-            return "arena_overflow";
+                return "arena_overflow";
         case Status::UNSUPPORTED:
-            return "unsupported";
+                return "unsupported";
         case Status::INTERNAL:
-            return "internal";
+                return "internal";
         }
-    return "unknown";
+        return "unknown";
 }
 } // namespace zzs::mllee

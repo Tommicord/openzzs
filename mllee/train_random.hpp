@@ -73,8 +73,7 @@
  * nonzero tail probability on the Q15 grid, is 0.0093 sigma, and
  * tests/test_mllee_training_regularization.cpp asserts a 0.02 sigma band.
  */
-namespace zzs::mllee::train
-{
+namespace zzs::mllee::train {
 /** @brief splitmix64 counter increment (the 64-bit golden-ratio constant). */
 inline constexpr uint64_t _S_splitmix_increment = 0x9E3779B97F4A7C15ull;
 /** @brief splitmix64 first mix multiplier. */
@@ -90,13 +89,12 @@ inline constexpr uint64_t _S_xorshift_multiplier = 0x2545F4914F6CDD1Dull;
  * @param state engine state, mutated in place; the caller owns it, always.
  */
 [[nodiscard]] inline constexpr uint64_t
-rng_splitmix64 (uint64_t &state) noexcept
-{
-    state += _S_splitmix_increment;
-    uint64_t value = state;
-    value = (value ^ (value >> 30u)) * _S_splitmix_mixer_a;
-    value = (value ^ (value >> 27u)) * _S_splitmix_mixer_b;
-    return value ^ (value >> 31u);
+rng_splitmix64 (uint64_t &state) noexcept {
+        state += _S_splitmix_increment;
+        uint64_t value = state;
+        value = (value ^ (value >> 30u)) * _S_splitmix_mixer_a;
+        value = (value ^ (value >> 27u)) * _S_splitmix_mixer_b;
+        return value ^ (value >> 31u);
 }
 
 /**
@@ -107,74 +105,63 @@ rng_splitmix64 (uint64_t &state) noexcept
  * the multiplier is odd).
  */
 [[nodiscard]] inline constexpr uint64_t
-rng_xorshift64 (uint64_t &state) noexcept
-{
-    if (state == 0u)
-        state = _S_splitmix_increment;
-    state ^= state >> 12u;
-    state ^= state << 25u;
-    state ^= state >> 27u;
-    return state * _S_xorshift_multiplier;
+rng_xorshift64 (uint64_t &state) noexcept {
+        if (state == 0u)
+                state = _S_splitmix_increment;
+        state ^= state >> 12u;
+        state ^= state << 25u;
+        state ^= state >> 27u;
+        return state * _S_xorshift_multiplier;
 }
 
 /** @brief The statistically strong engine: one 64-bit state and nothing else. */
-struct SplitMix64
-{
-    uint64_t _M_state = 0u;
+struct SplitMix64 {
+        uint64_t _M_state = 0u;
 
-    /** @brief Seed the engine; every 64-bit value is usable, including 0. */
-    [[nodiscard]] static constexpr SplitMix64
-    seeded (const uint64_t seed) noexcept
-    {
-        SplitMix64 engine;
-        engine._M_state = seed;
-        return engine;
-    }
+        /** @brief Seed the engine; every 64-bit value is usable, including 0. */
+        [[nodiscard]] static constexpr SplitMix64
+        seeded (const uint64_t seed) noexcept {
+                SplitMix64 engine;
+                engine._M_state = seed;
+                return engine;
+        }
 
-    uint64_t
-    next_u64 () noexcept
-    {
-        return rng_splitmix64 (this->_M_state);
-    }
+        uint64_t
+        next_u64 () noexcept {
+                return rng_splitmix64 (this->_M_state);
+        }
 
-    [[nodiscard]] uint32_t
-    next_u32 () noexcept
-    {
-        return static_cast<uint32_t> (this->next_u64 () >> 32u);
-    }
+        [[nodiscard]] uint32_t
+        next_u32 () noexcept {
+                return static_cast<uint32_t> (this->next_u64 () >> 32u);
+        }
 };
 
 /** @brief The cheap engine: one 64-bit state, per-element mask streams. */
-struct XorShift64
-{
-    uint64_t _M_state = _S_splitmix_increment;
+struct XorShift64 {
+        uint64_t _M_state = _S_splitmix_increment;
 
-    /** @brief Seed the engine; 0 is replaced by the golden-ratio constant. */
-    [[nodiscard]] static constexpr XorShift64
-    seeded (const uint64_t seed) noexcept
-    {
-        XorShift64 engine;
-        engine._M_state = seed == 0u ? _S_splitmix_increment : seed;
-        return engine;
-    }
+        /** @brief Seed the engine; 0 is replaced by the golden-ratio constant. */
+        [[nodiscard]] static constexpr XorShift64
+        seeded (const uint64_t seed) noexcept {
+                XorShift64 engine;
+                engine._M_state = seed == 0u ? _S_splitmix_increment : seed;
+                return engine;
+        }
 
-    uint64_t
-    next_u64 () noexcept
-    {
-        return rng_xorshift64 (this->_M_state);
-    }
+        uint64_t
+        next_u64 () noexcept {
+                return rng_xorshift64 (this->_M_state);
+        }
 
-    [[nodiscard]] uint32_t
-    next_u32 () noexcept
-    {
-        return static_cast<uint32_t> (this->next_u64 () >> 32u);
-    }
+        [[nodiscard]] uint32_t
+        next_u32 () noexcept {
+                return static_cast<uint32_t> (this->next_u64 () >> 32u);
+        }
 };
 
-static_assert (sizeof (SplitMix64) == 8u,
-               "the splitmix engine must be exactly its 64-bit state");
-static_assert (sizeof (XorShift64) == 8u,
-               "the xorshift engine must be exactly its 64-bit state");
+static_assert (sizeof (SplitMix64) == 8u, "the splitmix engine must be exactly its 64-bit state");
+static_assert (sizeof (XorShift64) == 8u, "the xorshift engine must be exactly its 64-bit state");
 
 /**
  * @brief Independent stream from a base seed and a stream index.
@@ -184,21 +171,18 @@ static_assert (sizeof (XorShift64) == 8u,
  * without storing a state per step.
  */
 [[nodiscard]] inline constexpr uint64_t
-rng_derive_seed (const uint64_t base, const uint32_t stream) noexcept
-{
-    uint64_t state = base
-                     ^ (static_cast<uint64_t> (stream) * _S_splitmix_increment);
-    return rng_splitmix64 (state);
+rng_derive_seed (const uint64_t base, const uint32_t stream) noexcept {
+        uint64_t state = base ^ (static_cast<uint64_t> (stream) * _S_splitmix_increment);
+        return rng_splitmix64 (state);
 }
 
 /** @brief Fold two 64-bit values into one seed (checkpoint and epoch keys). */
 [[nodiscard]] inline constexpr uint64_t
-rng_mix_seed (uint64_t a, uint64_t b) noexcept
-{
-    a ^= b + 0x9E3779B9u + (a << 6u) + (a >> 2u);
-    b ^= a + 0x9E3779B9u + (b << 6u) + (b >> 2u);
-    uint64_t state = a ^ (b * _S_splitmix_mixer_a);
-    return rng_splitmix64 (state);
+rng_mix_seed (uint64_t a, uint64_t b) noexcept {
+        a ^= b + 0x9E3779B9u + (a << 6u) + (a >> 2u);
+        b ^= a + 0x9E3779B9u + (b << 6u) + (b >> 2u);
+        uint64_t state = a ^ (b * _S_splitmix_mixer_a);
+        return rng_splitmix64 (state);
 }
 
 /**
@@ -212,20 +196,17 @@ rng_mix_seed (uint64_t a, uint64_t b) noexcept
 /** @brief Uniform Q15 lane in [-1.0, 1.0), i.e. an int in [-32768, 32767]. */
 template <typename Engine>
 [[nodiscard]] inline int32_t
-uniform_q15 (Engine &engine) noexcept
-{
-    const uint64_t raw = engine.next_u64 ();
-    return static_cast<int32_t> (static_cast<int16_t> (
-        static_cast<uint16_t> (raw >> 48u)));
+uniform_q15 (Engine &engine) noexcept {
+        const uint64_t raw = engine.next_u64 ();
+        return static_cast<int32_t> (static_cast<int16_t> (static_cast<uint16_t> (raw >> 48u)));
 }
 
 /** @brief Uniform Q15 magnitude in [0, 1.0), i.e. an int in [0, 32767]. */
 template <typename Engine>
 [[nodiscard]] inline int32_t
-uniform_positive_q15 (Engine &engine) noexcept
-{
-    const uint64_t raw = engine.next_u64 ();
-    return static_cast<int32_t> (static_cast<uint32_t> (raw >> 48u) & 0x7FFFu);
+uniform_positive_q15 (Engine &engine) noexcept {
+        const uint64_t raw = engine.next_u64 ();
+        return static_cast<int32_t> (static_cast<uint32_t> (raw >> 48u) & 0x7FFFu);
 }
 
 /**
@@ -238,29 +219,26 @@ uniform_positive_q15 (Engine &engine) noexcept
  */
 template <typename Engine>
 [[nodiscard]] inline uint32_t
-bounded_uniform (Engine &engine, const uint32_t bound) noexcept
-{
-    if (bound == 0u)
-        return 0u;
-    const uint64_t product
-        = static_cast<uint64_t> (engine.next_u32 ()) * static_cast<uint64_t> (bound);
-    return static_cast<uint32_t> (product >> 32u);
+bounded_uniform (Engine &engine, const uint32_t bound) noexcept {
+        if (bound == 0u)
+                return 0u;
+        const uint64_t product = static_cast<uint64_t> (engine.next_u32 ()) * static_cast<uint64_t> (bound);
+        return static_cast<uint32_t> (product >> 32u);
 }
 
 /** @brief Bernoulli draw: true with probability p (a Q15 magnitude in [0, 1)). */
 template <typename Engine>
 [[nodiscard]] inline bool
-bernoulli_q15 (Engine &engine, const int32_t p_q15) noexcept
-{
-    if (p_q15 <= 0)
-        return false;
-    if (p_q15 >= _S_q15_one)
-        return true;
-    /* Fifteen bits, so the draw spans [0, 32767] and the comparison against a
-       Q15 p is a 2^-15-exact Bernoulli test. */
-    const uint64_t raw = engine.next_u64 ();
-    const int32_t draw = static_cast<int32_t> (static_cast<uint32_t> (raw >> 49u));
-    return draw < p_q15;
+bernoulli_q15 (Engine &engine, const int32_t p_q15) noexcept {
+        if (p_q15 <= 0)
+                return false;
+        if (p_q15 >= _S_q15_one)
+                return true;
+        /* Fifteen bits, so the draw spans [0, 32767] and the comparison against a
+           Q15 p is a 2^-15-exact Bernoulli test. */
+        const uint64_t raw = engine.next_u64 ();
+        const int32_t draw = static_cast<int32_t> (static_cast<uint32_t> (raw >> 49u));
+        return draw < p_q15;
 }
 
 /**
@@ -273,18 +251,14 @@ bernoulli_q15 (Engine &engine, const int32_t p_q15) noexcept
  */
 template <typename Engine>
 [[nodiscard]] inline uint32_t
-fill_mask (Engine &engine, const int32_t keep_probability_q15,
-           uint8_t *const mask, const uint32_t count) noexcept
-{
-    uint32_t kept = 0u;
-    for (uint32_t i = 0; i < count; ++i)
-        {
-            const uint8_t bit
-                = bernoulli_q15 (engine, keep_probability_q15) ? 1u : 0u;
-            mask[i] = bit;
-            kept += bit;
+fill_mask (Engine &engine, const int32_t keep_probability_q15, uint8_t *const mask, const uint32_t count) noexcept {
+        uint32_t kept = 0u;
+        for (uint32_t i = 0; i < count; ++i) {
+                const uint8_t bit = bernoulli_q15 (engine, keep_probability_q15) ? 1u : 0u;
+                mask[i] = bit;
+                kept += bit;
         }
-    return kept;
+        return kept;
 }
 
 /**
@@ -296,30 +270,24 @@ fill_mask (Engine &engine, const int32_t keep_probability_q15,
  */
 template <typename Engine>
 [[nodiscard]] inline uint32_t
-fill_mask_blocked (Engine &engine, const int32_t keep_probability_q15,
-                   const uint32_t units, const uint32_t inner,
-                   uint8_t *const mask) noexcept
-{
-    uint32_t kept = 0u;
-    for (uint32_t unit = 0; unit < units; ++unit)
-        {
-            const uint8_t bit
-                = bernoulli_q15 (engine, keep_probability_q15) ? 1u : 0u;
-            for (uint32_t lane = 0; lane < inner; ++lane)
-                mask[unit * inner + lane] = bit;
-            kept += bit != 0u ? inner : 0u;
+fill_mask_blocked (Engine &engine, const int32_t keep_probability_q15, const uint32_t units, const uint32_t inner,
+                   uint8_t *const mask) noexcept {
+        uint32_t kept = 0u;
+        for (uint32_t unit = 0; unit < units; ++unit) {
+                const uint8_t bit = bernoulli_q15 (engine, keep_probability_q15) ? 1u : 0u;
+                for (uint32_t lane = 0; lane < inner; ++lane)
+                        mask[unit * inner + lane] = bit;
+                kept += bit != 0u ? inner : 0u;
         }
-    return kept;
+        return kept;
 }
 
 /** @brief Fill a lane buffer with uniform Q15 values (noise, random inputs). */
 template <typename Engine>
 inline void
-fill_lanes_uniform (Engine &engine, int16_t *const lanes,
-                    const uint32_t count) noexcept
-{
-    for (uint32_t i = 0; i < count; ++i)
-        lanes[i] = static_cast<int16_t> (uniform_q15 (engine));
+fill_lanes_uniform (Engine &engine, int16_t *const lanes, const uint32_t count) noexcept {
+        for (uint32_t i = 0; i < count; ++i)
+                lanes[i] = static_cast<int16_t> (uniform_q15 (engine));
 }
 
 /** @} */
@@ -345,38 +313,34 @@ fill_lanes_uniform (Engine &engine, int16_t *const lanes,
  * error stays below one ulp of the result plus one ulp per fold.
  */
 [[nodiscard]] inline constexpr int32_t
-q15_sqrt_wide (const int32_t value_q15) noexcept
-{
-    if (value_q15 <= 0)
-        return 0;
-    uint32_t argument = static_cast<uint32_t> (value_q15);
-    uint32_t folds = 0u;
-    while (argument > 65535u)
-        {
-            argument >>= 2u;
-            ++folds;
+q15_sqrt_wide (const int32_t value_q15) noexcept {
+        if (value_q15 <= 0)
+                return 0;
+        uint32_t argument = static_cast<uint32_t> (value_q15);
+        uint32_t folds = 0u;
+        while (argument > 65535u) {
+                argument >>= 2u;
+                ++folds;
         }
-    uint64_t root = _S_isqrt (argument << _S_grad_frac_bits);
-    root <<= folds;
-    return root > 0x7FFFFFFFull ? 0x7FFFFFFF : static_cast<int32_t> (root);
+        uint64_t root = _S_isqrt (argument << _S_grad_frac_bits);
+        root <<= folds;
+        return root > 0x7FFFFFFFull ? 0x7FFFFFFF : static_cast<int32_t> (root);
 }
 
 /** @brief sqrt (num / den) in 15 fraction bits from two plain integer counts. */
 [[nodiscard]] inline constexpr int32_t
-sqrt_ratio_q15 (const uint32_t num, const uint32_t den) noexcept
-{
-    if (den == 0u || num == 0u)
-        return 0;
-    uint64_t radicand = (static_cast<uint64_t> (num) << 30u) / den;
-    uint32_t folds = 0u;
-    while (radicand > 0xFFFFFFFFull)
-        {
-            radicand >>= 2u;
-            ++folds;
+sqrt_ratio_q15 (const uint32_t num, const uint32_t den) noexcept {
+        if (den == 0u || num == 0u)
+                return 0;
+        uint64_t radicand = (static_cast<uint64_t> (num) << 30u) / den;
+        uint32_t folds = 0u;
+        while (radicand > 0xFFFFFFFFull) {
+                radicand >>= 2u;
+                ++folds;
         }
-    uint64_t root = _S_isqrt (static_cast<uint32_t> (radicand));
-    root <<= folds;
-    return root > 0x7FFFFFFFull ? 0x7FFFFFFF : static_cast<int32_t> (root);
+        uint64_t root = _S_isqrt (static_cast<uint32_t> (radicand));
+        root <<= folds;
+        return root > 0x7FFFFFFFull ? 0x7FFFFFFF : static_cast<int32_t> (root);
 }
 
 /**
@@ -387,13 +351,11 @@ sqrt_ratio_q15 (const uint32_t num, const uint32_t den) noexcept
  * this wide form instead of saturating.
  */
 [[nodiscard]] inline constexpr int32_t
-ratio_wide_q15 (const uint32_t num, const uint32_t den) noexcept
-{
-    if (den == 0u)
-        return 0;
-    const uint64_t scaled
-        = (static_cast<uint64_t> (num) << _S_grad_frac_bits) / den;
-    return scaled > 0x7FFFFFFFull ? 0x7FFFFFFF : static_cast<int32_t> (scaled);
+ratio_wide_q15 (const uint32_t num, const uint32_t den) noexcept {
+        if (den == 0u)
+                return 0;
+        const uint64_t scaled = (static_cast<uint64_t> (num) << _S_grad_frac_bits) / den;
+        return scaled > 0x7FFFFFFFull ? 0x7FFFFFFF : static_cast<int32_t> (scaled);
 }
 
 /** @} */
@@ -447,18 +409,17 @@ inline constexpr uint32_t _S_max_permutation_elements = 65535u;
  * made explicit.
  */
 [[nodiscard]] inline int32_t
-neg_ln_q15 (const int32_t p_q15) noexcept
-{
-    if (p_q15 <= 0)
-        return 0x7FFFFFFF;
-    const int32_t coarse_q7 = q7_neg_log_q15 (p_q15);
-    const int32_t coarse_q15 = coarse_q7 * 256;
-    const int32_t e_q15 = q15_exp_neg (coarse_q15);
-    if (e_q15 < 512)
-        return coarse_q15;
-    const int32_t raw = q15_div (e_q15 - p_q15, p_q15);
-    const int32_t correction = raw > 256 ? 256 : (raw < -256 ? -256 : raw);
-    return coarse_q15 + correction;
+neg_ln_q15 (const int32_t p_q15) noexcept {
+        if (p_q15 <= 0)
+                return 0x7FFFFFFF;
+        const int32_t coarse_q7 = q7_neg_log_q15 (p_q15);
+        const int32_t coarse_q15 = coarse_q7 * 256;
+        const int32_t e_q15 = q15_exp_neg (coarse_q15);
+        if (e_q15 < 512)
+                return coarse_q15;
+        const int32_t raw = q15_div (e_q15 - p_q15, p_q15);
+        const int32_t correction = raw > 256 ? 256 : (raw < -256 ? -256 : raw);
+        return coarse_q15 + correction;
 }
 
 /**
@@ -472,31 +433,25 @@ neg_ln_q15 (const int32_t p_q15) noexcept
  * touching the engine.
  */
 [[nodiscard]] inline int32_t
-normal_quantile_q15 (const int32_t tail_q15) noexcept
-{
-    const int32_t half = _S_q15_one / 2;
-    const int32_t tail = tail_q15 < 1 ? 1 : (tail_q15 > half ? half : tail_q15);
-    const int32_t t = q15_sqrt_wide (neg_ln_q15 (tail) * 2);
-    /* c1 t and c2 t^2 in 14 fraction bits: q15_scale_shift never clamps, which
-       is what a t of 4.55 needs and a Q15 multiply would not give. */
-    const int32_t t_square_q15 = static_cast<int32_t> (
-        (static_cast<int64_t> (t) * t) >> _S_grad_frac_bits);
-    const int32_t c1_t_q14 = q15_scale_shift (t, _S_normal_c1_q15, 15u) >> 1u;
-    const int32_t c2_t2_q14
-        = q15_scale_shift (t_square_q15, _S_normal_c2_q15, 15u) >> 1u;
-    const int32_t numerator = _S_normal_c0_q14 + c1_t_q14 + c2_t2_q14;
-    const int32_t t_cube_q15 = q15_scale_shift (t_square_q15, t, 15u);
-    const int32_t d1_t_q14 = q15_scale_shift (t, _S_normal_d1_q14, 14u) >> 1u;
-    const int32_t d2_t2_q14
-        = q15_scale_shift (t_square_q15, _S_normal_d2_q15, 15u) >> 1u;
-    const int32_t d3_t3_q14
-        = q15_scale_shift (t_cube_q15, _S_normal_d3_q15, 15u) >> 1u;
-    const int32_t denominator
-        = _S_q14_one + d1_t_q14 + d2_t2_q14 + d3_t3_q14;
-    const int32_t correction = static_cast<int32_t> (
-        (static_cast<int64_t> (numerator) << _S_grad_frac_bits) / denominator);
-    const int32_t value = t - correction;
-    return value > _S_normal_t_limit_q15 ? _S_normal_t_limit_q15 : (value < 0 ? 0 : value);
+normal_quantile_q15 (const int32_t tail_q15) noexcept {
+        const int32_t half = _S_q15_one / 2;
+        const int32_t tail = tail_q15 < 1 ? 1 : (tail_q15 > half ? half : tail_q15);
+        const int32_t t = q15_sqrt_wide (neg_ln_q15 (tail) * 2);
+        /* c1 t and c2 t^2 in 14 fraction bits: q15_scale_shift never clamps, which
+           is what a t of 4.55 needs and a Q15 multiply would not give. */
+        const int32_t t_square_q15 = static_cast<int32_t> ((static_cast<int64_t> (t) * t) >> _S_grad_frac_bits);
+        const int32_t c1_t_q14 = q15_scale_shift (t, _S_normal_c1_q15, 15u) >> 1u;
+        const int32_t c2_t2_q14 = q15_scale_shift (t_square_q15, _S_normal_c2_q15, 15u) >> 1u;
+        const int32_t numerator = _S_normal_c0_q14 + c1_t_q14 + c2_t2_q14;
+        const int32_t t_cube_q15 = q15_scale_shift (t_square_q15, t, 15u);
+        const int32_t d1_t_q14 = q15_scale_shift (t, _S_normal_d1_q14, 14u) >> 1u;
+        const int32_t d2_t2_q14 = q15_scale_shift (t_square_q15, _S_normal_d2_q15, 15u) >> 1u;
+        const int32_t d3_t3_q14 = q15_scale_shift (t_cube_q15, _S_normal_d3_q15, 15u) >> 1u;
+        const int32_t denominator = _S_q14_one + d1_t_q14 + d2_t2_q14 + d3_t3_q14;
+        const int32_t correction =
+            static_cast<int32_t> ((static_cast<int64_t> (numerator) << _S_grad_frac_bits) / denominator);
+        const int32_t value = t - correction;
+        return value > _S_normal_t_limit_q15 ? _S_normal_t_limit_q15 : (value < 0 ? 0 : value);
 }
 
 /**
@@ -511,14 +466,13 @@ normal_quantile_q15 (const int32_t tail_q15) noexcept
  */
 template <typename Engine>
 [[nodiscard]] inline int32_t
-normal_wide_q15 (Engine &engine) noexcept
-{
-    int32_t uniform = uniform_q15 (engine);
-    if (uniform == _S_q15_min)
-        uniform = _S_q15_min + 1;
-    const int32_t magnitude = uniform < 0 ? -uniform : uniform;
-    const int32_t value = normal_quantile_q15 ((_S_q15_one - magnitude) / 2);
-    return uniform < 0 ? -value : value;
+normal_wide_q15 (Engine &engine) noexcept {
+        int32_t uniform = uniform_q15 (engine);
+        if (uniform == _S_q15_min)
+                uniform = _S_q15_min + 1;
+        const int32_t magnitude = uniform < 0 ? -uniform : uniform;
+        const int32_t value = normal_quantile_q15 ((_S_q15_one - magnitude) / 2);
+        return uniform < 0 ? -value : value;
 }
 
 /**
@@ -529,26 +483,22 @@ normal_wide_q15 (Engine &engine) noexcept
  */
 template <typename Engine>
 [[nodiscard]] inline int32_t
-normal_q15 (Engine &engine, const int32_t sigma_q15,
-            uint32_t &clamped) noexcept
-{
-    const int32_t z = normal_wide_q15 (engine);
-    const int32_t product = q15_scale_shift (z, sigma_q15, _S_grad_frac_bits);
-    if (product > _S_q15_max || product < _S_q15_min)
-        {
-            ++clamped;
-            return q15_clamp (product);
+normal_q15 (Engine &engine, const int32_t sigma_q15, uint32_t &clamped) noexcept {
+        const int32_t z = normal_wide_q15 (engine);
+        const int32_t product = q15_scale_shift (z, sigma_q15, _S_grad_frac_bits);
+        if (product > _S_q15_max || product < _S_q15_min) {
+                ++clamped;
+                return q15_clamp (product);
         }
-    return product;
+        return product;
 }
 
 /** @brief sigma * z narrowed to a Q15 lane, ignoring saturation. */
 template <typename Engine>
 [[nodiscard]] inline int32_t
-normal_q15 (Engine &engine, const int32_t sigma_q15) noexcept
-{
-    uint32_t ignored = 0u;
-    return normal_q15 (engine, sigma_q15, ignored);
+normal_q15 (Engine &engine, const int32_t sigma_q15) noexcept {
+        uint32_t ignored = 0u;
+        return normal_q15 (engine, sigma_q15, ignored);
 }
 
 /**
@@ -561,12 +511,11 @@ normal_q15 (Engine &engine, const int32_t sigma_q15) noexcept
  */
 template <typename Engine>
 [[nodiscard]] inline int32_t
-triangular_noise_q15 (Engine &engine, const int32_t scale_q15) noexcept
-{
-    const int32_t first = uniform_q15 (engine);
-    const int32_t second = uniform_q15 (engine);
-    const int32_t mean = (first + second) / 2;
-    return q15_mul (mean, scale_q15);
+triangular_noise_q15 (Engine &engine, const int32_t scale_q15) noexcept {
+        const int32_t first = uniform_q15 (engine);
+        const int32_t second = uniform_q15 (engine);
+        const int32_t mean = (first + second) / 2;
+        return q15_mul (mean, scale_q15);
 }
 
 /** @} */
@@ -584,49 +533,41 @@ triangular_noise_q15 (Engine &engine, const int32_t scale_q15) noexcept
 /** @brief Fill @p indices with 0, 1, ... count-1. */
 template <typename Index>
 inline void
-init_indices (Index *const indices, const uint32_t count) noexcept
-{
-    for (uint32_t i = 0; i < count; ++i)
-        indices[i] = static_cast<Index> (i);
+init_indices (Index *const indices, const uint32_t count) noexcept {
+        for (uint32_t i = 0; i < count; ++i)
+                indices[i] = static_cast<Index> (i);
 }
 
 /** @brief In-place Fisher-Yates shuffle of a caller-owned index buffer. */
 template <typename Index, typename Engine>
 inline void
-shuffle_indices (Engine &engine, Index *const indices,
-                 const uint32_t count) noexcept
-{
-    for (uint32_t tail = count; tail-- > 1u;)
-        {
-            const uint32_t pick = bounded_uniform (engine, tail + 1u);
-            const Index swap = indices[pick];
-            indices[pick] = indices[tail];
-            indices[tail] = swap;
+shuffle_indices (Engine &engine, Index *const indices, const uint32_t count) noexcept {
+        for (uint32_t tail = count; tail-- > 1u;) {
+                const uint32_t pick = bounded_uniform (engine, tail + 1u);
+                const Index swap = indices[pick];
+                indices[pick] = indices[tail];
+                indices[tail] = swap;
         }
 }
 
 /** @brief Write a shuffled 0..count-1 permutation into a caller-owned buffer. */
 template <typename Engine>
 inline Status
-make_permutation (Engine &engine, uint16_t *const indices,
-                  const uint32_t count) noexcept
-{
-    if (indices == nullptr && count != 0u)
-        return Status::BAD_LAYOUT;
-    if (count > _S_max_permutation_elements)
-        return Status::OUT_OF_RANGE;
-    init_indices (indices, count);
-    shuffle_indices (engine, indices, count);
-    return Status::OK;
+make_permutation (Engine &engine, uint16_t *const indices, const uint32_t count) noexcept {
+        if (indices == nullptr && count != 0u)
+                return Status::BAD_LAYOUT;
+        if (count > _S_max_permutation_elements)
+                return Status::OUT_OF_RANGE;
+        init_indices (indices, count);
+        shuffle_indices (engine, indices, count);
+        return Status::OK;
 }
 
 /** @brief Shuffle an existing uint16 index buffer in place. */
 template <typename Engine>
 inline void
-permute_indices (Engine &engine, uint16_t *const indices,
-                 const uint32_t count) noexcept
-{
-    shuffle_indices (engine, indices, count);
+permute_indices (Engine &engine, uint16_t *const indices, const uint32_t count) noexcept {
+        shuffle_indices (engine, indices, count);
 }
 
 /**
@@ -639,24 +580,20 @@ permute_indices (Engine &engine, uint16_t *const indices,
  */
 template <typename Engine>
 inline uint32_t
-sample_without_replacement (Engine &engine, const uint32_t population,
-                            const uint32_t count, uint16_t *const out,
-                            uint16_t *const scratch) noexcept
-{
-    if (out == nullptr || scratch == nullptr || population == 0u
-        || population > _S_max_permutation_elements)
-        return 0u;
-    const uint32_t draws = count < population ? count : population;
-    init_indices (scratch, population);
-    for (uint32_t i = 0; i < draws; ++i)
-        {
-            const uint32_t pick = i + bounded_uniform (engine, population - i);
-            const uint16_t swap = scratch[pick];
-            scratch[pick] = scratch[i];
-            scratch[i] = swap;
-            out[i] = scratch[i];
+sample_without_replacement (Engine &engine, const uint32_t population, const uint32_t count, uint16_t *const out,
+                            uint16_t *const scratch) noexcept {
+        if (out == nullptr || scratch == nullptr || population == 0u || population > _S_max_permutation_elements)
+                return 0u;
+        const uint32_t draws = count < population ? count : population;
+        init_indices (scratch, population);
+        for (uint32_t i = 0; i < draws; ++i) {
+                const uint32_t pick = i + bounded_uniform (engine, population - i);
+                const uint16_t swap = scratch[pick];
+                scratch[pick] = scratch[i];
+                scratch[i] = swap;
+                out[i] = scratch[i];
         }
-    return draws;
+        return draws;
 }
 
 /** @} */

@@ -46,54 +46,45 @@
  * helpers (smooth_onehot_q15, smooth_dense_q15, entropy_q7, blend) take
  * caller-owned buffers and carve nothing.
  */
-namespace zzs::mllee::train
-{
+namespace zzs::mllee::train {
 /** @brief Label-smoothing op ids (the loss family continues at 0x4C10). */
 inline constexpr uint32_t _S_op_smoothed_ce = 0x4C10u;
 inline constexpr uint32_t _S_op_soft_ce = 0x4C11u;
 
 /** @brief One smoothing evaluation: eps, the uniform mass and the class count. */
-struct SmoothingParams
-{
-    /** @brief Smoothing mass eps in Q15 (3277 = 0.1). */
-    int32_t _M_eps_q15 = 3277;
-    /** @brief Derived uniform per-class mass eps / C, filled by the helpers. */
-    int32_t _M_uniform_q15 = 0;
+struct SmoothingParams {
+        /** @brief Smoothing mass eps in Q15 (3277 = 0.1). */
+        int32_t _M_eps_q15 = 3277;
+        /** @brief Derived uniform per-class mass eps / C, filled by the helpers. */
+        int32_t _M_uniform_q15 = 0;
 
-    [[nodiscard]] static constexpr SmoothingParams
-    make (const int32_t eps_q15, const uint32_t classes) noexcept
-    {
-        SmoothingParams params;
-        params._M_eps_q15 = q15_clamp (eps_q15 < 0 ? 0 : eps_q15);
-        /* eps is already Q15, so the uniform mass is a plain integer divide
-           (ratio_q15 would re-scale by 2^15 and clamp -- wrong here). */
-        params._M_uniform_q15 = classes == 0u
-                                    ? 0
-                                    : div_round (params._M_eps_q15,
-                                                 static_cast<int32_t> (classes));
-        return params;
-    }
+        [[nodiscard]] static constexpr SmoothingParams
+        make (const int32_t eps_q15, const uint32_t classes) noexcept {
+                SmoothingParams params;
+                params._M_eps_q15 = q15_clamp (eps_q15 < 0 ? 0 : eps_q15);
+                /* eps is already Q15, so the uniform mass is a plain integer divide
+                   (ratio_q15 would re-scale by 2^15 and clamp -- wrong here). */
+                params._M_uniform_q15 =
+                    classes == 0u ? 0 : div_round (params._M_eps_q15, static_cast<int32_t> (classes));
+                return params;
+        }
 
-    [[nodiscard]] constexpr Status
-    validate () const noexcept
-    {
-        return _S_q15_min <= this->_M_eps_q15
-                       && this->_M_eps_q15 <= _S_q15_max
-                   && this->_M_uniform_q15 >= 0
-                       ? Status::OK
-                       : Status::OUT_OF_RANGE;
-    }
+        [[nodiscard]] constexpr Status
+        validate () const noexcept {
+                return _S_q15_min <= this->_M_eps_q15 && this->_M_eps_q15 <= _S_q15_max && this->_M_uniform_q15 >= 0
+                           ? Status::OK
+                           : Status::OUT_OF_RANGE;
+        }
 };
 
 static_assert (sizeof (SmoothingParams) == 8u, "smoothing params is two Q15 words");
 
 /** @brief Saved config for the smoothed CE backward (one tape slot). */
-struct SmoothedCeMeta
-{
-    int32_t _M_eps_q15 = 0;
-    int32_t _M_uniform_q15 = 0;
-    uint16_t _M_target = 0u;
-    uint16_t _M_classes = 0u;
+struct SmoothedCeMeta {
+        int32_t _M_eps_q15 = 0;
+        int32_t _M_uniform_q15 = 0;
+        uint16_t _M_target = 0u;
+        uint16_t _M_classes = 0u;
 };
 
 static_assert (sizeof (SmoothedCeMeta) == 12u, "smoothed CE meta is two words plus two halfwords");
@@ -107,18 +98,17 @@ static_assert (sizeof (SmoothedCeMeta) == 12u, "smoothed CE meta is two words pl
  * two primitives the backward kernels already vectorize.
  */
 inline Status
-smooth_onehot_q15 (const uint16_t target, const uint32_t classes,
-                   const SmoothingParams &params, int16_t *const dest) noexcept
-{
-    if (dest == nullptr || classes == 0u || target >= classes)
-        return Status::BAD_LAYOUT;
-    const Status valid = params.validate ();
-    if (!status_ok (valid))
-        return valid;
-    fill_lanes (dest, params._M_uniform_q15, classes);
-    const int32_t remainder = _S_q15_one - 1 - params._M_eps_q15;
-    dest[target] = q15_to_i16_sat (dest[target] + remainder);
-    return Status::OK;
+smooth_onehot_q15 (const uint16_t target, const uint32_t classes, const SmoothingParams &params,
+                   int16_t *const dest) noexcept {
+        if (dest == nullptr || classes == 0u || target >= classes)
+                return Status::BAD_LAYOUT;
+        const Status valid = params.validate ();
+        if (!status_ok (valid))
+                return valid;
+        fill_lanes (dest, params._M_uniform_q15, classes);
+        const int32_t remainder = _S_q15_one - 1 - params._M_eps_q15;
+        dest[target] = q15_to_i16_sat (dest[target] + remainder);
+        return Status::OK;
 }
 
 /**
@@ -131,22 +121,20 @@ smooth_onehot_q15 (const uint16_t target, const uint32_t classes,
  * lanes of probability codes.
  */
 inline Status
-smooth_dense_q15 (const Trainable &dense, const SmoothingParams &params,
-                  int16_t *const dest) noexcept
-{
-    if (!status_ok (dense.validate ()))
-        return Status::BAD_LAYOUT;
-    if (dest == nullptr)
-        return Status::BAD_LAYOUT;
-    const Status valid = params.validate ();
-    if (!status_ok (valid))
-        return valid;
-    train_simd::codes_to_q15 (dense._M_code, dest, dense._M_count);
-    const int32_t keep = _S_q15_one - 1 - params._M_eps_q15;
-    scale_lanes (dest, keep, dense._M_count);
-    for (uint32_t i = 0; i < dense._M_count; ++i)
-        dest[i] = q15_to_i16_sat (dest[i] + params._M_uniform_q15);
-    return Status::OK;
+smooth_dense_q15 (const Trainable &dense, const SmoothingParams &params, int16_t *const dest) noexcept {
+        if (!status_ok (dense.validate ()))
+                return Status::BAD_LAYOUT;
+        if (dest == nullptr)
+                return Status::BAD_LAYOUT;
+        const Status valid = params.validate ();
+        if (!status_ok (valid))
+                return valid;
+        train_simd::codes_to_q15 (dense._M_code, dest, dense._M_count);
+        const int32_t keep = _S_q15_one - 1 - params._M_eps_q15;
+        scale_lanes (dest, keep, dense._M_count);
+        for (uint32_t i = 0; i < dense._M_count; ++i)
+                dest[i] = q15_to_i16_sat (dest[i] + params._M_uniform_q15);
+        return Status::OK;
 }
 
 /**
@@ -159,32 +147,28 @@ smooth_dense_q15 (const Trainable &dense, const SmoothingParams &params,
  * p * (-log p), which is the positive entropy directly.
  */
 [[nodiscard]] inline int32_t
-entropy_q7 (const int16_t *const probs_q15, const uint32_t count) noexcept
-{
-    int64_t total_q7 = 0;
-    for (uint32_t i = 0; i < count; ++i)
-    {
-        const int32_t p = probs_q15[i];
-        if (p <= 0)
-            continue; /* 0 * log 0 is defined as the zero contribution */
-        total_q7 += (static_cast<int64_t> (q7_neg_log_q15 (p)) * p) >> 15;
-    }
-    return static_cast<int32_t> (total_q7);
+entropy_q7 (const int16_t *const probs_q15, const uint32_t count) noexcept {
+        int64_t total_q7 = 0;
+        for (uint32_t i = 0; i < count; ++i) {
+                const int32_t p = probs_q15[i];
+                if (p <= 0)
+                        continue; /* 0 * log 0 is defined as the zero contribution */
+                total_q7 += (static_cast<int64_t> (q7_neg_log_q15 (p)) * p) >> 15;
+        }
+        return static_cast<int32_t> (total_q7);
 }
 
 /** @brief Entropy of an int8 probability operand (the code-domain convenience). */
 [[nodiscard]] inline int32_t
-entropy_q7 (const Trainable &probs) noexcept
-{
-    int64_t total_q7 = 0;
-    for (uint32_t i = 0; i < probs._M_count; ++i)
-    {
-        const int32_t p = probs.q15_at (i);
-        if (p <= 0)
-            continue;
-        total_q7 += (static_cast<int64_t> (q7_neg_log_q15 (p)) * p) >> 15;
-    }
-    return static_cast<int32_t> (total_q7);
+entropy_q7 (const Trainable &probs) noexcept {
+        int64_t total_q7 = 0;
+        for (uint32_t i = 0; i < probs._M_count; ++i) {
+                const int32_t p = probs.q15_at (i);
+                if (p <= 0)
+                        continue;
+                total_q7 += (static_cast<int64_t> (q7_neg_log_q15 (p)) * p) >> 15;
+        }
+        return static_cast<int32_t> (total_q7);
 }
 
 /**
@@ -195,21 +179,17 @@ entropy_q7 (const Trainable &probs) noexcept
  * saturates at the Q15 rails when p_c is small.
  */
 inline Status
-uniform_target_gradient (const Trainable &probs, int16_t *const dest,
-                         const uint32_t count) noexcept
-{
-    if (dest == nullptr || probs._M_count != count || count == 0u)
-        return Status::BAD_LAYOUT;
-    /* 1/C in Q15: a plain integer divide of the unit, not ratio_q15 of a
-       Q15 numerator (that would scale by 2^15 again and clamp). */
-    const int32_t unit = div_round (_S_q15_one, static_cast<int32_t> (count));
-    for (uint32_t i = 0; i < count; ++i)
-    {
-        const int32_t p = probs.q15_at (i);
-        dest[i] = p > 0 ? q15_to_i16_sat (q15_div (-unit, p))
-                        : static_cast<int16_t> (_S_q15_min);
-    }
-    return Status::OK;
+uniform_target_gradient (const Trainable &probs, int16_t *const dest, const uint32_t count) noexcept {
+        if (dest == nullptr || probs._M_count != count || count == 0u)
+                return Status::BAD_LAYOUT;
+        /* 1/C in Q15: a plain integer divide of the unit, not ratio_q15 of a
+           Q15 numerator (that would scale by 2^15 again and clamp). */
+        const int32_t unit = div_round (_S_q15_one, static_cast<int32_t> (count));
+        for (uint32_t i = 0; i < count; ++i) {
+                const int32_t p = probs.q15_at (i);
+                dest[i] = p > 0 ? q15_to_i16_sat (q15_div (-unit, p)) : static_cast<int16_t> (_S_q15_min);
+        }
+        return Status::OK;
 }
 
 /**
@@ -222,50 +202,42 @@ uniform_target_gradient (const Trainable &probs, int16_t *const dest,
  * are axpy_lanes, so the blend is a SIMD kernel over stride-1 lanes.
  */
 inline Status
-smoothed_gradient_blend (const int16_t *const grad_onehot,
-                         const int16_t *const grad_uniform,
-                         const SmoothingParams &params, int16_t *const dest,
-                         const uint32_t count) noexcept
-{
-    if (grad_onehot == nullptr || grad_uniform == nullptr || dest == nullptr)
-        return Status::BAD_LAYOUT;
-    const Status valid = params.validate ();
-    if (!status_ok (valid))
-        return valid;
-    const int32_t keep = _S_q15_one - 1 - params._M_eps_q15;
-    fill_lanes (dest, 0, count);
-    axpy_lanes (dest, grad_onehot, keep, count);
-    axpy_lanes (dest, grad_uniform, params._M_eps_q15, count);
-    return Status::OK;
+smoothed_gradient_blend (const int16_t *const grad_onehot, const int16_t *const grad_uniform,
+                         const SmoothingParams &params, int16_t *const dest, const uint32_t count) noexcept {
+        if (grad_onehot == nullptr || grad_uniform == nullptr || dest == nullptr)
+                return Status::BAD_LAYOUT;
+        const Status valid = params.validate ();
+        if (!status_ok (valid))
+                return valid;
+        const int32_t keep = _S_q15_one - 1 - params._M_eps_q15;
+        fill_lanes (dest, 0, count);
+        axpy_lanes (dest, grad_onehot, keep, count);
+        axpy_lanes (dest, grad_uniform, params._M_eps_q15, count);
+        return Status::OK;
 }
 
 /** @brief Smoothed-CE backward: (1 - eps) * grad_onehot + eps * uniform gradient. */
 [[nodiscard]] inline Status
-smoothed_ce_backward (const Trainable & /*output*/,
-                      const Trainable &grad_output, GradContext &context) noexcept
-{
-    if (context._M_operand_count < 1u || context._M_saved_count < 1u)
-        return Status::BAD_LAYOUT;
-    const Trainable &probs = context._M_operands[0];
-    const SmoothedCeMeta *const meta = context.saved_as<SmoothedCeMeta> (0);
-    if (meta == nullptr)
-        return Status::BAD_LAYOUT;
-    const int32_t seed = grad_output.grad_at (0);
-    const SmoothingParams params
-        = SmoothingParams::make (meta->_M_eps_q15, meta->_M_classes);
-    const int32_t keep = _S_q15_one - 1 - params._M_eps_q15;
-    for (uint32_t i = 0; i < probs._M_count; ++i)
-    {
-        const int32_t p = probs.q15_at (i);
-        const int32_t t = i == meta->_M_target ? _S_q15_max : 0;
-        /* grad = -( (1 - eps) * t + eps / C ) / p, each rail saturating. */
-        const int32_t weight = q15_add_sat (q15_mul (keep, t),
-                                            params._M_uniform_q15);
-        const int32_t ratio = p > 0 ? q15_div (-weight, p) : -_S_q15_max;
-        if (probs.add_grad (i, q15_mul (ratio, seed)))
-            ++context._M_saturation_events;
-    }
-    return Status::OK;
+smoothed_ce_backward (const Trainable & /*output*/, const Trainable &grad_output, GradContext &context) noexcept {
+        if (context._M_operand_count < 1u || context._M_saved_count < 1u)
+                return Status::BAD_LAYOUT;
+        const Trainable &probs = context._M_operands[0];
+        const SmoothedCeMeta *const meta = context.saved_as<SmoothedCeMeta> (0);
+        if (meta == nullptr)
+                return Status::BAD_LAYOUT;
+        const int32_t seed = grad_output.grad_at (0);
+        const SmoothingParams params = SmoothingParams::make (meta->_M_eps_q15, meta->_M_classes);
+        const int32_t keep = _S_q15_one - 1 - params._M_eps_q15;
+        for (uint32_t i = 0; i < probs._M_count; ++i) {
+                const int32_t p = probs.q15_at (i);
+                const int32_t t = i == meta->_M_target ? _S_q15_max : 0;
+                /* grad = -( (1 - eps) * t + eps / C ) / p, each rail saturating. */
+                const int32_t weight = q15_add_sat (q15_mul (keep, t), params._M_uniform_q15);
+                const int32_t ratio = p > 0 ? q15_div (-weight, p) : -_S_q15_max;
+                if (probs.add_grad (i, q15_mul (ratio, seed)))
+                        ++context._M_saturation_events;
+        }
+        return Status::OK;
 }
 
 /**
@@ -277,76 +249,62 @@ smoothed_ce_backward (const Trainable & /*output*/,
  * Pool cost: 8-byte scalar node + 12-byte SmoothedCeMeta save.
  */
 [[nodiscard]] inline Status
-smoothed_cross_entropy_forward (Pool &pool, Tape *const tape,
-                                const Trainable &probs, const uint16_t target,
-                                const SmoothingParams &params,
-                                LossResult &out) noexcept
-{
-    if (!status_ok (probs.validate ()))
-        return Status::BAD_LAYOUT;
-    if (probs._M_count == 0u || target >= probs._M_count)
-        return Status::OUT_OF_RANGE;
-    const Status valid = params.validate ();
-    if (!status_ok (valid))
-        return valid;
-    const int32_t keep = _S_q15_one - 1 - params._M_eps_q15;
-    int64_t total_q7 = 0;
-    for (uint32_t i = 0; i < probs._M_count; ++i)
-    {
-        const int32_t neg_log = q7_neg_log_q15 (probs.q15_at (i));
-        const int32_t t = i == target ? keep : 0;
-        total_q7 += (static_cast<int64_t> (neg_log) * (t + params._M_uniform_q15))
-                    >> 15;
-    }
-    const Status finish = finish_loss (pool, static_cast<int32_t> (total_q7),
-                                       out);
-    if (!status_ok (finish))
-        return finish;
-    Saved saved;
-    SmoothedCeMeta *meta = nullptr;
-    if (tape != nullptr)
-    {
-        const Status save
-            = tape->save<SmoothedCeMeta> (1u, saved, meta);
-        if (!status_ok (save))
-            return save;
-        meta->_M_eps_q15 = params._M_eps_q15;
-        meta->_M_uniform_q15 = params._M_uniform_q15;
-        meta->_M_target = target;
-        meta->_M_classes = static_cast<uint16_t> (probs._M_count);
-    }
-    const Trainable operands[1] = { probs };
-    return record_loss (tape, &smoothed_ce_backward, _S_op_smoothed_ce, out,
-                        operands, 1u, tape != nullptr ? &saved : nullptr,
-                        tape != nullptr ? 1u : 0u);
+smoothed_cross_entropy_forward (Pool &pool, Tape *const tape, const Trainable &probs, const uint16_t target,
+                                const SmoothingParams &params, LossResult &out) noexcept {
+        if (!status_ok (probs.validate ()))
+                return Status::BAD_LAYOUT;
+        if (probs._M_count == 0u || target >= probs._M_count)
+                return Status::OUT_OF_RANGE;
+        const Status valid = params.validate ();
+        if (!status_ok (valid))
+                return valid;
+        const int32_t keep = _S_q15_one - 1 - params._M_eps_q15;
+        int64_t total_q7 = 0;
+        for (uint32_t i = 0; i < probs._M_count; ++i) {
+                const int32_t neg_log = q7_neg_log_q15 (probs.q15_at (i));
+                const int32_t t = i == target ? keep : 0;
+                total_q7 += (static_cast<int64_t> (neg_log) * (t + params._M_uniform_q15)) >> 15;
+        }
+        const Status finish = finish_loss (pool, static_cast<int32_t> (total_q7), out);
+        if (!status_ok (finish))
+                return finish;
+        Saved saved;
+        SmoothedCeMeta *meta = nullptr;
+        if (tape != nullptr) {
+                const Status save = tape->save<SmoothedCeMeta> (1u, saved, meta);
+                if (!status_ok (save))
+                        return save;
+                meta->_M_eps_q15 = params._M_eps_q15;
+                meta->_M_uniform_q15 = params._M_uniform_q15;
+                meta->_M_target = target;
+                meta->_M_classes = static_cast<uint16_t> (probs._M_count);
+        }
+        const Trainable operands[1] = {probs};
+        return record_loss (tape, &smoothed_ce_backward, _S_op_smoothed_ce, out, operands, 1u,
+                            tape != nullptr ? &saved : nullptr, tape != nullptr ? 1u : 0u);
 }
 
 /** @brief Soft-target CE backward with an explicit eps blend of the gradients. */
 [[nodiscard]] inline Status
-soft_target_ce_backward (const Trainable & /*output*/,
-                         const Trainable &grad_output,
-                         GradContext &context) noexcept
-{
-    if (context._M_operand_count < 2u || context._M_saved_count < 1u)
-        return Status::BAD_LAYOUT;
-    const Trainable &probs = context._M_operands[0];
-    const Trainable &target = context._M_operands[1];
-    const SmoothedCeMeta *const meta = context.saved_as<SmoothedCeMeta> (0);
-    if (meta == nullptr)
-        return Status::BAD_LAYOUT;
-    const int32_t seed = grad_output.grad_at (0);
-    const int32_t keep = _S_q15_one - 1 - meta->_M_eps_q15;
-    for (uint32_t i = 0; i < probs._M_count; ++i)
-    {
-        const int32_t p = probs.q15_at (i);
-        const int32_t t = target.q15_at (i);
-        const int32_t weight
-            = q15_add_sat (q15_mul (keep, t), meta->_M_uniform_q15);
-        const int32_t ratio = p > 0 ? q15_div (-weight, p) : -_S_q15_max;
-        if (probs.add_grad (i, q15_mul (ratio, seed)))
-            ++context._M_saturation_events;
-    }
-    return Status::OK;
+soft_target_ce_backward (const Trainable & /*output*/, const Trainable &grad_output, GradContext &context) noexcept {
+        if (context._M_operand_count < 2u || context._M_saved_count < 1u)
+                return Status::BAD_LAYOUT;
+        const Trainable &probs = context._M_operands[0];
+        const Trainable &target = context._M_operands[1];
+        const SmoothedCeMeta *const meta = context.saved_as<SmoothedCeMeta> (0);
+        if (meta == nullptr)
+                return Status::BAD_LAYOUT;
+        const int32_t seed = grad_output.grad_at (0);
+        const int32_t keep = _S_q15_one - 1 - meta->_M_eps_q15;
+        for (uint32_t i = 0; i < probs._M_count; ++i) {
+                const int32_t p = probs.q15_at (i);
+                const int32_t t = target.q15_at (i);
+                const int32_t weight = q15_add_sat (q15_mul (keep, t), meta->_M_uniform_q15);
+                const int32_t ratio = p > 0 ? q15_div (-weight, p) : -_S_q15_max;
+                if (probs.add_grad (i, q15_mul (ratio, seed)))
+                        ++context._M_saturation_events;
+        }
+        return Status::OK;
 }
 
 /**
@@ -358,48 +316,37 @@ soft_target_ce_backward (const Trainable & /*output*/,
  * Pool cost: 8-byte node + 12-byte meta save.
  */
 [[nodiscard]] inline Status
-soft_target_cross_entropy_forward (Pool &pool, Tape *const tape,
-                                   const Trainable &probs,
-                                   const Trainable &target,
-                                   const SmoothingParams &params,
-                                   LossResult &out) noexcept
-{
-    const Status pair = loss_pair_ok (probs, target);
-    if (!status_ok (pair))
-        return pair;
-    const Status valid = params.validate ();
-    if (!status_ok (valid))
-        return valid;
-    const int32_t keep = _S_q15_one - 1 - params._M_eps_q15;
-    int64_t total_q7 = 0;
-    for (uint32_t i = 0; i < probs._M_count; ++i)
-    {
-        const int32_t neg_log = q7_neg_log_q15 (probs.q15_at (i));
-        const int32_t weight
-            = q15_add_sat (q15_mul (keep, target.q15_at (i)),
-                           params._M_uniform_q15);
-        total_q7 += (static_cast<int64_t> (neg_log) * weight) >> 15;
-    }
-    const Status finish = finish_loss (pool, static_cast<int32_t> (total_q7),
-                                       out);
-    if (!status_ok (finish))
-        return finish;
-    Saved saved;
-    SmoothedCeMeta *meta = nullptr;
-    if (tape != nullptr)
-    {
-        const Status save
-            = tape->save<SmoothedCeMeta> (1u, saved, meta);
-        if (!status_ok (save))
-            return save;
-        meta->_M_eps_q15 = params._M_eps_q15;
-        meta->_M_uniform_q15 = params._M_uniform_q15;
-        meta->_M_target = 0u;
-        meta->_M_classes = static_cast<uint16_t> (probs._M_count);
-    }
-    const Trainable operands[2] = { probs, target };
-    return record_loss (tape, &soft_target_ce_backward, _S_op_soft_ce, out,
-                        operands, 2u, tape != nullptr ? &saved : nullptr,
-                        tape != nullptr ? 1u : 0u);
+soft_target_cross_entropy_forward (Pool &pool, Tape *const tape, const Trainable &probs, const Trainable &target,
+                                   const SmoothingParams &params, LossResult &out) noexcept {
+        const Status pair = loss_pair_ok (probs, target);
+        if (!status_ok (pair))
+                return pair;
+        const Status valid = params.validate ();
+        if (!status_ok (valid))
+                return valid;
+        const int32_t keep = _S_q15_one - 1 - params._M_eps_q15;
+        int64_t total_q7 = 0;
+        for (uint32_t i = 0; i < probs._M_count; ++i) {
+                const int32_t neg_log = q7_neg_log_q15 (probs.q15_at (i));
+                const int32_t weight = q15_add_sat (q15_mul (keep, target.q15_at (i)), params._M_uniform_q15);
+                total_q7 += (static_cast<int64_t> (neg_log) * weight) >> 15;
+        }
+        const Status finish = finish_loss (pool, static_cast<int32_t> (total_q7), out);
+        if (!status_ok (finish))
+                return finish;
+        Saved saved;
+        SmoothedCeMeta *meta = nullptr;
+        if (tape != nullptr) {
+                const Status save = tape->save<SmoothedCeMeta> (1u, saved, meta);
+                if (!status_ok (save))
+                        return save;
+                meta->_M_eps_q15 = params._M_eps_q15;
+                meta->_M_uniform_q15 = params._M_uniform_q15;
+                meta->_M_target = 0u;
+                meta->_M_classes = static_cast<uint16_t> (probs._M_count);
+        }
+        const Trainable operands[2] = {probs, target};
+        return record_loss (tape, &soft_target_ce_backward, _S_op_soft_ce, out, operands, 2u,
+                            tape != nullptr ? &saved : nullptr, tape != nullptr ? 1u : 0u);
 }
 } // namespace zzs::mllee::train

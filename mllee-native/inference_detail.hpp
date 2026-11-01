@@ -45,8 +45,8 @@ inline constexpr int32_t kCodeStep = 258;
 /** @brief Convert Q15 raw to int8 code. */
 [[nodiscard]] constexpr int8_t
 q15_raw_to_code (const int16_t q15_raw) noexcept {
-    const int32_t code = static_cast<int32_t> (q15_raw) / kCodeStep;
-    return static_cast<int8_t> (code > 127 ? 127 : (code < -127 ? -127 : code));
+        const int32_t code = static_cast<int32_t> (q15_raw) / kCodeStep;
+        return static_cast<int8_t> (code > 127 ? 127 : (code < -127 ? -127 : code));
 }
 
 /** @brief Flatten `seq_len` windows x `feature_count` features into int8 codes.
@@ -57,12 +57,12 @@ q15_raw_to_code (const int16_t q15_raw) noexcept {
  */
 inline void
 flatten_sample (const TrainingSample &sample, int8_t *const flat) noexcept {
-    uint32_t out = 0u;
-    for (uint32_t w = 0; w < zzs::mllee_native::dataset::kSeqLen; ++w) {
-        for (uint32_t f = 0; f < zzs::mllee_native::dataset::kFeatureCount; ++f) {
-            flat[out++] = q15_raw_to_code (sample._M_windows[w]._M_features[f]);
+        uint32_t out = 0u;
+        for (uint32_t w = 0; w < zzs::mllee_native::dataset::kSeqLen; ++w) {
+                for (uint32_t f = 0; f < zzs::mllee_native::dataset::kFeatureCount; ++f) {
+                        flat[out++] = q15_raw_to_code (sample._M_windows[w]._M_features[f]);
+                }
         }
-    }
 }
 
 /** @} */

@@ -27,8 +27,7 @@
 
 #include <cstdint>
 
-namespace zzs::mllee::onnx
-{
+namespace zzs::mllee::onnx {
 /**
  * @brief The 32-byte ONNX model header retained by the loader.
  *
@@ -36,78 +35,67 @@ namespace zzs::mllee::onnx
  * deliberately exactly 32 bytes: IR/opset versions, the graph span, producer
  * identity and the graph counts.  Names and paths are hashed, not stored.
  */
-struct ModelInfo
-{
-    uint32_t _M_ir_version = 0;
-    uint32_t _M_opset_version = 0;
-    uint32_t _M_graph_offset = 0;
-    uint32_t _M_graph_length = 0;
-    uint32_t _M_producer_hash = 0;
-    uint16_t _M_node_count = 0;
-    uint16_t _M_initializer_count = 0;
-    uint16_t _M_input_count = 0;
-    uint16_t _M_output_count = 0;
-    uint16_t _M_producer_length = 0;
-    uint8_t _M_flags = 0;
-    uint8_t _M_loader_flags = 0;
+struct ModelInfo {
+        uint32_t _M_ir_version = 0;
+        uint32_t _M_opset_version = 0;
+        uint32_t _M_graph_offset = 0;
+        uint32_t _M_graph_length = 0;
+        uint32_t _M_producer_hash = 0;
+        uint16_t _M_node_count = 0;
+        uint16_t _M_initializer_count = 0;
+        uint16_t _M_input_count = 0;
+        uint16_t _M_output_count = 0;
+        uint16_t _M_producer_length = 0;
+        uint8_t _M_flags = 0;
+        uint8_t _M_loader_flags = 0;
 
-    void
-    reset () noexcept
-    {
-        this->_M_ir_version = 0;
-        this->_M_opset_version = 0;
-        this->_M_graph_offset = 0;
-        this->_M_graph_length = 0;
-        this->_M_producer_hash = 0;
-        this->_M_node_count = 0;
-        this->_M_initializer_count = 0;
-        this->_M_input_count = 0;
-        this->_M_output_count = 0;
-        this->_M_producer_length = 0;
-        this->_M_flags = 0;
-        this->_M_loader_flags = 0;
-    }
+        void
+        reset () noexcept {
+                this->_M_ir_version = 0;
+                this->_M_opset_version = 0;
+                this->_M_graph_offset = 0;
+                this->_M_graph_length = 0;
+                this->_M_producer_hash = 0;
+                this->_M_node_count = 0;
+                this->_M_initializer_count = 0;
+                this->_M_input_count = 0;
+                this->_M_output_count = 0;
+                this->_M_producer_length = 0;
+                this->_M_flags = 0;
+                this->_M_loader_flags = 0;
+        }
 
-    [[nodiscard]] bool
-    has_graph () const noexcept
-    {
-        return (this->_M_flags & MODEL_FLAG_HAS_GRAPH) != 0u;
-    }
+        [[nodiscard]] bool
+        has_graph () const noexcept {
+                return (this->_M_flags & MODEL_FLAG_HAS_GRAPH) != 0u;
+        }
 
-    void
-    note_node () noexcept
-    {
-        this->_M_flags |= MODEL_FLAG_HAS_NODES;
-        if (!saturating_increment (this->_M_node_count, static_cast<uint16_t> (0xFFFFu)))
-            this->_M_flags |= MODEL_FLAG_COUNT_OVERFLOW;
-    }
+        void
+        note_node () noexcept {
+                this->_M_flags |= MODEL_FLAG_HAS_NODES;
+                if (!saturating_increment (this->_M_node_count, static_cast<uint16_t> (0xFFFFu)))
+                        this->_M_flags |= MODEL_FLAG_COUNT_OVERFLOW;
+        }
 
-    void
-    note_initializer () noexcept
-    {
-        this->_M_flags |= MODEL_FLAG_HAS_INITIALIZERS;
-        if (!saturating_increment (this->_M_initializer_count,
-                                    static_cast<uint16_t> (0xFFFFu)))
-            this->_M_flags |= MODEL_FLAG_COUNT_OVERFLOW;
-    }
+        void
+        note_initializer () noexcept {
+                this->_M_flags |= MODEL_FLAG_HAS_INITIALIZERS;
+                if (!saturating_increment (this->_M_initializer_count, static_cast<uint16_t> (0xFFFFu)))
+                        this->_M_flags |= MODEL_FLAG_COUNT_OVERFLOW;
+        }
 
-    void
-    note_input () noexcept
-    {
-        if (!saturating_increment (this->_M_input_count,
-                                    static_cast<uint16_t> (0xFFFFu)))
-            this->_M_flags |= MODEL_FLAG_COUNT_OVERFLOW;
-    }
+        void
+        note_input () noexcept {
+                if (!saturating_increment (this->_M_input_count, static_cast<uint16_t> (0xFFFFu)))
+                        this->_M_flags |= MODEL_FLAG_COUNT_OVERFLOW;
+        }
 
-    void
-    note_output () noexcept
-    {
-        if (!saturating_increment (this->_M_output_count,
-                                    static_cast<uint16_t> (0xFFFFu)))
-            this->_M_flags |= MODEL_FLAG_COUNT_OVERFLOW;
-    }
+        void
+        note_output () noexcept {
+                if (!saturating_increment (this->_M_output_count, static_cast<uint16_t> (0xFFFFu)))
+                        this->_M_flags |= MODEL_FLAG_COUNT_OVERFLOW;
+        }
 };
 
-static_assert (sizeof (ModelInfo) == _S_model_budget_bytes,
-               "onnx::ModelInfo must stay 32 bytes");
+static_assert (sizeof (ModelInfo) == _S_model_budget_bytes, "onnx::ModelInfo must stay 32 bytes");
 } // namespace zzs::mllee::onnx

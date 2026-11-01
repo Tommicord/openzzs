@@ -39,64 +39,54 @@
  * is written as an unsigned wrap test, so it compiles to a compare plus a
  * conditional move (or a `sbb`, on x86) rather than a second multiply.
  */
-namespace zzs::mllee
-{
-struct _S_Div32
-{
-    uint32_t _M_magic;
-    uint32_t _M_divisor;
+namespace zzs::mllee {
+struct _S_Div32 {
+        uint32_t _M_magic;
+        uint32_t _M_divisor;
 };
 
 [[nodiscard]] inline constexpr _S_Div32
-_S_div32_make (const uint32_t divisor) noexcept
-{
-    if (divisor <= 1u)
-        return _S_Div32{ 0u, divisor };
-    return _S_Div32{ static_cast<uint32_t> (((1ull << 32) + divisor - 1u) / divisor),
-                     divisor };
+_S_div32_make (const uint32_t divisor) noexcept {
+        if (divisor <= 1u)
+                return _S_Div32{0u, divisor};
+        return _S_Div32{static_cast<uint32_t> (((1ull << 32) + divisor - 1u) / divisor), divisor};
 }
 
 /** @brief High 32 bits of an unsigned 32x32 product. */
 [[nodiscard]] inline constexpr uint32_t
-_S_mulhi_u32 (const uint32_t lhs, const uint32_t rhs) noexcept
-{
+_S_mulhi_u32 (const uint32_t lhs, const uint32_t rhs) noexcept {
 #if defined(__SIZEOF_INT128__)
-    return static_cast<uint32_t> (
-        (static_cast<unsigned __int128> (lhs) * rhs) >> 32);
+        return static_cast<uint32_t> ((static_cast<unsigned __int128> (lhs) * rhs) >> 32);
 #else
-    return static_cast<uint32_t> ((static_cast<uint64_t> (lhs) * rhs) >> 32);
+        return static_cast<uint32_t> ((static_cast<uint64_t> (lhs) * rhs) >> 32);
 #endif
 }
 
 /** @brief Exact `numerator / divisor` for the reciprocal built by `_S_div32_make`. */
 [[nodiscard]] inline constexpr uint32_t
-_S_div32_u (const uint32_t numerator, const _S_Div32 reciprocal) noexcept
-{
-    if (reciprocal._M_divisor <= 1u)
-        return numerator;
-    const uint32_t quotient = _S_mulhi_u32 (numerator, reciprocal._M_magic);
-    const uint32_t remainder = numerator - quotient * reciprocal._M_divisor;
-    /* A quotient that overshot by one wraps `remainder`; the wrap is visible as
-       `remainder > numerator` because the true remainder never exceeds it. */
-    const uint32_t overshot = remainder > numerator ? 1u : 0u;
-    return quotient - overshot;
+_S_div32_u (const uint32_t numerator, const _S_Div32 reciprocal) noexcept {
+        if (reciprocal._M_divisor <= 1u)
+                return numerator;
+        const uint32_t quotient = _S_mulhi_u32 (numerator, reciprocal._M_magic);
+        const uint32_t remainder = numerator - quotient * reciprocal._M_divisor;
+        /* A quotient that overshot by one wraps `remainder`; the wrap is visible as
+           `remainder > numerator` because the true remainder never exceeds it. */
+        const uint32_t overshot = remainder > numerator ? 1u : 0u;
+        return quotient - overshot;
 }
 
 /** @brief Truncating signed division (`/` semantics) through the same reciprocal. */
 [[nodiscard]] inline constexpr int32_t
-_S_div32_i (const int32_t numerator, const _S_Div32 reciprocal) noexcept
-{
-    if (numerator >= 0)
-        return static_cast<int32_t> (_S_div32_u (static_cast<uint32_t> (numerator), reciprocal));
-    return -static_cast<int32_t> (
-        _S_div32_u (0u - static_cast<uint32_t> (numerator), reciprocal));
+_S_div32_i (const int32_t numerator, const _S_Div32 reciprocal) noexcept {
+        if (numerator >= 0)
+                return static_cast<int32_t> (_S_div32_u (static_cast<uint32_t> (numerator), reciprocal));
+        return -static_cast<int32_t> (_S_div32_u (0u - static_cast<uint32_t> (numerator), reciprocal));
 }
 
 /** @brief Exact power-of-two division, kept as a shift after a compile-time check. */
 [[nodiscard]] inline constexpr uint32_t
-_S_div_pow2_u (const uint32_t value, const uint32_t shift) noexcept
-{
-    return value >> shift;
+_S_div_pow2_u (const uint32_t value, const uint32_t shift) noexcept {
+        return value >> shift;
 }
 
 /**
@@ -109,132 +99,117 @@ _S_div_pow2_u (const uint32_t value, const uint32_t shift) noexcept
  * load/store loop that the size-optimized build will not vectorize.
  */
 inline void
-_S_copy_bytes (void *const destination, const void *const source,
-               const uint32_t count) noexcept
-{
-    if (count == 0u)
-        return;
+_S_copy_bytes (void *const destination, const void *const source, const uint32_t count) noexcept {
+        if (count == 0u)
+                return;
 #if defined(__GNUC__) || defined(__clang__)
-    __builtin_memcpy (destination, source, static_cast<unsigned long> (count));
+        __builtin_memcpy (destination, source, static_cast<unsigned long> (count));
 #else
-    auto *to = static_cast<uint8_t *> (destination);
-    const auto *from = static_cast<const uint8_t *> (source);
-    for (uint32_t i = 0; i < count; ++i)
-        to[i] = from[i];
+        auto *to = static_cast<uint8_t *> (destination);
+        const auto *from = static_cast<const uint8_t *> (source);
+        for (uint32_t i = 0; i < count; ++i)
+                to[i] = from[i];
 #endif
 }
 
 inline void
-_S_fill_bytes (void *const destination, const uint8_t value,
-               const uint32_t count) noexcept
-{
-    if (count == 0u)
-        return;
+_S_fill_bytes (void *const destination, const uint8_t value, const uint32_t count) noexcept {
+        if (count == 0u)
+                return;
 #if defined(__GNUC__) || defined(__clang__)
-    __builtin_memset (destination, value, static_cast<unsigned long> (count));
+        __builtin_memset (destination, value, static_cast<unsigned long> (count));
 #else
-    auto *to = static_cast<uint8_t *> (destination);
-    for (uint32_t i = 0; i < count; ++i)
-        to[i] = value;
+        auto *to = static_cast<uint8_t *> (destination);
+        for (uint32_t i = 0; i < count; ++i)
+                to[i] = value;
 #endif
 }
 
 [[nodiscard]] inline constexpr int32_t
-_S_abs_i32 (const int32_t value) noexcept
-{
-    return value < 0 ? -value : value;
+_S_abs_i32 (const int32_t value) noexcept {
+        return value < 0 ? -value : value;
 }
 
 [[nodiscard]] inline constexpr int32_t
-_S_clamp_i32 (const int32_t value, const int32_t low, const int32_t high) noexcept
-{
-    return value < low ? low : (value > high ? high : value);
+_S_clamp_i32 (const int32_t value, const int32_t low, const int32_t high) noexcept {
+        return value < low ? low : (value > high ? high : value);
 }
 
 /** @brief Branch-free min/max on signed and unsigned words. */
 [[nodiscard]] inline constexpr int32_t
-_S_min_i32 (const int32_t lhs, const int32_t rhs) noexcept
-{
-    return rhs < lhs ? rhs : lhs;
+_S_min_i32 (const int32_t lhs, const int32_t rhs) noexcept {
+        return rhs < lhs ? rhs : lhs;
 }
 
 [[nodiscard]] inline constexpr int32_t
-_S_max_i32 (const int32_t lhs, const int32_t rhs) noexcept
-{
-    return lhs < rhs ? rhs : lhs;
+_S_max_i32 (const int32_t lhs, const int32_t rhs) noexcept {
+        return lhs < rhs ? rhs : lhs;
 }
 
 [[nodiscard]] inline constexpr uint32_t
-_S_min_u32 (const uint32_t lhs, const uint32_t rhs) noexcept
-{
-    return rhs < lhs ? rhs : lhs;
+_S_min_u32 (const uint32_t lhs, const uint32_t rhs) noexcept {
+        return rhs < lhs ? rhs : lhs;
 }
 
 [[nodiscard]] inline constexpr uint32_t
-_S_max_u32 (const uint32_t lhs, const uint32_t rhs) noexcept
-{
-    return lhs < rhs ? rhs : lhs;
+_S_max_u32 (const uint32_t lhs, const uint32_t rhs) noexcept {
+        return lhs < rhs ? rhs : lhs;
 }
 
 /** @brief floor(log2(value)); 0 for `value <= 1`. */
 [[nodiscard]] inline constexpr uint32_t
-_S_log2_u32 (const uint32_t value) noexcept
-{
+_S_log2_u32 (const uint32_t value) noexcept {
 #if defined(__has_builtin) && __has_builtin(__builtin_clz)
-    if !consteval {
-        if (value > 1u)
-            return 31u - static_cast<uint32_t> (__builtin_clz (value));
-        return 0u;
-    }
+        if !consteval {
+                if (value > 1u)
+                        return 31u - static_cast<uint32_t> (__builtin_clz (value));
+                return 0u;
+        }
 #endif
-    uint32_t bits = 0;
-    while ((value >> bits) > 1u)
-        ++bits;
-    return bits;
+        uint32_t bits = 0;
+        while ((value >> bits) > 1u)
+                ++bits;
+        return bits;
 }
 
 /** @brief ceil(log2(value)); 0 for `value <= 1`. */
 [[nodiscard]] inline constexpr uint32_t
-_S_ceil_log2_u32 (const uint32_t value) noexcept
-{
-    if (value <= 1u)
-        return 0u;
-    return _S_log2_u32 (value - 1u) + 1u;
+_S_ceil_log2_u32 (const uint32_t value) noexcept {
+        if (value <= 1u)
+                return 0u;
+        return _S_log2_u32 (value - 1u) + 1u;
 }
 
 /** @brief log2 of a power-of-two constant, via ctz where the compiler has it. */
 [[nodiscard]] inline constexpr uint32_t
-_S_ctz_u32 (const uint32_t value) noexcept
-{
+_S_ctz_u32 (const uint32_t value) noexcept {
 #if defined(__has_builtin) && __has_builtin(__builtin_ctz)
-    if !consteval {
-        if (value != 0u)
-            return static_cast<uint32_t> (__builtin_ctz (value));
-        return 32u;
-    }
-#endif
-    uint32_t count = 0;
-    uint32_t probe = value;
-    while ((probe & 1u) == 0u && probe != 0u)
-        {
-            probe >>= 1;
-            ++count;
+        if !consteval {
+                if (value != 0u)
+                        return static_cast<uint32_t> (__builtin_ctz (value));
+                return 32u;
         }
-    return count;
+#endif
+        uint32_t count = 0;
+        uint32_t probe = value;
+        while ((probe & 1u) == 0u && probe != 0u) {
+                probe >>= 1;
+                ++count;
+        }
+        return count;
 }
 
 [[nodiscard]] inline constexpr uint32_t
-_S_popcount_u32 (const uint32_t value) noexcept
-{
+_S_popcount_u32 (const uint32_t value) noexcept {
 #if defined(__has_builtin) && __has_builtin(__builtin_popcount)
-    if !consteval {
-        return static_cast<uint32_t> (__builtin_popcount (value));
-    }
+        if !consteval {
+                return static_cast<uint32_t> (__builtin_popcount (value));
+        }
 #endif
-    uint32_t count = 0;
-    for (uint32_t probe = value; probe != 0u; probe >>= 1)
-        count += probe & 1u;
-    return count;
+        uint32_t count = 0;
+        for (uint32_t probe = value; probe != 0u; probe >>= 1)
+                count += probe & 1u;
+        return count;
 }
 
 /**
@@ -247,29 +222,27 @@ _S_popcount_u32 (const uint32_t value) noexcept
  * being present: every use has a value-level equivalent.
  */
 [[nodiscard]] inline constexpr int64_t
-_S_mulhi_s64 (const int64_t lhs, const int64_t rhs) noexcept
-{
+_S_mulhi_s64 (const int64_t lhs, const int64_t rhs) noexcept {
 #if defined(__has_builtin) && __has_builtin(__builtin_smulh)
-    if !consteval {
-        return static_cast<int64_t> (__builtin_smulh (lhs, rhs));
-    }
+        if !consteval {
+                return static_cast<int64_t> (__builtin_smulh (lhs, rhs));
+        }
 #endif
 #if defined(__SIZEOF_INT128__)
-    return static_cast<int64_t> (
-        (static_cast<__int128> (lhs) * static_cast<__int128> (rhs)) >> 64);
+        return static_cast<int64_t> ((static_cast<__int128> (lhs) * static_cast<__int128> (rhs)) >> 64);
 #else
-    const uint64_t a = static_cast<uint64_t> (lhs);
-    const uint64_t b = static_cast<uint64_t> (rhs);
-    const uint64_t a_lo = a & 0xFFFFFFFFu;
-    const uint64_t a_hi = a >> 32;
-    const uint64_t b_lo = b & 0xFFFFFFFFu;
-    const uint64_t b_hi = b >> 32;
-    const uint64_t lo_lo = a_lo * b_lo;
-    const uint64_t hi_lo = a_hi * b_lo;
-    const uint64_t lo_hi = a_lo * b_hi;
-    const uint64_t hi_hi = a_hi * b_hi;
-    const uint64_t cross = (lo_lo >> 32) + (hi_lo & 0xFFFFFFFFu) + (lo_hi & 0xFFFFFFFFu);
-    return static_cast<int64_t> (hi_hi + (hi_lo >> 32) + (lo_hi >> 32) + (cross >> 32));
+        const uint64_t a = static_cast<uint64_t> (lhs);
+        const uint64_t b = static_cast<uint64_t> (rhs);
+        const uint64_t a_lo = a & 0xFFFFFFFFu;
+        const uint64_t a_hi = a >> 32;
+        const uint64_t b_lo = b & 0xFFFFFFFFu;
+        const uint64_t b_hi = b >> 32;
+        const uint64_t lo_lo = a_lo * b_lo;
+        const uint64_t hi_lo = a_hi * b_lo;
+        const uint64_t lo_hi = a_lo * b_hi;
+        const uint64_t hi_hi = a_hi * b_hi;
+        const uint64_t cross = (lo_lo >> 32) + (hi_lo & 0xFFFFFFFFu) + (lo_hi & 0xFFFFFFFFu);
+        return static_cast<int64_t> (hi_hi + (hi_lo >> 32) + (lo_hi >> 32) + (cross >> 32));
 #endif
 }
 } // namespace zzs::mllee

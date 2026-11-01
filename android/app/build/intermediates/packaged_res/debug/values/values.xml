@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OpenZZS</string>
+    <string name="status_error">Error</string>
+    <string name="status_initializing">Initializing...</string>
+    <string name="status_ready">Ready</string>
+</resources>

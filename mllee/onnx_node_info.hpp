@@ -27,17 +27,15 @@
 
 #include <cstdint>
 
-namespace zzs::mllee::onnx
-{
+namespace zzs::mllee::onnx {
 /** @brief NodeInfo flag bits. */
-enum NodeFlag : uint8_t
-{
-    NODE_FLAG_HAS_OP = 1u << 0,
-    NODE_FLAG_HAS_DOMAIN = 1u << 1,
-    NODE_FLAG_HAS_NAME = 1u << 2,
-    NODE_FLAG_DEFAULT_DOMAIN = 1u << 3,
-    NODE_FLAG_COUNT_OVERFLOW = 1u << 4,
-    NODE_FLAG_UNKNOWN_OP = 1u << 5,
+enum NodeFlag : uint8_t {
+        NODE_FLAG_HAS_OP = 1u << 0,
+        NODE_FLAG_HAS_DOMAIN = 1u << 1,
+        NODE_FLAG_HAS_NAME = 1u << 2,
+        NODE_FLAG_DEFAULT_DOMAIN = 1u << 3,
+        NODE_FLAG_COUNT_OVERFLOW = 1u << 4,
+        NODE_FLAG_UNKNOWN_OP = 1u << 5,
 };
 
 /**
@@ -49,98 +47,86 @@ enum NodeFlag : uint8_t
  * below the error rate of the Flash the model lives in.  Input/output values
  * are emitted as events and never accumulated.
  */
-struct NodeInfo
-{
-    uint32_t _M_op_hash = 0;
-    uint32_t _M_op_hash2 = 0;
-    uint32_t _M_domain_hash = 0;
-    uint32_t _M_name_hash = 0;
-    uint16_t _M_op_length = 0;
-    uint16_t _M_domain_length = 0;
-    uint16_t _M_name_length = 0;
-    uint8_t _M_input_count = 0;
-    uint8_t _M_output_count = 0;
-    uint16_t _M_attribute_count = 0;
-    uint8_t _M_flags = 0;
-    uint8_t _M_reserved = 0;
+struct NodeInfo {
+        uint32_t _M_op_hash = 0;
+        uint32_t _M_op_hash2 = 0;
+        uint32_t _M_domain_hash = 0;
+        uint32_t _M_name_hash = 0;
+        uint16_t _M_op_length = 0;
+        uint16_t _M_domain_length = 0;
+        uint16_t _M_name_length = 0;
+        uint8_t _M_input_count = 0;
+        uint8_t _M_output_count = 0;
+        uint16_t _M_attribute_count = 0;
+        uint8_t _M_flags = 0;
+        uint8_t _M_reserved = 0;
 
-    void
-    reset () noexcept
-    {
-        this->_M_op_hash = 0;
-        this->_M_op_hash2 = 0;
-        this->_M_domain_hash = 0;
-        this->_M_name_hash = 0;
-        this->_M_op_length = 0;
-        this->_M_domain_length = 0;
-        this->_M_name_length = 0;
-        this->_M_input_count = 0;
-        this->_M_output_count = 0;
-        this->_M_attribute_count = 0;
-        this->_M_flags = NODE_FLAG_DEFAULT_DOMAIN;
-        this->_M_reserved = 0;
-    }
+        void
+        reset () noexcept {
+                this->_M_op_hash = 0;
+                this->_M_op_hash2 = 0;
+                this->_M_domain_hash = 0;
+                this->_M_name_hash = 0;
+                this->_M_op_length = 0;
+                this->_M_domain_length = 0;
+                this->_M_name_length = 0;
+                this->_M_input_count = 0;
+                this->_M_output_count = 0;
+                this->_M_attribute_count = 0;
+                this->_M_flags = NODE_FLAG_DEFAULT_DOMAIN;
+                this->_M_reserved = 0;
+        }
 
-    void
-    set_op (const uint32_t hash, const uint32_t hash2,
-            const uint32_t length) noexcept
-    {
-        this->_M_op_hash = hash;
-        this->_M_op_hash2 = hash2;
-        this->_M_op_length = saturate_u16 (length);
-        this->_M_flags |= NODE_FLAG_HAS_OP;
-        if (length > 0xFFFFu)
-            this->_M_flags |= NODE_FLAG_COUNT_OVERFLOW;
-    }
+        void
+        set_op (const uint32_t hash, const uint32_t hash2, const uint32_t length) noexcept {
+                this->_M_op_hash = hash;
+                this->_M_op_hash2 = hash2;
+                this->_M_op_length = saturate_u16 (length);
+                this->_M_flags |= NODE_FLAG_HAS_OP;
+                if (length > 0xFFFFu)
+                        this->_M_flags |= NODE_FLAG_COUNT_OVERFLOW;
+        }
 
-    void
-    set_domain (const uint32_t hash, const uint32_t length) noexcept
-    {
-        this->_M_domain_hash = hash;
-        this->_M_domain_length = saturate_u16 (length);
-        this->_M_flags |= NODE_FLAG_HAS_DOMAIN;
-        this->_M_flags &= static_cast<uint8_t> (~NODE_FLAG_DEFAULT_DOMAIN);
-        if (length == 0u)
-            this->_M_flags |= NODE_FLAG_DEFAULT_DOMAIN;
-    }
+        void
+        set_domain (const uint32_t hash, const uint32_t length) noexcept {
+                this->_M_domain_hash = hash;
+                this->_M_domain_length = saturate_u16 (length);
+                this->_M_flags |= NODE_FLAG_HAS_DOMAIN;
+                this->_M_flags &= static_cast<uint8_t> (~NODE_FLAG_DEFAULT_DOMAIN);
+                if (length == 0u)
+                        this->_M_flags |= NODE_FLAG_DEFAULT_DOMAIN;
+        }
 
-    void
-    set_name (const uint32_t hash, const uint32_t length) noexcept
-    {
-        this->_M_name_hash = hash;
-        this->_M_name_length = saturate_u16 (length);
-        this->_M_flags |= NODE_FLAG_HAS_NAME;
-    }
+        void
+        set_name (const uint32_t hash, const uint32_t length) noexcept {
+                this->_M_name_hash = hash;
+                this->_M_name_length = saturate_u16 (length);
+                this->_M_flags |= NODE_FLAG_HAS_NAME;
+        }
 
-    void
-    note_input () noexcept
-    {
-        if (!saturating_increment (this->_M_input_count, static_cast<uint8_t> (0xFFu)))
-            this->_M_flags |= NODE_FLAG_COUNT_OVERFLOW;
-    }
+        void
+        note_input () noexcept {
+                if (!saturating_increment (this->_M_input_count, static_cast<uint8_t> (0xFFu)))
+                        this->_M_flags |= NODE_FLAG_COUNT_OVERFLOW;
+        }
 
-    void
-    note_output () noexcept
-    {
-        if (!saturating_increment (this->_M_output_count, static_cast<uint8_t> (0xFFu)))
-            this->_M_flags |= NODE_FLAG_COUNT_OVERFLOW;
-    }
+        void
+        note_output () noexcept {
+                if (!saturating_increment (this->_M_output_count, static_cast<uint8_t> (0xFFu)))
+                        this->_M_flags |= NODE_FLAG_COUNT_OVERFLOW;
+        }
 
-    void
-    note_attribute () noexcept
-    {
-        if (!saturating_increment (this->_M_attribute_count,
-                                    static_cast<uint16_t> (0xFFFFu)))
-            this->_M_flags |= NODE_FLAG_COUNT_OVERFLOW;
-    }
+        void
+        note_attribute () noexcept {
+                if (!saturating_increment (this->_M_attribute_count, static_cast<uint16_t> (0xFFFFu)))
+                        this->_M_flags |= NODE_FLAG_COUNT_OVERFLOW;
+        }
 
-    [[nodiscard]] bool
-    is_default_domain () const noexcept
-    {
-        return (this->_M_flags & NODE_FLAG_DEFAULT_DOMAIN) != 0u;
-    }
+        [[nodiscard]] bool
+        is_default_domain () const noexcept {
+                return (this->_M_flags & NODE_FLAG_DEFAULT_DOMAIN) != 0u;
+        }
 };
 
-static_assert (sizeof (NodeInfo) == _S_node_budget_bytes,
-               "onnx::NodeInfo must stay 28 bytes");
+static_assert (sizeof (NodeInfo) == _S_node_budget_bytes, "onnx::NodeInfo must stay 28 bytes");
 } // namespace zzs::mllee::onnx

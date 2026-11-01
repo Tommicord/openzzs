@@ -45,58 +45,58 @@ using zzs::kernel::clock::Nanoseconds;
 
 /** @brief Kernel channel ids; the HAL maps hardware sensors to these. */
 enum class Channel : uint8_t {
-    MAG_X = 0,
-    MAG_Y = 1,
-    MAG_Z = 2,
-    ACCEL_X = 3,
-    ACCEL_Y = 4,
-    ACCEL_Z = 5,
-    GYRO_X = 6,
-    GYRO_Y = 7,
-    GYRO_Z = 8,
-    LIGHT = 9,
-    SOUND_ENVELOPE = 10,
-    BATTERY = 11,
-    COUNT = 12,
+        MAG_X = 0,
+        MAG_Y = 1,
+        MAG_Z = 2,
+        ACCEL_X = 3,
+        ACCEL_Y = 4,
+        ACCEL_Z = 5,
+        GYRO_X = 6,
+        GYRO_Y = 7,
+        GYRO_Z = 8,
+        LIGHT = 9,
+        SOUND_ENVELOPE = 10,
+        BATTERY = 11,
+        COUNT = 12,
 };
 
 /** @brief One Q15 sensor sample. */
 struct Sample {
-    Channel _M_channel;
-    int16_t _M_sample_q15;
-    Nanoseconds _M_timestamp_ns;
+        Channel _M_channel;
+        int16_t _M_sample_q15;
+        Nanoseconds _M_timestamp_ns;
 };
 
 /** @brief Number of kernel channels. */
 [[nodiscard]] inline constexpr uint32_t
 channel_count (void) noexcept {
-    return static_cast<uint32_t> (Channel::COUNT);
+        return static_cast<uint32_t> (Channel::COUNT);
 }
 
 /** @brief Expected sample rate (Hz) of a channel, from the platform HAL table. */
 [[nodiscard]] inline constexpr uint32_t
 channel_rate_hz (const Channel channel) noexcept {
-    switch (channel) {
-    case Channel::MAG_X:
-    case Channel::MAG_Y:
-    case Channel::MAG_Z:
-        return zzs::kernel::_S_mag_rate_hz;
-    case Channel::ACCEL_X:
-    case Channel::ACCEL_Y:
-    case Channel::ACCEL_Z:
-        return zzs::kernel::_S_accel_rate_hz;
-    case Channel::GYRO_X:
-    case Channel::GYRO_Y:
-    case Channel::GYRO_Z:
-        return zzs::kernel::_S_gyro_rate_hz;
-    case Channel::LIGHT:
-    case Channel::BATTERY:
-        return zzs::kernel::_S_light_rate_hz;
-    case Channel::SOUND_ENVELOPE:
-        return zzs::kernel::_S_envelope_rate_hz;
-    default:
-        return zzs::kernel::_S_grid_rate_hz;
-    }
+        switch (channel) {
+        case Channel::MAG_X:
+        case Channel::MAG_Y:
+        case Channel::MAG_Z:
+                return zzs::kernel::_S_mag_rate_hz;
+        case Channel::ACCEL_X:
+        case Channel::ACCEL_Y:
+        case Channel::ACCEL_Z:
+                return zzs::kernel::_S_accel_rate_hz;
+        case Channel::GYRO_X:
+        case Channel::GYRO_Y:
+        case Channel::GYRO_Z:
+                return zzs::kernel::_S_gyro_rate_hz;
+        case Channel::LIGHT:
+        case Channel::BATTERY:
+                return zzs::kernel::_S_light_rate_hz;
+        case Channel::SOUND_ENVELOPE:
+                return zzs::kernel::_S_envelope_rate_hz;
+        default:
+                return zzs::kernel::_S_grid_rate_hz;
+        }
 }
 
 /** @} */

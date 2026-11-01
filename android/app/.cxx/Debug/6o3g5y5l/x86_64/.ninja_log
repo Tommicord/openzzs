@@ -1,0 +1,7 @@
+# ninja log v5
+0	1047	1793532031738045389	model_blob_generated.cpp	2ce04e0b246a7a8d
+0	1047	1793532031738045389	/home/tommicord/CLionProjects/openzzs/android/app/.cxx/Debug/6o3g5y5l/x86_64/model_blob_generated.cpp	2ce04e0b246a7a8d
+1051	1464	1793532032142048957	CMakeFiles/openzzs-android.dir/model_blob_generated.cpp.o	10cbfd7a96cda0fd
+1048	5841	1793532036512087562	CMakeFiles/openzzs-android.dir/sensr_android.cpp.o	c353029c7d5103b
+1050	8504	1793532039181111140	CMakeFiles/openzzs-android.dir/sensr_jni.cpp.o	1d85730b7fd662c5
+8504	8610	1793532039293112130	/home/tommicord/CLionProjects/openzzs/android/app/build/intermediates/cxx/Debug/6o3g5y5l/obj/x86_64/libopenzzs-android.so	74b8881f8b7db45f

@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "kernel/kernel_sensor_hal.hpp"
 #include "../platform_config.hpp"
+#include "kernel/kernel_sensor_hal.hpp"
 
 #include <cstdint>
 
@@ -34,8 +34,7 @@
  * translation unit.
  * @{
  */
-namespace zzs::kernel::sensor::driver::platform::qnx
-{
+namespace zzs::kernel::sensor::driver::platform::qnx {
 
 /** @brief Build the QNX sensor HAL vtable. */
 [[nodiscard]] const zzs::kernel::hal::_S_SensorHal *

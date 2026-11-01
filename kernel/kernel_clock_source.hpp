@@ -66,20 +66,21 @@ inline NowFn _S_now_fn = nullptr;
 
 [[nodiscard]] inline Nanoseconds
 clock_source_now_ns (void) noexcept {
-    if (_S_now_fn != nullptr)
-        return _S_now_fn ();
-    return 0ull;
+        if (_S_now_fn != nullptr)
+                return _S_now_fn ();
+        return 0ull;
 }
 
 [[nodiscard]] inline zzs::kernel::Status
 clock_source_install (const NowFn now_fn) noexcept {
-    if (now_fn == nullptr) {
-        zzs::base::log_error ("clock source install failed ({})", status_name (zzs::kernel::Status::OUT_OF_RANGE));
-        return zzs::kernel::Status::OUT_OF_RANGE;
-    }
-    _S_now_fn = now_fn;
-    zzs::base::log_info ("clock source installed");
-    return zzs::kernel::Status::OK;
+        if (now_fn == nullptr) {
+                zzs::base::log_error ("clock source install failed ({})",
+                                      status_name (zzs::kernel::Status::OUT_OF_RANGE));
+                return zzs::kernel::Status::OUT_OF_RANGE;
+        }
+        _S_now_fn = now_fn;
+        zzs::base::log_info ("clock source installed");
+        return zzs::kernel::Status::OK;
 }
 /** @} */
 } // namespace zzs::kernel::clock

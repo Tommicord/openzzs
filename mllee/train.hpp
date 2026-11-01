@@ -44,17 +44,9 @@
  * keeps only the kernels a caller actually calls.
  */
 
-#include "mllee/train_fixed.hpp"
-#include "mllee/train_pool.hpp"
-#include "mllee/train_tensor.hpp"
-#include "mllee/train_graph.hpp"
-
 #include "mllee/train_activations.hpp"
+#include "mllee/train_attention.hpp"
 #include "mllee/train_backward_kernels.hpp"
-#include "mllee/train_simd.hpp"
-
-#include "mllee/train_trainer.hpp"
-
 #include "mllee/train_calibration.hpp"
 #include "mllee/train_checkpoint.hpp"
 #include "mllee/train_conv.hpp"
@@ -62,8 +54,10 @@
 #include "mllee/train_dropout.hpp"
 #include "mllee/train_embedding.hpp"
 #include "mllee/train_fake_quant.hpp"
+#include "mllee/train_fixed.hpp"
 #include "mllee/train_grad_check.hpp"
 #include "mllee/train_grad_clip.hpp"
+#include "mllee/train_graph.hpp"
 #include "mllee/train_init.hpp"
 #include "mllee/train_label_smoothing.hpp"
 #include "mllee/train_linear.hpp"
@@ -71,12 +65,15 @@
 #include "mllee/train_loss_scale.hpp"
 #include "mllee/train_lr_schedule.hpp"
 #include "mllee/train_model_averaging.hpp"
+#include "mllee/train_norm.hpp"
 #include "mllee/train_optim.hpp"
+#include "mllee/train_pool.hpp"
 #include "mllee/train_pooling.hpp"
 #include "mllee/train_prune.hpp"
 #include "mllee/train_random.hpp"
 #include "mllee/train_regularization.hpp"
 #include "mllee/train_running_stats.hpp"
+#include "mllee/train_simd.hpp"
 #include "mllee/train_softmax.hpp"
-#include "mllee/train_attention.hpp"
-#include "mllee/train_norm.hpp"
+#include "mllee/train_tensor.hpp"
+#include "mllee/train_trainer.hpp"

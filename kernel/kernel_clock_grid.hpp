@@ -58,51 +58,51 @@ inline constexpr int32_t _S_drift_resync_frac_q15 = 16384; /* 0.5 tick */
 
 /** @brief Grid phase tracker state. */
 struct _S_GridTracker {
-    Nanoseconds _M_last_tick_ns; /* ns timestamp of last grid tick boundary */
-    int64_t _M_phase_ns;         /* phase into the current tick, can be negative */
-    uint32_t _M_tick_count;      /* total ticks emitted */
-    int32_t _M_drift_accum_q15;  /* accumulated drift correction, Q15 fraction */
+        Nanoseconds _M_last_tick_ns; /* ns timestamp of last grid tick boundary */
+        int64_t _M_phase_ns;         /* phase into the current tick, can be negative */
+        uint32_t _M_tick_count;      /* total ticks emitted */
+        int32_t _M_drift_accum_q15;  /* accumulated drift correction, Q15 fraction */
 };
 
 /** @brief Initialize the tracker from the current clock source. */
 [[nodiscard]] inline zzs::kernel::Status
 grid_tracker_init (_S_GridTracker &tracker, const Nanoseconds now_ns) noexcept {
-    tracker._M_last_tick_ns = now_ns - (now_ns % _S_grid_period_ns);
-    tracker._M_phase_ns = 0;
-    tracker._M_tick_count = 0;
-    tracker._M_drift_accum_q15 = 0;
-    zzs::base::log_info ("grid tracker initialized");
-    return zzs::kernel::Status::OK;
+        tracker._M_last_tick_ns = now_ns - (now_ns % _S_grid_period_ns);
+        tracker._M_phase_ns = 0;
+        tracker._M_tick_count = 0;
+        tracker._M_drift_accum_q15 = 0;
+        zzs::base::log_info ("grid tracker initialized");
+        return zzs::kernel::Status::OK;
 }
 
 /** @brief Advance the tracker to `now_ns`, returning how many grid ticks elapsed. */
 [[nodiscard]] inline uint32_t
 grid_tracker_advance (_S_GridTracker &tracker, const Nanoseconds now_ns) noexcept {
-    if (now_ns < tracker._M_last_tick_ns)
-        return 0u; /* clock went backwards: ignore, stay put */
+        if (now_ns < tracker._M_last_tick_ns)
+                return 0u; /* clock went backwards: ignore, stay put */
 
-    const int64_t elapsed_ns = static_cast<int64_t> (now_ns) - static_cast<int64_t> (tracker._M_last_tick_ns);
-    const int64_t total_phase_ns = tracker._M_phase_ns + elapsed_ns;
+        const int64_t elapsed_ns = static_cast<int64_t> (now_ns) - static_cast<int64_t> (tracker._M_last_tick_ns);
+        const int64_t total_phase_ns = tracker._M_phase_ns + elapsed_ns;
 
-    /* A negative total phase (clock jumped) cannot produce a valid tick count:
-       clamp to zero ticks and reset phase rather than wrapping uint32_t. */
-    int64_t ticks = 0;
-    int64_t remainder_ns = total_phase_ns;
-    if (total_phase_ns >= 0) {
-        ticks = total_phase_ns / static_cast<int64_t> (_S_grid_period_ns);
-        remainder_ns = total_phase_ns % static_cast<int64_t> (_S_grid_period_ns);
-    } else {
-        tracker._M_phase_ns = 0;
-    }
+        /* A negative total phase (clock jumped) cannot produce a valid tick count:
+           clamp to zero ticks and reset phase rather than wrapping uint32_t. */
+        int64_t ticks = 0;
+        int64_t remainder_ns = total_phase_ns;
+        if (total_phase_ns >= 0) {
+                ticks = total_phase_ns / static_cast<int64_t> (_S_grid_period_ns);
+                remainder_ns = total_phase_ns % static_cast<int64_t> (_S_grid_period_ns);
+        } else {
+                tracker._M_phase_ns = 0;
+        }
 
-    if (ticks > 0) {
-        tracker._M_last_tick_ns += static_cast<Nanoseconds> (ticks) * _S_grid_period_ns;
-        tracker._M_phase_ns = remainder_ns;
-        tracker._M_tick_count += static_cast<uint32_t> (ticks);
-    } else if (total_phase_ns >= 0) {
-        tracker._M_phase_ns = total_phase_ns;
-    }
-    return static_cast<uint32_t> (ticks);
+        if (ticks > 0) {
+                tracker._M_last_tick_ns += static_cast<Nanoseconds> (ticks) * _S_grid_period_ns;
+                tracker._M_phase_ns = remainder_ns;
+                tracker._M_tick_count += static_cast<uint32_t> (ticks);
+        } else if (total_phase_ns >= 0) {
+                tracker._M_phase_ns = total_phase_ns;
+        }
+        return static_cast<uint32_t> (ticks);
 }
 
 /**
@@ -115,28 +115,28 @@ grid_tracker_advance (_S_GridTracker &tracker, const Nanoseconds now_ns) noexcep
  */
 inline void
 grid_tracker_apply_drift (_S_GridTracker &tracker, const int32_t drift_frac_q15) noexcept {
-    const int32_t clamped =
-        drift_frac_q15 > _S_drift_resync_frac_q15
-            ? _S_drift_resync_frac_q15
-            : (drift_frac_q15 < -_S_drift_resync_frac_q15 ? -_S_drift_resync_frac_q15 : drift_frac_q15);
-    tracker._M_drift_accum_q15 = zzs::kernel::fx::q15_add_sat (tracker._M_drift_accum_q15, clamped);
-    const int64_t drift_ns =
-        (static_cast<int64_t> (tracker._M_drift_accum_q15) * static_cast<int64_t> (_S_grid_period_ns))
-        >> zzs::kernel::_S_state_frac_bits;
-    tracker._M_phase_ns += drift_ns;
-    /* Normalize phase into [0, period) so a negative or over-tick phase cannot
-       produce a negative tick count on the next advance. */
-    if (tracker._M_phase_ns < 0)
-        tracker._M_phase_ns = 0;
-    else if (tracker._M_phase_ns >= static_cast<int64_t> (_S_grid_period_ns))
-        tracker._M_phase_ns = static_cast<int64_t> (_S_grid_period_ns) - 1;
-    tracker._M_drift_accum_q15 = 0; /* applied once */
+        const int32_t clamped =
+            drift_frac_q15 > _S_drift_resync_frac_q15
+                ? _S_drift_resync_frac_q15
+                : (drift_frac_q15 < -_S_drift_resync_frac_q15 ? -_S_drift_resync_frac_q15 : drift_frac_q15);
+        tracker._M_drift_accum_q15 = zzs::kernel::fx::q15_add_sat (tracker._M_drift_accum_q15, clamped);
+        const int64_t drift_ns =
+            (static_cast<int64_t> (tracker._M_drift_accum_q15) * static_cast<int64_t> (_S_grid_period_ns))
+            >> zzs::kernel::_S_state_frac_bits;
+        tracker._M_phase_ns += drift_ns;
+        /* Normalize phase into [0, period) so a negative or over-tick phase cannot
+           produce a negative tick count on the next advance. */
+        if (tracker._M_phase_ns < 0)
+                tracker._M_phase_ns = 0;
+        else if (tracker._M_phase_ns >= static_cast<int64_t> (_S_grid_period_ns))
+                tracker._M_phase_ns = static_cast<int64_t> (_S_grid_period_ns) - 1;
+        tracker._M_drift_accum_q15 = 0; /* applied once */
 }
 
 /** @brief Current tick index (monotonic, wraps only at 2^32). */
 [[nodiscard]] inline uint32_t
 grid_tracker_tick_count (const _S_GridTracker &tracker) noexcept {
-    return tracker._M_tick_count;
+        return tracker._M_tick_count;
 }
 
 /** @} */

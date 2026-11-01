@@ -9,6 +9,7 @@
 *.iml
 
 # Build and measurement artifacts
+.tmp/
 *.o
 *.a
 *.so

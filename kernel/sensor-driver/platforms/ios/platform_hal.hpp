@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "kernel/kernel_sensor_hal.hpp"
 #include "../platform_config.hpp"
+#include "kernel/kernel_sensor_hal.hpp"
 #include "std/maybe.hpp"
 
 #include <cstdint>
@@ -35,12 +35,10 @@
  * translation unit.
  * @{
  */
-namespace zzs::kernel::sensor::driver::platform::ios
-{
+namespace zzs::kernel::sensor::driver::platform::ios {
 
 /** @brief Build the iOS sensor HAL vtable. */
-[[nodiscard]] zzs::base::Maybe<const zzs::kernel::hal::_S_SensorHal *,
-                               zzs::kernel::Status>
+[[nodiscard]] zzs::base::Maybe<const zzs::kernel::hal::_S_SensorHal *, zzs::kernel::Status>
 create_ios_sensor_hal (const PlatformConfig &config) noexcept;
 
 /** @} */

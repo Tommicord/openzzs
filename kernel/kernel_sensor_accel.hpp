@@ -37,16 +37,16 @@ namespace zzs::kernel::sensor::accel {
 
 /** @brief Accelerometer channel ids. */
 enum Axis : uint8_t {
-    X = static_cast<uint8_t> (sensor::Channel::ACCEL_X),
-    Y = static_cast<uint8_t> (sensor::Channel::ACCEL_Y),
-    Z = static_cast<uint8_t> (sensor::Channel::ACCEL_Z),
-    COUNT = 3u,
+        X = static_cast<uint8_t> (sensor::Channel::ACCEL_X),
+        Y = static_cast<uint8_t> (sensor::Channel::ACCEL_Y),
+        Z = static_cast<uint8_t> (sensor::Channel::ACCEL_Z),
+        COUNT = 3u,
 };
 
 /** @brief Accelerometer sample rate (Hz), from the platform HAL table. */
 [[nodiscard]] inline constexpr uint32_t
 rate_hz (void) noexcept {
-    return zzs::kernel::_S_accel_rate_hz;
+        return zzs::kernel::_S_accel_rate_hz;
 }
 
 /** @} */

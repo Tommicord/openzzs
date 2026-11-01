@@ -52,8 +52,7 @@
  * (two stride-1 passes over C <= 255 classes), which trades one extra exp
  * sweep for 4*C bytes of pool the saved probabilities would need.
  */
-namespace zzs::mllee::train
-{
+namespace zzs::mllee::train {
 /** @brief Distillation op ids (continuing the loss family numbering). */
 inline constexpr uint32_t _S_op_kl = 0x4C20u;
 inline constexpr uint32_t _S_op_distill = 0x4C21u;
@@ -68,35 +67,31 @@ inline constexpr uint32_t _S_distill_max_classes = 255u;
  * T = 2 -> shift 2, T = 4 -> shift 4, keeping the multiplier representable
  * where a Q15 T^2 lane would not be.
  */
-struct DistillMeta
-{
-    int32_t _M_inv_temperature_q15 = _S_q15_max;
-    int32_t _M_alpha_q15 = 16384;
-    uint16_t _M_label = 0u;
-    uint8_t _M_classes = 0u;
-    uint8_t _M_route_teacher = 0u;
-    uint8_t _M_kl_shift = 0u;
-    uint8_t _M_pad = 0u;
+struct DistillMeta {
+        int32_t _M_inv_temperature_q15 = _S_q15_max;
+        int32_t _M_alpha_q15 = 16384;
+        uint16_t _M_label = 0u;
+        uint8_t _M_classes = 0u;
+        uint8_t _M_route_teacher = 0u;
+        uint8_t _M_kl_shift = 0u;
+        uint8_t _M_pad = 0u;
 };
 
 static_assert (sizeof (DistillMeta) == 16u, "distill meta is two words, a halfword and four bytes padded to alignment");
 
 /** @brief A combined distillation evaluation: total, soft and hard arms. */
-struct DistillResult
-{
-    LossResult _M_total;
-    int32_t _M_kl_q7 = 0;
-    int32_t _M_hard_q7 = 0;
+struct DistillResult {
+        LossResult _M_total;
+        int32_t _M_kl_q7 = 0;
+        int32_t _M_hard_q7 = 0;
 };
 
-static_assert (sizeof (DistillResult) == sizeof (LossResult) + 8u,
-               "distill result is LossResult plus two words");
+static_assert (sizeof (DistillResult) == sizeof (LossResult) + 8u, "distill result is LossResult plus two words");
 
 /** @brief Running log-sum-exp state for one softmax sweep (Q15 max, Q7 lse). */
-struct SoftmaxState
-{
-    int32_t _M_max_q15 = 0;
-    int32_t _M_lse_q7 = 0;
+struct SoftmaxState {
+        int32_t _M_max_q15 = 0;
+        int32_t _M_lse_q7 = 0;
 };
 
 static_assert (sizeof (SoftmaxState) == 8u, "softmax state is two domain words");
@@ -109,8 +104,7 @@ static_assert (sizeof (SoftmaxState) == 8u, "softmax state is two domain words")
  * (`1331`) instead of multiplying the rounded Q7 `ln 2` (`15 * 89 = 1335`)
  * removes a systematic four-Q7 bias from every log-probability.
  */
-inline constexpr int32_t _S_exp_scale_q7
-    = _S_round_shift (static_cast<int64_t> (15) * _S_ln2_q15 * _S_q7_one, 15u);
+inline constexpr int32_t _S_exp_scale_q7 = _S_round_shift (static_cast<int64_t> (15) * _S_ln2_q15 * _S_q7_one, 15u);
 
 /**
  * @brief Natural log of a positive integer in Q7, via mantissa normalization.
@@ -124,28 +118,22 @@ inline constexpr int32_t _S_exp_scale_q7
  * Iterative, no recursion, defined for every value >= 1.
  */
 [[nodiscard]] inline constexpr int32_t
-q7_log_pos_int (uint32_t value) noexcept
-{
-    if (value == 0u)
-        return _S_q15_min;
-    uint64_t mantissa = static_cast<uint64_t> (value) << 15;
-    int32_t exponent = 0;
-    while (mantissa >= _S_q15_one)
-        {
-            mantissa >>= 1;
-            ++exponent;
+q7_log_pos_int (uint32_t value) noexcept {
+        if (value == 0u)
+                return _S_q15_min;
+        uint64_t mantissa = static_cast<uint64_t> (value) << 15;
+        int32_t exponent = 0;
+        while (mantissa >= _S_q15_one) {
+                mantissa >>= 1;
+                ++exponent;
         }
-    while (mantissa < 16384u)
-        {
-            mantissa <<= 1;
-            --exponent;
+        while (mantissa < 16384u) {
+                mantissa <<= 1;
+                --exponent;
         }
-    const int32_t total_q15
-        = q15_log_q15 (static_cast<int32_t> (mantissa))
-          + exponent * _S_ln2_q15;
-    const int32_t result = _S_round_shift (
-        static_cast<int64_t> (total_q15) * _S_q7_one, 15u);
-    return result < _S_q15_min ? _S_q15_min : result;
+        const int32_t total_q15 = q15_log_q15 (static_cast<int32_t> (mantissa)) + exponent * _S_ln2_q15;
+        const int32_t result = _S_round_shift (static_cast<int64_t> (total_q15) * _S_q7_one, 15u);
+        return result < _S_q15_min ? _S_q15_min : result;
 }
 
 /**
@@ -155,43 +143,36 @@ q7_log_pos_int (uint32_t value) noexcept
  * and one scale_lanes pass, both stride-1 and vectorized.
  */
 inline Status
-soften_teacher (const Trainable &teacher, const int32_t inv_temperature_q15,
-                int16_t *const dest) noexcept
-{
-    if (!status_ok (teacher.validate ()))
-        return Status::BAD_LAYOUT;
-    if (dest == nullptr)
-        return Status::BAD_LAYOUT;
-    if (inv_temperature_q15 <= 0 || inv_temperature_q15 > _S_q15_one)
-        return Status::OUT_OF_RANGE;
-    train_simd::codes_to_q15 (teacher._M_code, dest, teacher._M_count);
-    scale_lanes (dest, inv_temperature_q15, teacher._M_count);
-    return Status::OK;
+soften_teacher (const Trainable &teacher, const int32_t inv_temperature_q15, int16_t *const dest) noexcept {
+        if (!status_ok (teacher.validate ()))
+                return Status::BAD_LAYOUT;
+        if (dest == nullptr)
+                return Status::BAD_LAYOUT;
+        if (inv_temperature_q15 <= 0 || inv_temperature_q15 > _S_q15_one)
+                return Status::OUT_OF_RANGE;
+        train_simd::codes_to_q15 (teacher._M_code, dest, teacher._M_count);
+        scale_lanes (dest, inv_temperature_q15, teacher._M_count);
+        return Status::OK;
 }
 
 /** @brief Max + log-sum-exp of a Q15 lane vector; lse reported in Q7. */
 [[nodiscard]] inline SoftmaxState
-log_sum_exp_lanes (const int16_t *const logits_q15,
-                   const uint32_t count) noexcept
-{
-    SoftmaxState state;
-    if (count == 0u || logits_q15 == nullptr)
+log_sum_exp_lanes (const int16_t *const logits_q15, const uint32_t count) noexcept {
+        SoftmaxState state;
+        if (count == 0u || logits_q15 == nullptr)
+                return state;
+        int32_t maximum = logits_q15[0];
+        for (uint32_t i = 1; i < count; ++i)
+                if (logits_q15[i] > maximum)
+                        maximum = logits_q15[i];
+        uint64_t total = 0; /* sum of Q15 exp terms, each <= 32767, max term ~= 1 */
+        for (uint32_t i = 0; i < count; ++i)
+                total += static_cast<uint32_t> (
+                    q15_exp (static_cast<int32_t> (static_cast<int64_t> (logits_q15[i]) - maximum)));
+        /* ln(sum exp(z - max)) = ln(total) - 15 ln 2 in Q7, then re-base by max. */
+        state._M_max_q15 = maximum;
+        state._M_lse_q7 = (maximum >> 8) + q7_log_pos_int (static_cast<uint32_t> (total)) - _S_exp_scale_q7;
         return state;
-    int32_t maximum = logits_q15[0];
-    for (uint32_t i = 1; i < count; ++i)
-        if (logits_q15[i] > maximum)
-            maximum = logits_q15[i];
-    uint64_t total = 0; /* sum of Q15 exp terms, each <= 32767, max term ~= 1 */
-    for (uint32_t i = 0; i < count; ++i)
-        total += static_cast<uint32_t> (
-            q15_exp (static_cast<int32_t> (
-                static_cast<int64_t> (logits_q15[i]) - maximum)));
-    /* ln(sum exp(z - max)) = ln(total) - 15 ln 2 in Q7, then re-base by max. */
-    state._M_max_q15 = maximum;
-    state._M_lse_q7
-        = (maximum >> 8) + q7_log_pos_int (static_cast<uint32_t> (total))
-          - _S_exp_scale_q7;
-    return state;
 }
 
 /**
@@ -205,57 +186,44 @@ log_sum_exp_lanes (const int16_t *const logits_q15,
  * probability can reach (down to -32768/128 = -256 nats at the rail).
  */
 inline Status
-log_softmax_q7 (const int16_t *const logits_q15, const uint32_t count,
-                int16_t *const dest_q7, SoftmaxState &lse_out) noexcept
-{
-    if (logits_q15 == nullptr || dest_q7 == nullptr || count == 0u)
-        return Status::BAD_LAYOUT;
-    const SoftmaxState state = log_sum_exp_lanes (logits_q15, count);
-    lse_out = state;
-    for (uint32_t i = 0; i < count; ++i)
-    {
-        const int32_t logit_q7 = static_cast<int32_t> (
-            static_cast<int64_t> (logits_q15[i]) >> 8);
-        dest_q7[i] = q15_to_i16_sat (logit_q7 - state._M_lse_q7);
-    }
-    return Status::OK;
+log_softmax_q7 (const int16_t *const logits_q15, const uint32_t count, int16_t *const dest_q7,
+                SoftmaxState &lse_out) noexcept {
+        if (logits_q15 == nullptr || dest_q7 == nullptr || count == 0u)
+                return Status::BAD_LAYOUT;
+        const SoftmaxState state = log_sum_exp_lanes (logits_q15, count);
+        lse_out = state;
+        for (uint32_t i = 0; i < count; ++i) {
+                const int32_t logit_q7 = static_cast<int32_t> (static_cast<int64_t> (logits_q15[i]) >> 8);
+                dest_q7[i] = q15_to_i16_sat (logit_q7 - state._M_lse_q7);
+        }
+        return Status::OK;
 }
 
 /** @brief Softened (z * invT) Q15 logit of one code element. */
 [[nodiscard]] inline constexpr int32_t
-softened_logit_q15 (const Trainable &t, const uint32_t index,
-                    const int32_t inv_temperature_q15) noexcept
-{
-    return q15_mul (t.q15_at (index), inv_temperature_q15);
+softened_logit_q15 (const Trainable &t, const uint32_t index, const int32_t inv_temperature_q15) noexcept {
+        return q15_mul (t.q15_at (index), inv_temperature_q15);
 }
 
 /** @brief Softmax state of a code operand under the softened temperature. */
 [[nodiscard]] inline SoftmaxState
-softmax_state_from_codes (const Trainable &t,
-                          const int32_t inv_temperature_q15) noexcept
-{
-    SoftmaxState state;
-    if (t._M_count == 0u)
+softmax_state_from_codes (const Trainable &t, const int32_t inv_temperature_q15) noexcept {
+        SoftmaxState state;
+        if (t._M_count == 0u)
+                return state;
+        int32_t maximum = softened_logit_q15 (t, 0u, inv_temperature_q15);
+        for (uint32_t i = 1; i < t._M_count; ++i) {
+                const int32_t z = softened_logit_q15 (t, i, inv_temperature_q15);
+                if (z > maximum)
+                        maximum = z;
+        }
+        uint64_t total = 0;
+        for (uint32_t i = 0; i < t._M_count; ++i)
+                total += static_cast<uint32_t> (q15_exp (static_cast<int32_t> (
+                    static_cast<int64_t> (softened_logit_q15 (t, i, inv_temperature_q15)) - maximum)));
+        state._M_max_q15 = maximum;
+        state._M_lse_q7 = (maximum >> 8) + q7_log_pos_int (static_cast<uint32_t> (total)) - _S_exp_scale_q7;
         return state;
-    int32_t maximum = softened_logit_q15 (t, 0u, inv_temperature_q15);
-    for (uint32_t i = 1; i < t._M_count; ++i)
-    {
-        const int32_t z = softened_logit_q15 (t, i, inv_temperature_q15);
-        if (z > maximum)
-            maximum = z;
-    }
-    uint64_t total = 0;
-    for (uint32_t i = 0; i < t._M_count; ++i)
-        total += static_cast<uint32_t> (
-            q15_exp (static_cast<int32_t> (
-                static_cast<int64_t> (
-                    softened_logit_q15 (t, i, inv_temperature_q15))
-                - maximum)));
-    state._M_max_q15 = maximum;
-    state._M_lse_q7
-        = (maximum >> 8) + q7_log_pos_int (static_cast<uint32_t> (total))
-          - _S_exp_scale_q7;
-    return state;
 }
 
 /** @brief Q7 log-probability of one code operand element under @p state.
@@ -264,24 +232,19 @@ softmax_state_from_codes (const Trainable &t,
  * the un-centered softened logit; centering again would double-subtract it.
  */
 [[nodiscard]] inline constexpr int32_t
-log_prob_q7 (const Trainable &t, const uint32_t index,
-             const int32_t inv_temperature_q15,
-             const SoftmaxState &state) noexcept
-{
-    const int32_t logit_q7 = static_cast<int32_t> (
-        static_cast<int64_t> (softened_logit_q15 (t, index, inv_temperature_q15))
-        >> 8);
-    return logit_q7 - state._M_lse_q7;
+log_prob_q7 (const Trainable &t, const uint32_t index, const int32_t inv_temperature_q15,
+             const SoftmaxState &state) noexcept {
+        const int32_t logit_q7 =
+            static_cast<int32_t> (static_cast<int64_t> (softened_logit_q15 (t, index, inv_temperature_q15)) >> 8);
+        return logit_q7 - state._M_lse_q7;
 }
 
 /** @brief Q15 softmax probability of one code operand element under @p state. */
 [[nodiscard]] inline int32_t
-prob_q15 (const Trainable &t, const uint32_t index,
-          const int32_t inv_temperature_q15,
-          const SoftmaxState &state) noexcept
-{
-    const int32_t lambda = log_prob_q7 (t, index, inv_temperature_q15, state);
-    return q15_exp_q7 (lambda > 0 ? 0 : lambda);
+prob_q15 (const Trainable &t, const uint32_t index, const int32_t inv_temperature_q15,
+          const SoftmaxState &state) noexcept {
+        const int32_t lambda = log_prob_q7 (t, index, inv_temperature_q15, state);
+        return q15_exp_q7 (lambda > 0 ? 0 : lambda);
 }
 
 /**
@@ -294,80 +257,61 @@ prob_q15 (const Trainable &t, const uint32_t index,
  * shift per row instead of one per class.
  */
 [[nodiscard]] inline int32_t
-kl_sum_q7 (const Trainable &student, const Trainable &teacher,
-           const int32_t inv_temperature_q15, const SoftmaxState &student_state,
-           const SoftmaxState &teacher_state) noexcept
-{
-    int64_t products = 0;
-    for (uint32_t i = 0; i < teacher._M_count; ++i)
-    {
-        const int32_t t_q15 = prob_q15 (teacher, i, inv_temperature_q15,
-                                        teacher_state);
-        if (t_q15 <= 0)
-            continue; /* zero target: the x*log(x) limit is the zero term */
-        const int32_t delta
-            = log_prob_q7 (teacher, i, inv_temperature_q15, teacher_state)
-              - log_prob_q7 (student, i, inv_temperature_q15, student_state);
-        products += static_cast<int64_t> (delta) * t_q15;
-    }
-    /* The log lanes are Q7 quantized, so a near-zero divergence can still
-       close one Q7 below the true zero; the divergence itself is non-negative
-       by construction, and a negative loss would invert the gradient scale. */
-    const int32_t value = static_cast<int32_t> ((products + (1LL << 14)) >> 15);
-    return value > 0 ? value : 0;
+kl_sum_q7 (const Trainable &student, const Trainable &teacher, const int32_t inv_temperature_q15,
+           const SoftmaxState &student_state, const SoftmaxState &teacher_state) noexcept {
+        int64_t products = 0;
+        for (uint32_t i = 0; i < teacher._M_count; ++i) {
+                const int32_t t_q15 = prob_q15 (teacher, i, inv_temperature_q15, teacher_state);
+                if (t_q15 <= 0)
+                        continue; /* zero target: the x*log(x) limit is the zero term */
+                const int32_t delta = log_prob_q7 (teacher, i, inv_temperature_q15, teacher_state)
+                                      - log_prob_q7 (student, i, inv_temperature_q15, student_state);
+                products += static_cast<int64_t> (delta) * t_q15;
+        }
+        /* The log lanes are Q7 quantized, so a near-zero divergence can still
+           close one Q7 below the true zero; the divergence itself is non-negative
+           by construction, and a negative loss would invert the gradient scale. */
+        const int32_t value = static_cast<int32_t> ((products + (1LL << 14)) >> 15);
+        return value > 0 ? value : 0;
 }
 
 /** @brief KL backward: student gets seed * invT * (p_s - p_t), teacher optional. */
 [[nodiscard]] inline Status
-kl_backward (const Trainable & /*output*/, const Trainable &grad_output,
-             GradContext &context) noexcept
-{
-    if (context._M_operand_count < 2u || context._M_saved_count < 1u)
-        return Status::BAD_LAYOUT;
-    const Trainable &student = context._M_operands[0];
-    const Trainable &teacher = context._M_operands[1];
-    const DistillMeta *const meta = context.saved_as<DistillMeta> (0);
-    if (meta == nullptr)
-        return Status::BAD_LAYOUT;
-    const uint32_t count = student._M_count;
-    if (teacher._M_count != count || count == 0u
-        || count > _S_distill_max_classes)
-        return Status::BAD_LAYOUT;
-    const int32_t seed = grad_output.grad_at (0);
-    const int32_t inv_t = meta->_M_inv_temperature_q15;
-    const SoftmaxState student_state
-        = softmax_state_from_codes (student, inv_t);
-    const SoftmaxState teacher_state
-        = softmax_state_from_codes (teacher, inv_t);
-    const int32_t kl_q7
-        = kl_sum_q7 (student, teacher, inv_t, student_state, teacher_state);
-    for (uint32_t i = 0; i < count; ++i)
-    {
-        const int32_t p_s
-            = prob_q15 (student, i, inv_t, student_state);
-        const int32_t p_t
-            = prob_q15 (teacher, i, inv_t, teacher_state);
-        const int32_t student_grad
-            = q15_mul (q15_clamp (p_s - p_t), inv_t);
-        if (student.add_grad (i, q15_mul (student_grad, seed)))
-            ++context._M_saturation_events;
-        if (meta->_M_route_teacher != 0u && teacher.has_grad ())
-        {
-            const int32_t delta
-                = log_prob_q7 (teacher, i, inv_t, teacher_state)
-                  - log_prob_q7 (student, i, inv_t, student_state);
-            /* (delta - KL) is a Q7 real difference; widen to a lane (x256),
-               saturating above 1.0 -- the documented lane limit. */
-            const int32_t outer
-                = q15_clamp (static_cast<int32_t> (
-                    static_cast<int64_t> (delta - kl_q7) << 8));
-            const int32_t teacher_grad
-                = q15_mul (q15_mul (p_t, inv_t), outer);
-            if (teacher.add_grad (i, q15_mul (teacher_grad, seed)))
-                ++context._M_saturation_events;
+kl_backward (const Trainable & /*output*/, const Trainable &grad_output, GradContext &context) noexcept {
+        if (context._M_operand_count < 2u || context._M_saved_count < 1u)
+                return Status::BAD_LAYOUT;
+        const Trainable &student = context._M_operands[0];
+        const Trainable &teacher = context._M_operands[1];
+        const DistillMeta *const meta = context.saved_as<DistillMeta> (0);
+        if (meta == nullptr)
+                return Status::BAD_LAYOUT;
+        const uint32_t count = student._M_count;
+        if (teacher._M_count != count || count == 0u || count > _S_distill_max_classes)
+                return Status::BAD_LAYOUT;
+        const int32_t seed = grad_output.grad_at (0);
+        const int32_t inv_t = meta->_M_inv_temperature_q15;
+        const SoftmaxState student_state = softmax_state_from_codes (student, inv_t);
+        const SoftmaxState teacher_state = softmax_state_from_codes (teacher, inv_t);
+        const int32_t kl_q7 = kl_sum_q7 (student, teacher, inv_t, student_state, teacher_state);
+        for (uint32_t i = 0; i < count; ++i) {
+                const int32_t p_s = prob_q15 (student, i, inv_t, student_state);
+                const int32_t p_t = prob_q15 (teacher, i, inv_t, teacher_state);
+                const int32_t student_grad = q15_mul (q15_clamp (p_s - p_t), inv_t);
+                if (student.add_grad (i, q15_mul (student_grad, seed)))
+                        ++context._M_saturation_events;
+                if (meta->_M_route_teacher != 0u && teacher.has_grad ()) {
+                        const int32_t delta = log_prob_q7 (teacher, i, inv_t, teacher_state)
+                                              - log_prob_q7 (student, i, inv_t, student_state);
+                        /* (delta - KL) is a Q7 real difference; widen to a lane (x256),
+                           saturating above 1.0 -- the documented lane limit. */
+                        const int32_t outer =
+                            q15_clamp (static_cast<int32_t> (static_cast<int64_t> (delta - kl_q7) << 8));
+                        const int32_t teacher_grad = q15_mul (q15_mul (p_t, inv_t), outer);
+                        if (teacher.add_grad (i, q15_mul (teacher_grad, seed)))
+                                ++context._M_saturation_events;
+                }
         }
-    }
-    return Status::OK;
+        return Status::OK;
 }
 
 /**
@@ -379,123 +323,94 @@ kl_backward (const Trainable & /*output*/, const Trainable &grad_output,
  * Pool cost: 8-byte node + 16-byte DistillMeta save.
  */
 [[nodiscard]] inline Status
-kl_divergence_forward (Pool &pool, Tape *const tape, const Trainable &student,
-                       const Trainable &teacher,
-                       const int32_t inv_temperature_q15, LossResult &out,
-                       const bool route_teacher = false) noexcept
-{
-    const Status pair = loss_pair_ok (student, teacher);
-    if (!status_ok (pair))
-        return pair;
-    if (student._M_count > _S_distill_max_classes)
-        return Status::OUT_OF_RANGE;
-    if (inv_temperature_q15 <= 0 || inv_temperature_q15 > _S_q15_one)
-        return Status::OUT_OF_RANGE;
-    const SoftmaxState student_state
-        = softmax_state_from_codes (student, inv_temperature_q15);
-    const SoftmaxState teacher_state
-        = softmax_state_from_codes (teacher, inv_temperature_q15);
-    const int32_t loss_q7 = kl_sum_q7 (student, teacher, inv_temperature_q15,
-                                       student_state, teacher_state);
-    const Status finish = finish_loss (pool, loss_q7, out);
-    if (!status_ok (finish))
-        return finish;
-    Saved saved;
-    DistillMeta *meta = nullptr;
-    if (tape != nullptr)
-    {
-        const Status save = tape->save<DistillMeta> (1u, saved, meta);
-        if (!status_ok (save))
-            return save;
-        meta->_M_inv_temperature_q15 = inv_temperature_q15;
-        meta->_M_alpha_q15 = 0;
-        meta->_M_label = 0u;
-        meta->_M_classes = static_cast<uint8_t> (student._M_count);
-        meta->_M_route_teacher = route_teacher ? 1u : 0u;
-        meta->_M_kl_shift = 0u;
-        meta->_M_pad = 0u;
-    }
-    const Trainable operands[2] = { student, teacher };
-    return record_loss (tape, &kl_backward, _S_op_kl, out, operands, 2u,
-                        tape != nullptr ? &saved : nullptr,
-                        tape != nullptr ? 1u : 0u);
+kl_divergence_forward (Pool &pool, Tape *const tape, const Trainable &student, const Trainable &teacher,
+                       const int32_t inv_temperature_q15, LossResult &out, const bool route_teacher = false) noexcept {
+        const Status pair = loss_pair_ok (student, teacher);
+        if (!status_ok (pair))
+                return pair;
+        if (student._M_count > _S_distill_max_classes)
+                return Status::OUT_OF_RANGE;
+        if (inv_temperature_q15 <= 0 || inv_temperature_q15 > _S_q15_one)
+                return Status::OUT_OF_RANGE;
+        const SoftmaxState student_state = softmax_state_from_codes (student, inv_temperature_q15);
+        const SoftmaxState teacher_state = softmax_state_from_codes (teacher, inv_temperature_q15);
+        const int32_t loss_q7 = kl_sum_q7 (student, teacher, inv_temperature_q15, student_state, teacher_state);
+        const Status finish = finish_loss (pool, loss_q7, out);
+        if (!status_ok (finish))
+                return finish;
+        Saved saved;
+        DistillMeta *meta = nullptr;
+        if (tape != nullptr) {
+                const Status save = tape->save<DistillMeta> (1u, saved, meta);
+                if (!status_ok (save))
+                        return save;
+                meta->_M_inv_temperature_q15 = inv_temperature_q15;
+                meta->_M_alpha_q15 = 0;
+                meta->_M_label = 0u;
+                meta->_M_classes = static_cast<uint8_t> (student._M_count);
+                meta->_M_route_teacher = route_teacher ? 1u : 0u;
+                meta->_M_kl_shift = 0u;
+                meta->_M_pad = 0u;
+        }
+        const Trainable operands[2] = {student, teacher};
+        return record_loss (tape, &kl_backward, _S_op_kl, out, operands, 2u, tape != nullptr ? &saved : nullptr,
+                            tape != nullptr ? 1u : 0u);
 }
 
 /** @brief Combined backward: alpha * CE grad + (1 - alpha) * 2^shift * KL grad. */
 [[nodiscard]] inline Status
-distill_backward (const Trainable & /*output*/,
-                  const Trainable &grad_output, GradContext &context) noexcept
-{
-    if (context._M_operand_count < 2u || context._M_saved_count < 1u)
-        return Status::BAD_LAYOUT;
-    const Trainable &student = context._M_operands[0];
-    const Trainable &teacher = context._M_operands[1];
-    const DistillMeta *const meta = context.saved_as<DistillMeta> (0);
-    if (meta == nullptr)
-        return Status::BAD_LAYOUT;
-    const uint32_t count = student._M_count;
-    if (teacher._M_count != count || count == 0u
-        || count > _S_distill_max_classes || meta->_M_label >= count)
-        return Status::BAD_LAYOUT;
-    const int32_t seed = grad_output.grad_at (0);
-    const int32_t inv_t = meta->_M_inv_temperature_q15;
-    const int32_t alpha = meta->_M_alpha_q15;
-    const int32_t one_minus = _S_q15_one - 1 - alpha;
-    const SoftmaxState student_state
-        = softmax_state_from_codes (student, inv_t);
-    const SoftmaxState teacher_state
-        = softmax_state_from_codes (teacher, inv_t);
-    /* Loop-invariant: the routed arm needs KL once per backward, not once per
-       class -- inside the loop this is C full exp sweeps instead of one. */
-    const int32_t kl_here
-        = meta->_M_route_teacher != 0u && teacher.has_grad ()
-              ? kl_sum_q7 (student, teacher, inv_t, student_state,
-                           teacher_state)
-              : 0;
-    for (uint32_t i = 0; i < count; ++i)
-    {
-        const int32_t p_s = prob_q15 (student, i, inv_t, student_state);
-        const int32_t p_t = prob_q15 (teacher, i, inv_t, teacher_state);
-        const int32_t one_hot
-            = i == meta->_M_label ? _S_q15_max : 0;
-        /* Three Q15 factors at once in int64: (p_s - one_hot) * invT * alpha
-           and (p_s - p_t) * invT * (1 - alpha), each narrowed by 2^30 with
-           rounding, then the KL arm gets its 2^kl_shift scale before the
-           saturating sum -- the one place a T > 1 gain is applied. */
-        const int64_t hard_arm
-            = (static_cast<int64_t> (q15_clamp (p_s - one_hot)) * inv_t * alpha)
-              >> 30;
-        const int64_t soft_raw
-            = (static_cast<int64_t> (q15_clamp (p_s - p_t)) * inv_t * one_minus)
-              >> 30;
-        const int64_t soft_arm = soft_raw << meta->_M_kl_shift;
-        const int64_t summed = hard_arm + soft_arm;
-        const int32_t combined = q15_clamp (static_cast<int32_t> (
-            summed > _S_q15_max ? _S_q15_max
-                                : (summed < _S_q15_min ? _S_q15_min : summed)));
-        if (student.add_grad (i, q15_mul (combined, seed)))
-            ++context._M_saturation_events;
-        if (meta->_M_route_teacher != 0u && teacher.has_grad ())
-        {
-            const int32_t delta
-                = log_prob_q7 (teacher, i, inv_t, teacher_state)
-                  - log_prob_q7 (student, i, inv_t, student_state);
-            const int32_t outer
-                = q15_clamp (static_cast<int32_t> (
-                    static_cast<int64_t> (delta - kl_here) << 8));
-            const int32_t grad_raw
-                = q15_mul (q15_mul (q15_mul (p_t, inv_t), outer), one_minus);
-            const int64_t grad_wide
-                = (static_cast<int64_t> (grad_raw) << meta->_M_kl_shift);
-            const int32_t grad = q15_clamp (static_cast<int32_t> (
-                grad_wide > _S_q15_max
-                    ? _S_q15_max
-                    : (grad_wide < _S_q15_min ? _S_q15_min : grad_wide)));
-            if (teacher.add_grad (i, q15_mul (q15_clamp (grad), seed)))
-                ++context._M_saturation_events;
+distill_backward (const Trainable & /*output*/, const Trainable &grad_output, GradContext &context) noexcept {
+        if (context._M_operand_count < 2u || context._M_saved_count < 1u)
+                return Status::BAD_LAYOUT;
+        const Trainable &student = context._M_operands[0];
+        const Trainable &teacher = context._M_operands[1];
+        const DistillMeta *const meta = context.saved_as<DistillMeta> (0);
+        if (meta == nullptr)
+                return Status::BAD_LAYOUT;
+        const uint32_t count = student._M_count;
+        if (teacher._M_count != count || count == 0u || count > _S_distill_max_classes || meta->_M_label >= count)
+                return Status::BAD_LAYOUT;
+        const int32_t seed = grad_output.grad_at (0);
+        const int32_t inv_t = meta->_M_inv_temperature_q15;
+        const int32_t alpha = meta->_M_alpha_q15;
+        const int32_t one_minus = _S_q15_one - 1 - alpha;
+        const SoftmaxState student_state = softmax_state_from_codes (student, inv_t);
+        const SoftmaxState teacher_state = softmax_state_from_codes (teacher, inv_t);
+        /* Loop-invariant: the routed arm needs KL once per backward, not once per
+           class -- inside the loop this is C full exp sweeps instead of one. */
+        const int32_t kl_here = meta->_M_route_teacher != 0u && teacher.has_grad ()
+                                    ? kl_sum_q7 (student, teacher, inv_t, student_state, teacher_state)
+                                    : 0;
+        for (uint32_t i = 0; i < count; ++i) {
+                const int32_t p_s = prob_q15 (student, i, inv_t, student_state);
+                const int32_t p_t = prob_q15 (teacher, i, inv_t, teacher_state);
+                const int32_t one_hot = i == meta->_M_label ? _S_q15_max : 0;
+                /* Three Q15 factors at once in int64: (p_s - one_hot) * invT * alpha
+                   and (p_s - p_t) * invT * (1 - alpha), each narrowed by 2^30 with
+                   rounding, then the KL arm gets its 2^kl_shift scale before the
+                   saturating sum -- the one place a T > 1 gain is applied. */
+                const int64_t hard_arm = (static_cast<int64_t> (q15_clamp (p_s - one_hot)) * inv_t * alpha) >> 30;
+                const int64_t soft_raw = (static_cast<int64_t> (q15_clamp (p_s - p_t)) * inv_t * one_minus) >> 30;
+                const int64_t soft_arm = soft_raw << meta->_M_kl_shift;
+                const int64_t summed = hard_arm + soft_arm;
+                const int32_t combined = q15_clamp (static_cast<int32_t> (
+                    summed > _S_q15_max ? _S_q15_max : (summed < _S_q15_min ? _S_q15_min : summed)));
+                if (student.add_grad (i, q15_mul (combined, seed)))
+                        ++context._M_saturation_events;
+                if (meta->_M_route_teacher != 0u && teacher.has_grad ()) {
+                        const int32_t delta = log_prob_q7 (teacher, i, inv_t, teacher_state)
+                                              - log_prob_q7 (student, i, inv_t, student_state);
+                        const int32_t outer =
+                            q15_clamp (static_cast<int32_t> (static_cast<int64_t> (delta - kl_here) << 8));
+                        const int32_t grad_raw = q15_mul (q15_mul (q15_mul (p_t, inv_t), outer), one_minus);
+                        const int64_t grad_wide = (static_cast<int64_t> (grad_raw) << meta->_M_kl_shift);
+                        const int32_t grad = q15_clamp (static_cast<int32_t> (
+                            grad_wide > _S_q15_max ? _S_q15_max : (grad_wide < _S_q15_min ? _S_q15_min : grad_wide)));
+                        if (teacher.add_grad (i, q15_mul (q15_clamp (grad), seed)))
+                                ++context._M_saturation_events;
+                }
         }
-    }
-    return Status::OK;
+        return Status::OK;
 }
 
 /**
@@ -511,59 +426,47 @@ distill_backward (const Trainable & /*output*/,
  * Pool cost: 8-byte node + 16-byte DistillMeta save.
  */
 [[nodiscard]] inline Status
-distill_forward (Pool &pool, Tape *const tape, const Trainable &student,
-                 const Trainable &teacher, const uint16_t label,
-                 const int32_t inv_temperature_q15, const int32_t alpha_q15,
-                 const uint32_t kl_shift, DistillResult &out,
-                 const bool route_teacher = false) noexcept
-{
-    const Status pair = loss_pair_ok (student, teacher);
-    if (!status_ok (pair))
-        return pair;
-    if (student._M_count > _S_distill_max_classes || label >= student._M_count)
-        return Status::OUT_OF_RANGE;
-    if (inv_temperature_q15 <= 0 || inv_temperature_q15 > _S_q15_one)
-        return Status::OUT_OF_RANGE;
-    if (kl_shift > 4u)
-        return Status::OUT_OF_RANGE;
-    const int32_t alpha = q15_clamp (alpha_q15);
-    const int32_t one_minus = _S_q15_one - 1 - alpha;
-    const SoftmaxState student_state
-        = softmax_state_from_codes (student, inv_temperature_q15);
-    const SoftmaxState teacher_state
-        = softmax_state_from_codes (teacher, inv_temperature_q15);
-    const int32_t kl_q7 = kl_sum_q7 (student, teacher, inv_temperature_q15,
-                                     student_state, teacher_state);
-    const int32_t hard_q7
-        = -log_prob_q7 (student, label, inv_temperature_q15, student_state);
-    const int64_t blended = ((static_cast<int64_t> (hard_q7) * alpha) >> 15)
-                            + (((static_cast<int64_t> (kl_q7) * one_minus)
-                                >> 15)
-                               << kl_shift);
-    const Status finish
-        = finish_loss (pool, static_cast<int32_t> (blended), out._M_total);
-    if (!status_ok (finish))
-        return finish;
-    out._M_kl_q7 = kl_q7;
-    out._M_hard_q7 = hard_q7;
-    Saved saved;
-    DistillMeta *meta = nullptr;
-    if (tape != nullptr)
-    {
-        const Status save = tape->save<DistillMeta> (1u, saved, meta);
-        if (!status_ok (save))
-            return save;
-        meta->_M_inv_temperature_q15 = inv_temperature_q15;
-        meta->_M_alpha_q15 = alpha;
-        meta->_M_label = label;
-        meta->_M_classes = static_cast<uint8_t> (student._M_count);
-        meta->_M_route_teacher = route_teacher ? 1u : 0u;
-        meta->_M_kl_shift = static_cast<uint8_t> (kl_shift);
-        meta->_M_pad = 0u;
-    }
-    const Trainable operands[2] = { student, teacher };
-    return record_loss (tape, &distill_backward, _S_op_distill, out._M_total,
-                        operands, 2u, tape != nullptr ? &saved : nullptr,
-                        tape != nullptr ? 1u : 0u);
+distill_forward (Pool &pool, Tape *const tape, const Trainable &student, const Trainable &teacher, const uint16_t label,
+                 const int32_t inv_temperature_q15, const int32_t alpha_q15, const uint32_t kl_shift,
+                 DistillResult &out, const bool route_teacher = false) noexcept {
+        const Status pair = loss_pair_ok (student, teacher);
+        if (!status_ok (pair))
+                return pair;
+        if (student._M_count > _S_distill_max_classes || label >= student._M_count)
+                return Status::OUT_OF_RANGE;
+        if (inv_temperature_q15 <= 0 || inv_temperature_q15 > _S_q15_one)
+                return Status::OUT_OF_RANGE;
+        if (kl_shift > 4u)
+                return Status::OUT_OF_RANGE;
+        const int32_t alpha = q15_clamp (alpha_q15);
+        const int32_t one_minus = _S_q15_one - 1 - alpha;
+        const SoftmaxState student_state = softmax_state_from_codes (student, inv_temperature_q15);
+        const SoftmaxState teacher_state = softmax_state_from_codes (teacher, inv_temperature_q15);
+        const int32_t kl_q7 = kl_sum_q7 (student, teacher, inv_temperature_q15, student_state, teacher_state);
+        const int32_t hard_q7 = -log_prob_q7 (student, label, inv_temperature_q15, student_state);
+        const int64_t blended = ((static_cast<int64_t> (hard_q7) * alpha) >> 15)
+                                + (((static_cast<int64_t> (kl_q7) * one_minus) >> 15) << kl_shift);
+        const Status finish = finish_loss (pool, static_cast<int32_t> (blended), out._M_total);
+        if (!status_ok (finish))
+                return finish;
+        out._M_kl_q7 = kl_q7;
+        out._M_hard_q7 = hard_q7;
+        Saved saved;
+        DistillMeta *meta = nullptr;
+        if (tape != nullptr) {
+                const Status save = tape->save<DistillMeta> (1u, saved, meta);
+                if (!status_ok (save))
+                        return save;
+                meta->_M_inv_temperature_q15 = inv_temperature_q15;
+                meta->_M_alpha_q15 = alpha;
+                meta->_M_label = label;
+                meta->_M_classes = static_cast<uint8_t> (student._M_count);
+                meta->_M_route_teacher = route_teacher ? 1u : 0u;
+                meta->_M_kl_shift = static_cast<uint8_t> (kl_shift);
+                meta->_M_pad = 0u;
+        }
+        const Trainable operands[2] = {student, teacher};
+        return record_loss (tape, &distill_backward, _S_op_distill, out._M_total, operands, 2u,
+                            tape != nullptr ? &saved : nullptr, tape != nullptr ? 1u : 0u);
 }
 } // namespace zzs::mllee::train

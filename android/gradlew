@@ -1,0 +1,44 @@
+#!/bin/bash
+
+# Gradle wrapper script for OpenZZS Android project
+# This script downloads and runs Gradle to build the project.
+
+set -e
+
+APP_HOME=$(cd "$(dirname "$0")" && pwd)
+GRADLE_USER_HOME="${GRADLE_USER_HOME:-$HOME/.gradle}"
+WRAPPER_JAR="$GRADLE_USER_HOME/wrapper/dists/gradle-8.2-bin/752d03g58a3b9a44g58a3b9a/gradle-8.2.jar"
+
+# Determine Java command
+if [ -n "$JAVA_HOME" ] ; then
+    if [ -x "$JAVA_HOME/jre/sh/java" ] ; then
+        JAVACMD="$JAVA_HOME/jre/sh/java"
+    else
+        JAVACMD="$JAVA_HOME/bin/java"
+    fi
+else
+    JAVACMD=java
+fi
+
+if [ ! -x "$JAVACMD" ] ; then
+    echo "Error: JAVA_HOME is not set or Java is not installed." >&2
+    exit 1
+fi
+
+# Download Gradle wrapper if not present
+if [ ! -f "$WRAPPER_JAR" ] ; then
+    echo "Downloading Gradle 8.2..."
+    mkdir -p "$GRADLE_USER_HOME/wrapper/dists"
+    curl -L -o "$GRADLE_USER_HOME/gradle-8.2-bin.zip" \
+        "https://services.gradle.org/distributions/gradle-8.2-bin.zip"
+    unzip -q "$GRADLE_USER_HOME/gradle-8.2-bin.zip" -d "$GRADLE_USER_HOME/wrapper/dists/"
+    rm -f "$GRADLE_USER_HOME/gradle-8.2-bin.zip"
+fi
+
+WRAPPER_JAR=$(find "$GRADLE_USER_HOME/wrapper/dists" -name "gradle-8.2.jar" -type f 2>/dev/null | head -1)
+if [ -z "$WRAPPER_JAR" ] ; then
+    echo "Error: Gradle wrapper jar not found." >&2
+    exit 1
+fi
+
+exec "$JAVACMD" -jar "$WRAPPER_JAR" "$@"

@@ -39,8 +39,7 @@
  * hex magic numbers are used and they are documented here.
  * @{
  */
-namespace zzs::kernel::pkt
-{
+namespace zzs::kernel::pkt {
 
 /** @brief Frame magic byte (0x5A = OpenZZS kernel). Documented, not arbitrary. */
 inline constexpr uint8_t _S_packet_magic = 0x5Au;
@@ -49,37 +48,34 @@ inline constexpr uint8_t _S_packet_magic = 0x5Au;
 inline constexpr uint8_t _S_packet_version = 1u;
 
 /** @brief Packet types the kernel can decode. */
-enum class Type : uint8_t
-{
-    SAMPLE = 0x01,   /**< One resampled grid-tick sensor sample */
-    FEATURE_ROW = 0x02, /**< One packed int8 feature row */
-    CONFIG = 0x03,   /**< Runtime configuration (rate, gain, mains grid) */
-    STREAM_OPEN = 0x04, /**< Open a packet stream */
-    STREAM_CLOSE = 0x05, /**< Close a packet stream */
-    STREAM_ACK = 0x06,   /**< Stream acknowledgment */
-    KEEPALIVE = 0x07,  /**< Stream keepalive */
+enum class Type : uint8_t {
+        SAMPLE = 0x01,       /**< One resampled grid-tick sensor sample */
+        FEATURE_ROW = 0x02,  /**< One packed int8 feature row */
+        CONFIG = 0x03,       /**< Runtime configuration (rate, gain, mains grid) */
+        STREAM_OPEN = 0x04,  /**< Open a packet stream */
+        STREAM_CLOSE = 0x05, /**< Close a packet stream */
+        STREAM_ACK = 0x06,   /**< Stream acknowledgment */
+        KEEPALIVE = 0x07,    /**< Stream keepalive */
 };
 
 /** @brief Header flags. */
-enum class Flags : uint8_t
-{
-    NONE = 0x00,
-    STUFFED = 0x01, /**< Payload contains stuffed bytes */
-    COMPRESSED = 0x02, /**< Payload is packlow-compressed */
-    LAST = 0x80,    /**< Last packet of a message */
+enum class Flags : uint8_t {
+        NONE = 0x00,
+        STUFFED = 0x01,    /**< Payload contains stuffed bytes */
+        COMPRESSED = 0x02, /**< Payload is packlow-compressed */
+        LAST = 0x80,       /**< Last packet of a message */
 };
 
 /** @brief Fixed packet header, 8 bytes. */
-struct _S_PacketHeader
-{
-    uint8_t _M_magic;       /* 0x5A */
-    uint8_t _M_version;     /* 1 */
-    uint8_t _M_type;        /* Type */
-    uint8_t _M_length_hi;   /* payload length high */
-    uint8_t _M_length_lo;   /* payload length low */
-    uint8_t _M_sequence;    /* packet sequence */
-    uint8_t _M_flags;       /* Flags */
-    uint8_t _M_reserved;    /* reserved, 0 */
+struct _S_PacketHeader {
+        uint8_t _M_magic;     /* 0x5A */
+        uint8_t _M_version;   /* 1 */
+        uint8_t _M_type;      /* Type */
+        uint8_t _M_length_hi; /* payload length high */
+        uint8_t _M_length_lo; /* payload length low */
+        uint8_t _M_sequence;  /* packet sequence */
+        uint8_t _M_flags;     /* Flags */
+        uint8_t _M_reserved;  /* reserved, 0 */
 };
 
 /** @brief Byte-stuffing escape markers (only inside payload). */
@@ -94,16 +90,14 @@ inline constexpr uint8_t _S_stuff_flag = 0x7Eu;
  *  escaped byte `b` is written as [0x7D, b ^ 0x20].
  */
 [[nodiscard]] inline uint32_t
-stuff_byte (const uint8_t byte, uint8_t *const out) noexcept
-{
-    if (byte == _S_stuff_flag || byte == _S_stuff_escape || byte == _S_packet_magic)
-        {
-            out[0] = _S_stuff_escape;
-            out[1] = static_cast<uint8_t> (byte ^ 0x20u);
-            return 2u;
+stuff_byte (const uint8_t byte, uint8_t *const out) noexcept {
+        if (byte == _S_stuff_flag || byte == _S_stuff_escape || byte == _S_packet_magic) {
+                out[0] = _S_stuff_escape;
+                out[1] = static_cast<uint8_t> (byte ^ 0x20u);
+                return 2u;
         }
-    out[0] = byte;
-    return 1u;
+        out[0] = byte;
+        return 1u;
 }
 
 /** @brief Unstuff one byte from `in`; advances `in` by 1 or 2.
@@ -112,43 +106,37 @@ stuff_byte (const uint8_t byte, uint8_t *const out) noexcept
  *  is set to the number of source bytes consumed (1 or 2).
  */
 [[nodiscard]] inline bool
-unstuff_byte (const uint8_t *const in, const uint32_t in_remaining, uint8_t &out,
-              uint32_t &consumed) noexcept
-{
-    if (in_remaining == 0u)
-        return false;
-    if (in[0] == _S_stuff_escape)
-        {
-            if (in_remaining < 2u)
+unstuff_byte (const uint8_t *const in, const uint32_t in_remaining, uint8_t &out, uint32_t &consumed) noexcept {
+        if (in_remaining == 0u)
                 return false;
-            out = static_cast<uint8_t> (in[1] ^ 0x20u);
-            consumed = 2u;
-            return true;
+        if (in[0] == _S_stuff_escape) {
+                if (in_remaining < 2u)
+                        return false;
+                out = static_cast<uint8_t> (in[1] ^ 0x20u);
+                consumed = 2u;
+                return true;
         }
-    out = in[0];
-    consumed = 1u;
-    return true;
+        out = in[0];
+        consumed = 1u;
+        return true;
 }
 
 /** @brief Header length in bytes. */
 [[nodiscard]] inline constexpr uint32_t
-header_bytes (void) noexcept
-{
-    return zzs::kernel::_S_packet_header_bytes;
+header_bytes (void) noexcept {
+        return zzs::kernel::_S_packet_header_bytes;
 }
 
 /** @brief CRC length in bytes. */
 [[nodiscard]] inline constexpr uint32_t
-crc_bytes (void) noexcept
-{
-    return zzs::kernel::_S_packet_crc_bytes;
+crc_bytes (void) noexcept {
+        return zzs::kernel::_S_packet_crc_bytes;
 }
 
 /** @brief Max payload in bytes. */
 [[nodiscard]] inline constexpr uint32_t
-max_payload (void) noexcept
-{
-    return zzs::kernel::_S_packet_max_payload;
+max_payload (void) noexcept {
+        return zzs::kernel::_S_packet_max_payload;
 }
 
 /** @} */

@@ -1,0 +1,10 @@
+R_DEF: Internal format may change without notice
+local
+id feature_text
+id inference_text
+id status_text
+layout activity_main
+string app_name
+string status_error
+string status_initializing
+string status_ready

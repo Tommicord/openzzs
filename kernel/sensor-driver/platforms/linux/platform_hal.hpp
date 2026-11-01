@@ -38,8 +38,7 @@
 /* `linux` is a predefined macro (=1) on GCC/Linux; undef it so the `platform::linux`
  * namespace declaration is parsed as an identifier, not a numeric constant. */
 #undef linux
-namespace zzs::kernel::sensor::driver::platform::linux
-{
+namespace zzs::kernel::sensor::driver::platform::linux {
 
 /** @brief Build the Linux sensor HAL vtable.
  *

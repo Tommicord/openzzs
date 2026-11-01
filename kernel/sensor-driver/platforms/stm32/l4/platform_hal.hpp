@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "kernel/kernel_sensor_hal.hpp"
 #include "../../platform_config.hpp"
+#include "kernel/kernel_sensor_hal.hpp"
 
 #include <cstdint>
 
@@ -34,8 +34,7 @@
  * the platform-specific translation unit.
  * @{
  */
-namespace zzs::kernel::sensor::driver::platform::stm32::l4
-{
+namespace zzs::kernel::sensor::driver::platform::stm32::l4 {
 
 /** @brief Build the STM32L4 sensor HAL vtable. */
 [[nodiscard]] const zzs::kernel::hal::_S_SensorHal *

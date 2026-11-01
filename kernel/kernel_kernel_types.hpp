@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "kernel/kernel_config.hpp"
 #include "kernel/kernel_clock_source.hpp"
+#include "kernel/kernel_config.hpp"
 
 #include <cstdint>
 
@@ -34,8 +34,7 @@
  * No heap, no float, no std::string/vector/array.
  * @{
  */
-namespace zzs::kernel::types
-{
+namespace zzs::kernel::types {
 
 using zzs::kernel::clock::Nanoseconds;
 
@@ -64,48 +63,45 @@ using GridTick = uint32_t;
 using FeatureQ15 = int32_t;
 
 /** @brief One packed feature row: _S_feature_count int8 codes. */
-struct FeatureRow
-{
-    int8_t _M_code[zzs::kernel::_S_feature_count];
+struct FeatureRow {
+        int8_t _M_code[zzs::kernel::_S_feature_count];
 };
 
 /** @brief One grid-tick sample bundle: all channels resampled to the grid. */
-struct GridSample
-{
-    GridTick _M_tick;
-    Nanoseconds _M_timestamp_ns;
-    SampleQ15 _M_mag_x;
-    SampleQ15 _M_mag_y;
-    SampleQ15 _M_mag_z;
-    SampleQ15 _M_accel_x;
-    SampleQ15 _M_accel_y;
-    SampleQ15 _M_accel_z;
-    SampleQ15 _M_gyro_x;
-    SampleQ15 _M_gyro_y;
-    SampleQ15 _M_gyro_z;
-    SampleQ15 _M_light;
-    SampleQ15 _M_sound_envelope;
-    SampleQ15 _M_battery;
+struct GridSample {
+        GridTick _M_tick;
+        Nanoseconds _M_timestamp_ns;
+        SampleQ15 _M_mag_x;
+        SampleQ15 _M_mag_y;
+        SampleQ15 _M_mag_z;
+        SampleQ15 _M_accel_x;
+        SampleQ15 _M_accel_y;
+        SampleQ15 _M_accel_z;
+        SampleQ15 _M_gyro_x;
+        SampleQ15 _M_gyro_y;
+        SampleQ15 _M_gyro_z;
+        SampleQ15 _M_light;
+        SampleQ15 _M_sound_envelope;
+        SampleQ15 _M_battery;
 };
 
 /** @brief Clear a grid sample to zero. */
 inline void
-grid_sample_clear (GridSample &gs) noexcept
-{
-    gs._M_tick = 0;
-    gs._M_timestamp_ns = 0;
-    gs._M_mag_x = 0;
-    gs._M_mag_y = 0;
-    gs._M_mag_z = 0;
-    gs._M_accel_x = 0;
-    gs._M_accel_y = 0;
-    gs._M_accel_z = 0;
-    gs._M_gyro_x = 0;
-    gs._M_gyro_y = 0;
-    gs._M_gyro_z = 0;
-    gs._M_light = 0;
-    gs._M_sound_envelope = 0;
-    gs._M_battery = 0;
+grid_sample_clear (GridSample &gs) noexcept {
+        gs._M_tick = 0;
+        gs._M_timestamp_ns = 0;
+        gs._M_mag_x = 0;
+        gs._M_mag_y = 0;
+        gs._M_mag_z = 0;
+        gs._M_accel_x = 0;
+        gs._M_accel_y = 0;
+        gs._M_accel_z = 0;
+        gs._M_gyro_x = 0;
+        gs._M_gyro_y = 0;
+        gs._M_gyro_z = 0;
+        gs._M_light = 0;
+        gs._M_sound_envelope = 0;
+        gs._M_battery = 0;
 }
 
 /** @} */

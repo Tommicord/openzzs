@@ -1,0 +1,171 @@
+[
+  {
+    "level_": 0,
+    "message_": "Start JSON generation. Platform version: 24 min SDK version: x86_64",
+    "file_": "/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/CMakeLists.txt",
+    "tag_": "debug|x86_64",
+    "diagnosticCode_": 0,
+    "memoizedIsInitialized": 1,
+    "unknownFields": {
+      "fields": {}
+    },
+    "memoizedSize": -1,
+    "memoizedHashCode": 0
+  },
+  {
+    "level_": 0,
+    "message_": "rebuilding JSON /home/tommicord/CLionProjects/openzzs/android/app/.cxx/Debug/6o3g5y5l/x86_64/android_gradle_build.json due to:",
+    "file_": "/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/CMakeLists.txt",
+    "tag_": "debug|x86_64",
+    "diagnosticCode_": 0,
+    "memoizedIsInitialized": 1,
+    "unknownFields": {
+      "fields": {}
+    },
+    "memoizedSize": -1,
+    "memoizedHashCode": 0
+  },
+  {
+    "level_": 0,
+    "message_": "- no fingerprint file, will remove stale configuration folder",
+    "file_": "/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/CMakeLists.txt",
+    "tag_": "debug|x86_64",
+    "diagnosticCode_": 0,
+    "memoizedIsInitialized": 1,
+    "unknownFields": {
+      "fields": {}
+    },
+    "memoizedSize": -1,
+    "memoizedHashCode": 0
+  },
+  {
+    "level_": 0,
+    "message_": "removing stale contents from \u0027/home/tommicord/CLionProjects/openzzs/android/app/.cxx/Debug/6o3g5y5l/x86_64\u0027",
+    "file_": "/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/CMakeLists.txt",
+    "tag_": "debug|x86_64",
+    "diagnosticCode_": 0,
+    "memoizedIsInitialized": 1,
+    "unknownFields": {
+      "fields": {}
+    },
+    "memoizedSize": -1,
+    "memoizedHashCode": 0
+  },
+  {
+    "level_": 0,
+    "message_": "created folder \u0027/home/tommicord/CLionProjects/openzzs/android/app/.cxx/Debug/6o3g5y5l/x86_64\u0027",
+    "file_": "/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/CMakeLists.txt",
+    "tag_": "debug|x86_64",
+    "diagnosticCode_": 0,
+    "memoizedIsInitialized": 1,
+    "unknownFields": {
+      "fields": {}
+    },
+    "memoizedSize": -1,
+    "memoizedHashCode": 0
+  },
+  {
+    "level_": 0,
+    "message_": "executing cmake /home/tommicord/Android/Sdk/cmake/3.22.1/bin/cmake \\\n  -H/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp \\\n  -DCMAKE_SYSTEM_NAME\u003dAndroid \\\n  -DCMAKE_EXPORT_COMPILE_COMMANDS\u003dON \\\n  -DCMAKE_SYSTEM_VERSION\u003d24 \\\n  -DANDROID_PLATFORM\u003dandroid-24 \\\n  -DANDROID_ABI\u003dx86_64 \\\n  -DCMAKE_ANDROID_ARCH_ABI\u003dx86_64 \\\n  -DANDROID_NDK\u003d/home/tommicord/Android/Sdk/ndk/30.0.16248370 \\\n  -DCMAKE_ANDROID_NDK\u003d/home/tommicord/Android/Sdk/ndk/30.0.16248370 \\\n  -DCMAKE_TOOLCHAIN_FILE\u003d/home/tommicord/Android/Sdk/ndk/30.0.16248370/build/cmake/android.toolchain.cmake \\\n  -DCMAKE_MAKE_PROGRAM\u003d/home/tommicord/Android/Sdk/cmake/3.22.1/bin/ninja \\\n  \"-DCMAKE_CXX_FLAGS\u003d-std\u003dgnu++2b -fexceptions -frtti -O2 -DZZS_MLLEE_HOST\" \\\n  -DCMAKE_LIBRARY_OUTPUT_DIRECTORY\u003d/home/tommicord/CLionProjects/openzzs/android/app/build/intermediates/cxx/Debug/6o3g5y5l/obj/x86_64 \\\n  -DCMAKE_RUNTIME_OUTPUT_DIRECTORY\u003d/home/tommicord/CLionProjects/openzzs/android/app/build/intermediates/cxx/Debug/6o3g5y5l/obj/x86_64 \\\n  -DCMAKE_BUILD_TYPE\u003dDebug \\\n  -B/home/tommicord/CLionProjects/openzzs/android/app/.cxx/Debug/6o3g5y5l/x86_64 \\\n  -GNinja \\\n  -DANDROID_STL\u003dc++_shared\n",
+    "file_": "/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/CMakeLists.txt",
+    "tag_": "debug|x86_64",
+    "diagnosticCode_": 0,
+    "memoizedIsInitialized": 1,
+    "unknownFields": {
+      "fields": {}
+    },
+    "memoizedSize": -1,
+    "memoizedHashCode": 0
+  },
+  {
+    "level_": 0,
+    "message_": "/home/tommicord/Android/Sdk/cmake/3.22.1/bin/cmake \\\n  -H/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp \\\n  -DCMAKE_SYSTEM_NAME\u003dAndroid \\\n  -DCMAKE_EXPORT_COMPILE_COMMANDS\u003dON \\\n  -DCMAKE_SYSTEM_VERSION\u003d24 \\\n  -DANDROID_PLATFORM\u003dandroid-24 \\\n  -DANDROID_ABI\u003dx86_64 \\\n  -DCMAKE_ANDROID_ARCH_ABI\u003dx86_64 \\\n  -DANDROID_NDK\u003d/home/tommicord/Android/Sdk/ndk/30.0.16248370 \\\n  -DCMAKE_ANDROID_NDK\u003d/home/tommicord/Android/Sdk/ndk/30.0.16248370 \\\n  -DCMAKE_TOOLCHAIN_FILE\u003d/home/tommicord/Android/Sdk/ndk/30.0.16248370/build/cmake/android.toolchain.cmake \\\n  -DCMAKE_MAKE_PROGRAM\u003d/home/tommicord/Android/Sdk/cmake/3.22.1/bin/ninja \\\n  \"-DCMAKE_CXX_FLAGS\u003d-std\u003dgnu++2b -fexceptions -frtti -O2 -DZZS_MLLEE_HOST\" \\\n  -DCMAKE_LIBRARY_OUTPUT_DIRECTORY\u003d/home/tommicord/CLionProjects/openzzs/android/app/build/intermediates/cxx/Debug/6o3g5y5l/obj/x86_64 \\\n  -DCMAKE_RUNTIME_OUTPUT_DIRECTORY\u003d/home/tommicord/CLionProjects/openzzs/android/app/build/intermediates/cxx/Debug/6o3g5y5l/obj/x86_64 \\\n  -DCMAKE_BUILD_TYPE\u003dDebug \\\n  -B/home/tommicord/CLionProjects/openzzs/android/app/.cxx/Debug/6o3g5y5l/x86_64 \\\n  -GNinja \\\n  -DANDROID_STL\u003dc++_shared\n",
+    "file_": "/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/CMakeLists.txt",
+    "tag_": "debug|x86_64",
+    "diagnosticCode_": 0,
+    "memoizedIsInitialized": 1,
+    "unknownFields": {
+      "fields": {}
+    },
+    "memoizedSize": -1,
+    "memoizedHashCode": 0
+  },
+  {
+    "level_": 0,
+    "message_": "Received process result: 0",
+    "file_": "/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/CMakeLists.txt",
+    "tag_": "debug|x86_64",
+    "diagnosticCode_": 0,
+    "memoizedIsInitialized": 1,
+    "unknownFields": {
+      "fields": {}
+    },
+    "memoizedSize": -1,
+    "memoizedHashCode": 0
+  },
+  {
+    "level_": 0,
+    "message_": "Exiting generation of /home/tommicord/CLionProjects/openzzs/android/app/.cxx/Debug/6o3g5y5l/x86_64/compile_commands.json.bin normally",
+    "file_": "/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/CMakeLists.txt",
+    "tag_": "debug|x86_64",
+    "diagnosticCode_": 0,
+    "memoizedIsInitialized": 1,
+    "unknownFields": {
+      "fields": {}
+    },
+    "memoizedSize": -1,
+    "memoizedHashCode": 0
+  },
+  {
+    "level_": 0,
+    "message_": "done executing cmake",
+    "file_": "/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/CMakeLists.txt",
+    "tag_": "debug|x86_64",
+    "diagnosticCode_": 0,
+    "memoizedIsInitialized": 1,
+    "unknownFields": {
+      "fields": {}
+    },
+    "memoizedSize": -1,
+    "memoizedHashCode": 0
+  },
+  {
+    "level_": 0,
+    "message_": "deleted unexpected build output /home/tommicord/CLionProjects/openzzs/android/app/build/intermediates/cxx/Debug/6o3g5y5l/obj/x86_64/libc++_shared.so in incremental regenerate",
+    "file_": "/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/CMakeLists.txt",
+    "tag_": "debug|x86_64",
+    "diagnosticCode_": 0,
+    "memoizedIsInitialized": 1,
+    "unknownFields": {
+      "fields": {}
+    },
+    "memoizedSize": -1,
+    "memoizedHashCode": 0
+  },
+  {
+    "level_": 0,
+    "message_": "hard linked /home/tommicord/CLionProjects/openzzs/android/app/.cxx/Debug/6o3g5y5l/x86_64/compile_commands.json to /home/tommicord/CLionProjects/openzzs/android/app/.cxx/tools/debug/x86_64/compile_commands.json",
+    "file_": "/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/CMakeLists.txt",
+    "tag_": "debug|x86_64",
+    "diagnosticCode_": 0,
+    "memoizedIsInitialized": 1,
+    "unknownFields": {
+      "fields": {}
+    },
+    "memoizedSize": -1,
+    "memoizedHashCode": 0
+  },
+  {
+    "level_": 0,
+    "message_": "JSON generation completed without problems",
+    "file_": "/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/CMakeLists.txt",
+    "tag_": "debug|x86_64",
+    "diagnosticCode_": 0,
+    "memoizedIsInitialized": 1,
+    "unknownFields": {
+      "fields": {}
+    },
+    "memoizedSize": -1,
+    "memoizedHashCode": 0
+  }
+]
