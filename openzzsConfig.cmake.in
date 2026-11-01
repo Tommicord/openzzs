@@ -1,0 +1,12 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+set_and_check(OPENZZS_INCLUDE_DIR "@CMAKE_INSTALL_FULL_INCLUDEDIR@/openzzs")
+
+set(OPENZZS_FOUND TRUE)
+set(OPENZZS_VERSION "@PROJECT_VERSION@")
+
+include("${CMAKE_CURRENT_LIST_DIR}/openzzs-targets.cmake")
+
+check_required_components(openzzs)

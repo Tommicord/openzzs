@@ -1,0 +1,9 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+includedir=@CMAKE_INSTALL_FULL_INCLUDEDIR@/openzzs
+libdir=@CMAKE_INSTALL_FULL_LIBDIR@
+
+Name: openzzs
+Description: OpenZZS ML/Power Outage Detection framework
+Version: @PROJECT_VERSION@
+Cflags: -I${includedir}
+Libs: -L${libdir} -lopenzzs-std -lopenzzs-sensor-driver

@@ -1,0 +1,38 @@
+{
+  "ACTIVATION relu 4096": {
+    "cycles": 8.42,
+    "unit": "ticks/element"
+  },
+  "ATTENTION seq8 hd8 h4": {
+    "cycles": 16.93,
+    "unit": "ticks/element"
+  },
+  "CONV1D dw k5 64->64 packlow": {
+    "cycles": 19.18,
+    "unit": "ticks/element"
+  },
+  "CONV1D dw k5 64->64 raw": {
+    "cycles": 15.64,
+    "unit": "ticks/element"
+  },
+  "LINEAR 128x128 i8 packlow": {
+    "cycles": 102.75,
+    "unit": "ticks/element"
+  },
+  "LINEAR 128x128 i8 raw": {
+    "cycles": 1.03,
+    "unit": "ticks/element"
+  },
+  "LINEAR 64x64 i8 raw": {
+    "cycles": 1.77,
+    "unit": "ticks/element"
+  },
+  "NORM 4096 win64": {
+    "cycles": 37.28,
+    "unit": "ticks/element"
+  },
+  "SOFTMAX 4096 win64": {
+    "cycles": 14.33,
+    "unit": "ticks/element"
+  }
+}

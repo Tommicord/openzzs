@@ -278,3 +278,72 @@ jobs:
       - name: Run mllee_bench smoke test
         run: |
           cmake-build-debug/mllee_bench
+
+  # ---------------------------------------------------------------------------
+  # bench-track
+  # Ubuntu, Release. Build mllee_bench, run it and compare every hot-path op
+  # against tools/benchmarks/baseline.json. Exits non-zero when any op
+  # regresses by more than 5%. Allowed to fail initially because the baseline
+  # is a local measurement artifact and is not part of the repository.
+  # ---------------------------------------------------------------------------
+  bench-track:
+    name: bench-track
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install CMake and Ninja
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends cmake ninja-build python3 || true
+
+      - name: Run mllee_bench regression tracking
+        run: |
+          python3 tools/mllee_bench_track.py
+
+  # ---------------------------------------------------------------------------
+  # fuzz
+  # Ubuntu, Debug, clang. Builds the libFuzzer target for the ONNX reader and
+  # runs it for 60 seconds. Allowed to fail initially while the target is new.
+  # ---------------------------------------------------------------------------
+  fuzz:
+    name: fuzz
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install CMake, Ninja and clang
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends cmake ninja-build clang || true
+
+      - name: Cache Catch2 FetchContent _deps
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/cmake-build-debug/_deps
+          key: fuzz-catch2-debug-${{ hashFiles('**/CMakeLists.txt') }}
+
+      - name: Configure with sanitizers
+        run: |
+          cmake -S . -B cmake-build-debug \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DOPENZZS_MLLEE_ASM=ON \
+            -DOPENZZS_BUILD_TESTS=OFF \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Build fuzz_onnx
+        run: |
+          cmake --build cmake-build-debug -j$(nproc) --target fuzz_onnx
+
+      - name: Run fuzz_onnx for 60 seconds
+        run: |
+          cmake-build-debug/fuzz_onnx -max_total_time=60 || true

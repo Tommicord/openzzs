@@ -14,8 +14,13 @@ if (CMAKE_BUILD_TYPE STREQUAL "Release")
   add_compile_options(
     -Oz
     -ffunction-sections
-    -fdata-sections)
-  add_link_options(-Wl,--gc-sections -Wl,--strip-all)
+    -fdata-sections
+    -ffile-prefix-map=${CMAKE_SOURCE_DIR}=.
+    -fdebug-prefix-map=${CMAKE_SOURCE_DIR}=.)
+  add_link_options(-Wl,--gc-sections -Wl,--strip-all -Wl,--build-id=none)
+  set(CMAKE_BUILD_RPATH "")
+  set(CMAKE_BUILD_RPATH_USE_ORIGIN TRUE)
+  set(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> qcD <TARGET> <LINK_FLAGS> <OBJECTS>")
   set(OPENZZS_RUNTIME_RELEASE_OPTIONS
     -fno-unwind-tables
     -fno-asynchronous-unwind-tables)
@@ -234,6 +239,16 @@ if (NOT CMAKE_CROSSCOMPILING)
   target_compile_definitions(mllee_bench PRIVATE ZZS_MLLEE_HOST)
 endif ()
 
+# libFuzzer target for the native ONNX / MLEE blob reader. Host only: libFuzzer
+# is not available for embedded cross targets.
+if (NOT CMAKE_CROSSCOMPILING)
+  add_executable(fuzz_onnx tools/fuzz_onnx_reader.cpp)
+  target_link_libraries(fuzz_onnx PRIVATE openzzs-mllee)
+  target_compile_definitions(fuzz_onnx PRIVATE ZZS_MLLEE_HOST)
+  target_compile_options(fuzz_onnx PRIVATE -fsanitize=fuzzer,address,undefined)
+  target_link_options(fuzz_onnx PRIVATE -fsanitize=fuzzer,address,undefined)
+endif ()
+
 find_program(ZZS_BASH bash)
 if (ZZS_BASH AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_mllee_ram.sh)
   add_custom_target(check_mllee_ram
@@ -272,6 +287,34 @@ if (OPENZZS_RUNTIME_RELEASE_OPTIONS)
   target_compile_options(openzzs PRIVATE ${OPENZZS_RUNTIME_RELEASE_OPTIONS})
   target_compile_options(openzzs-mllee INTERFACE ${OPENZZS_RUNTIME_RELEASE_OPTIONS})
 endif ()
+
+# ---------------------------------------------------------------------------
+# Install rules for find_package(openzzs) support.
+# ---------------------------------------------------------------------------
+include(GNUInstallDirs)
+
+# Public headers: all of std/ and mlee/ (there is no detail/ subdirectory).
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/std/
+        DESTINATION include/openzzs/std
+        FILES_MATCHING PATTERN "*.hpp")
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/mllee/
+        DESTINATION include/openzzs/mllee
+        FILES_MATCHING PATTERN "*.hpp")
+
+install(TARGETS openzzs-std openzzs-mllee openzzs-sensor-driver
+        ARCHIVE DESTINATION lib)
+
+# CMake config package.
+configure_file(openzzsConfig.cmake.in openzzsConfig.cmake @ONLY)
+configure_file(openzzs-targets.cmake.in openzzs-targets.cmake @ONLY)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/openzzsConfig.cmake
+              ${CMAKE_CURRENT_BINARY_DIR}/openzzs-targets.cmake
+        DESTINATION lib/cmake/openzzs)
+
+# pkgconfig file.
+configure_file(openzzs.pc.in openzzs.pc @ONLY)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/openzzs.pc
+        DESTINATION lib/pkgconfig)
 
 option(OPENZZS_BUILD_TESTS "Build the unit test suite" ON)
 

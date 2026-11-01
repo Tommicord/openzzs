@@ -399,5 +399,171 @@ struct MultiTaskParams {
     Trainable _M_loss;   /* scalar */
 };
 
+/* ======================================================================== */
+/* Tier 5: Distillation training pipeline                                   */
+/* ======================================================================== */
+
+/** @brief Forward hook: student CONV1D+Attention+3-head forward with a
+ *         teacher-blended soft target and MSE distillation loss. */
+[[nodiscard]] Status
+distill_forward_hook (StepContext &context, const int8_t *teacher_logits, uint32_t teacher_count) noexcept;
+
+/** @brief Trainable parameter block for the distill pipeline.
+ *
+ * Param layout: 0=conv_w 1=conv_b 2=qkv_w 3=qkv_b
+ *               4=head1_w 5=head1_b 6=head2_w 7=head2_b
+ *               8=head3_w 9=head3_b 10=output 11=loss (12 params)
+ */
+struct DistillParams {
+    /* Layer weights (require grad). */
+    Trainable _M_conv_w;  /* [conv_channels, feature_count * conv_kernel] */
+    Trainable _M_conv_b;  /* [conv_channels] */
+    Trainable _M_qkv_w;   /* [qkv_output, conv_output] */
+    Trainable _M_qkv_b;   /* [qkv_output] */
+    Trainable _M_head1_w; /* [head1_out, pooled] */
+    Trainable _M_head1_b; /* [head1_out] */
+    Trainable _M_head2_w; /* [head2_out, pooled] */
+    Trainable _M_head2_b; /* [head2_out] */
+    Trainable _M_head3_w; /* [head3_out, pooled] */
+    Trainable _M_head3_b; /* [head3_out] */
+
+    /* Layer activations / outputs (forward output + grad lanes). */
+    Trainable _M_output; /* [output_dim] */
+    Trainable _M_loss;   /* scalar */
+};
+
+/**
+ * @brief All caller-owned storage for distill training, sized by Config.
+ *
+ * Mirrors ConvAttnStorage: 16 KiB bump pool, 256 tape nodes, weight/code +
+ * grad buffers sized by ConvAttnDefaultConfig, activation buffers,
+ * input/target, loss.
+ */
+template <typename Config = ConvAttnDefaultConfig> struct DistillStorage {
+    /* Arena: 16 KiB bump-allocated pool for tape + saved tensors. */
+    alignas (4) uint8_t _M_arena[16384];
+    Pool _M_pool;
+
+    /* Tape nodes: 256 nodes. */
+    alignas (8) zzs::mllee::train::Node _M_nodes[256];
+    Tape _M_tape;
+
+    /* Conv1D weights: [conv_channels, feature_count * conv_kernel]. */
+    alignas (4) int8_t _M_conv_w_code[Config::conv_channels * Config::feature_count * Config::conv_kernel];
+    alignas (8) int16_t _M_conv_w_grad[Config::conv_channels * Config::feature_count * Config::conv_kernel];
+    alignas (4) int8_t _M_conv_b_code[Config::conv_channels];
+    alignas (8) int16_t _M_conv_b_grad[Config::conv_channels];
+
+    /* QKV LINEAR weights: [qkv_output, conv_output]. */
+    alignas (4) int8_t _M_qkv_w_code[Config::qkv_output * Config::conv_output];
+    alignas (8) int16_t _M_qkv_w_grad[Config::qkv_output * Config::conv_output];
+    alignas (4) int8_t _M_qkv_b_code[Config::qkv_output];
+    alignas (8) int16_t _M_qkv_b_grad[Config::qkv_output];
+
+    /* Output LINEAR weights: [output_dim, pooled]. */
+    alignas (4) int8_t _M_head1_w_code[Config::output_dim * Config::pooled];
+    alignas (8) int16_t _M_head1_w_grad[Config::output_dim * Config::pooled];
+    alignas (4) int8_t _M_head1_b_code[Config::output_dim];
+    alignas (8) int16_t _M_head1_b_grad[Config::output_dim];
+
+    alignas (4) int8_t _M_head2_w_code[Config::pooled];
+    alignas (8) int16_t _M_head2_w_grad[Config::pooled];
+    alignas (4) int8_t _M_head2_b_code[1];
+    alignas (8) int16_t _M_head2_b_grad[1];
+
+    alignas (4) int8_t _M_head3_w_code[Config::pooled];
+    alignas (8) int16_t _M_head3_w_grad[Config::pooled];
+    alignas (4) int8_t _M_head3_b_code[1];
+    alignas (8) int16_t _M_head3_b_grad[1];
+
+    /* Activation code + grad buffers. */
+    alignas (4) int8_t _M_conv_out_code[Config::conv_output];
+    alignas (8) int16_t _M_conv_out_grad[Config::conv_output];
+    alignas (4) int8_t _M_qkv_out_code[Config::qkv_output];
+    alignas (8) int16_t _M_qkv_out_grad[Config::qkv_output];
+    alignas (4) int8_t _M_attn_out_code[Config::attn_output];
+    alignas (8) int16_t _M_attn_out_grad[Config::attn_output];
+    alignas (4) int8_t _M_pool_out_code[Config::pooled];
+    alignas (8) int16_t _M_pool_out_grad[Config::pooled];
+    alignas (4) int8_t _M_output_code[Config::output_dim];
+    alignas (8) int16_t _M_output_grad[Config::output_dim];
+
+    /* Input + target (set per step). */
+    alignas (4) int8_t _M_input_code[Config::flat_input];
+    alignas (4) int8_t _M_target_code[Config::output_dim];
+
+    /* Loss. */
+    alignas (4) int8_t _M_loss_code[1];
+    alignas (8) int16_t _M_loss_grad[1];
+
+    DistillParams _M_params;
+
+    DistillStorage () noexcept;
+    void
+    reset () noexcept;
+};
+
+/** @brief Non-template alias for default-config storage. */
+using DistillStorageDefault = DistillStorage<ConvAttnDefaultConfig>;
+
+/**
+ * @brief OOP training pipeline for distillation.
+ *
+ * Wraps DistillStorage and owns the step loop.  run_training wires
+ * hooks._M_forward = distill_forward_hook.  All state is inside the object;
+ * no globals.
+ */
+template <typename Config = ConvAttnDefaultConfig> class DistillPipeline {
+  public:
+    DistillPipeline () noexcept = default;
+    DistillPipeline (const DistillPipeline &) = delete;
+    DistillPipeline &
+    operator= (const DistillPipeline &) = delete;
+
+    /** @brief Run training for @p steps on the compile-time dataset. */
+    [[nodiscard]] Status
+    run_training (uint32_t steps, zzs::base::Stdout &out) noexcept;
+
+    /** @brief Evaluate the model on the full dataset, report accuracy. */
+    [[nodiscard]] Status
+    evaluate_model (zzs::base::Stdout &out) noexcept;
+
+    /** @brief Access the underlying storage. */
+    [[nodiscard]] DistillStorage<Config> &
+    storage () noexcept {
+        return this->_M_storage;
+    }
+
+    [[nodiscard]] const DistillStorage<Config> &
+    storage () const noexcept {
+        return this->_M_storage;
+    }
+
+  private:
+    DistillStorage<Config> _M_storage;
+};
+
+/** @brief Non-template alias for the default-config pipeline. */
+using DistillPipelineDefault = DistillPipeline<ConvAttnDefaultConfig>;
+
+/** @brief Run training for @p steps on the compile-time dataset. */
+[[nodiscard]] Status
+run_training (DistillStorageDefault &storage, uint32_t steps, zzs::base::Stdout &out) noexcept;
+
+/** @brief Evaluate the model on the full dataset, report accuracy. */
+[[nodiscard]] Status
+evaluate_model (DistillStorageDefault &storage, zzs::base::Stdout &out) noexcept;
+
+/** @brief Wire up the DistillParams Trainable views to storage buffers. */
+template <typename Config>
+void
+setup_distill_params (DistillParams &params, int8_t *conv_w_code, int16_t *conv_w_grad, int8_t *conv_b_code,
+                      int16_t *conv_b_grad, int8_t *qkv_w_code, int16_t *qkv_w_grad, int8_t *qkv_b_code,
+                      int16_t *qkv_b_grad, int8_t *head1_w_code, int16_t *head1_w_grad, int8_t *head1_b_code,
+                      int16_t *head1_b_grad, int8_t *head2_w_code, int16_t *head2_w_grad, int8_t *head2_b_code,
+                      int16_t *head2_b_grad, int8_t *head3_w_code, int16_t *head3_w_grad, int8_t *head3_b_code,
+                      int16_t *head3_b_grad, int8_t *output_code, int16_t *output_grad, int8_t *loss_code,
+                      int16_t *loss_grad) noexcept;
+
 /** @} */
 } // namespace zzs::mllee_native::pipeline

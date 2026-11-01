@@ -1025,23 +1025,233 @@ ConvAttnPipeline<Config>::evaluate_model (zzs::base::Stdout &out) noexcept {
 }
 
 /* ======================================================================== */
-/* Tier 4: Multi-task training pipeline stubs                               */
+/* Tier 4: Multi-task training pipeline                                     */
 /* ======================================================================== */
 
-/** @brief Multi-task forward hook: stub (returns Status::OK, does nothing). */
+/* Multi-task loss: L = CE(head1, target) + 0.5*MSE(head2, target[1])
+ *                 + 0.5*MSE(head3, target[2]).  All arithmetic fixed-point,
+ *     int8 codes.  head2/head3 are scalar outputs; target[1]/target[2] are
+ *     single int8 codes (not one-hot). */
+
+/** @brief Multi-task forward hook: CONV1D -> QKV LINEAR -> ATTENTION ->
+ *         GLOBAL_AVG_POOL -> 3 LINEAR heads -> SOFTMAX(head1) +
+ *         multi-task loss.  All layers recorded on tape. */
 [[nodiscard]] inline Status
 multitask_forward_hook (StepContext &context) noexcept {
-    (void) context;
+    const int8_t *const input = context._M_input;
+    const uint32_t input_count = context._M_input_count;
+    const int8_t *const target = context._M_target;
+    const uint32_t target_count = context._M_target_count;
+
+    /* Param layout: 0=conv_w 1=conv_b 2=qkv_w 3=qkv_b
+     *             4=head1_w 5=head1_b 6=head2_w 7=head2_b
+     *             8=head3_w 9=head3_b 10=output 11=loss */
+    const Trainable &conv_w = context._M_params[0];
+    const Trainable &conv_b = context._M_params[1];
+    const Trainable &qkv_w = context._M_params[2];
+    const Trainable &qkv_b = context._M_params[3];
+    const Trainable &h1_w = context._M_params[4];
+    const Trainable &h1_b = context._M_params[5];
+    const Trainable &h2_w = context._M_params[6];
+    const Trainable &h2_b = context._M_params[7];
+    const Trainable &h3_w = context._M_params[8];
+    const Trainable &h3_b = context._M_params[9];
+    Trainable output = context._M_params[10];
+
+    /* Wrap raw input pointer as a Trainable view (no grad, forward-only). */
+    Trainable conv_input = Trainable::make (
+        const_cast<int8_t *> (input), nullptr,
+        zzs::mllee::train::Shape::tensor3 (1u, ConvAttnDefaultConfig::feature_count, ConvAttnDefaultConfig::seq_len),
+        0u);
+
+    /* ---------- Layer 1: CONV1D(38->8, k=3, causal): 190 -> 40 ---------- */
+    Trainable conv_out_code;
+    int8_t conv_out_mem[ConvAttnDefaultConfig::conv_output];
+    conv_out_code = Trainable::make (
+        conv_out_mem, nullptr,
+        zzs::mllee::train::Shape::tensor3 (1u, ConvAttnDefaultConfig::conv_channels, ConvAttnDefaultConfig::seq_len),
+        0u);
+    const ConvSpec conv_spec = make_conv_spec (1);
+    {
+        Pool &pool = *context._M_pool;
+        Tape &tape = *context._M_tape;
+        const Status st = conv_run (tape, conv_spec, conv_input, conv_w, conv_b, conv_out_code);
+        if (!status_ok (st))
+            return st;
+    }
+
+    /* ---------- Layer 2: LINEAR(40->120) QKV: 40 -> 120 ---------- */
+    Trainable qkv_out_code;
+    int8_t qkv_out_mem[ConvAttnDefaultConfig::qkv_output];
+    qkv_out_code = Trainable::make (qkv_out_mem, nullptr,
+                                    zzs::mllee::train::Shape::matrix (1u, ConvAttnDefaultConfig::qkv_output), 0u);
+    const LinearSpec qkv_spec = make_qkv_spec (1);
+    {
+        Pool &pool = *context._M_pool;
+        Tape &tape = *context._M_tape;
+        const Status st = linear_run (tape, qkv_spec, conv_out_code, qkv_w, qkv_b, qkv_out_code);
+        if (!status_ok (st))
+            return st;
+    }
+
+    /* Q/K/V view-split for ATTENTION (same pattern as conv_attn_forward_hook). */
+    const uint32_t attn_stride = ConvAttnDefaultConfig::attn_heads * ConvAttnDefaultConfig::attn_head_dim;
+    const uint32_t attn_elements = ConvAttnDefaultConfig::attn_output;
+    Trainable q_view = Trainable::make (qkv_out_code._M_code, nullptr,
+                                        zzs::mllee::train::Shape::matrix (ConvAttnDefaultConfig::seq_len, attn_stride),
+                                        zzs::mllee::train::Flag::RequiresGrad);
+    Trainable k_view = Trainable::make (qkv_out_code._M_code + attn_elements, nullptr,
+                                        zzs::mllee::train::Shape::matrix (ConvAttnDefaultConfig::seq_len, attn_stride),
+                                        zzs::mllee::train::Flag::RequiresGrad);
+    Trainable v_view = Trainable::make (qkv_out_code._M_code + 2 * attn_elements, nullptr,
+                                        zzs::mllee::train::Shape::matrix (ConvAttnDefaultConfig::seq_len, attn_stride),
+                                        zzs::mllee::train::Flag::RequiresGrad);
+
+    /* ---------- Layer 3: ATTENTION(seq=5,head_dim=4,heads=2): 120 -> 40 ---------- */
+    Trainable attn_out_code;
+    int8_t attn_out_mem[ConvAttnDefaultConfig::attn_output];
+    attn_out_code = Trainable::make (attn_out_mem, nullptr,
+                                     zzs::mllee::train::Shape::matrix (1u, ConvAttnDefaultConfig::attn_output), 0u);
+    const AttentionSpec attn_spec = make_attention_spec ();
+    {
+        Pool &pool = *context._M_pool;
+        Tape &tape = *context._M_tape;
+        const Status st = attention_run (tape, attn_spec, q_view, k_view, v_view, attn_out_code);
+        if (!status_ok (st))
+            return st;
+    }
+
+    /* ---------- Layer 4: GLOBAL_AVG_POOL(seq=5,ch=8): 40 -> 8 ---------- */
+    Trainable pool_out_code;
+    int8_t pool_out_mem[ConvAttnDefaultConfig::pooled];
+    pool_out_code = Trainable::make (
+        pool_out_mem, nullptr, zzs::mllee::train::Shape::tensor3 (1u, ConvAttnDefaultConfig::conv_channels, 1u), 0u);
+    const PoolSpec pool_spec = make_pool_spec (1);
+    {
+        Pool &pool = *context._M_pool;
+        Tape &tape = *context._M_tape;
+        const Status st = pool_run (tape, pool_spec, attn_out_code, pool_out_code);
+        if (!status_ok (st))
+            return st;
+    }
+
+    /* ---------- Layer 5: HEAD1 LINEAR(8->3): 8 -> 3 ---------- */
+    Trainable head1_out_code;
+    int8_t head1_out_mem[ConvAttnDefaultConfig::output_dim];
+    head1_out_code = Trainable::make (head1_out_mem, nullptr,
+                                      zzs::mllee::train::Shape::matrix (1u, ConvAttnDefaultConfig::output_dim), 0u);
+    const LinearSpec h1_spec = make_output_spec (1);
+    {
+        Pool &pool = *context._M_pool;
+        Tape &tape = *context._M_tape;
+        const Status st = linear_run (tape, h1_spec, pool_out_code, h1_w, h1_b, head1_out_code);
+        if (!status_ok (st))
+            return st;
+    }
+
+    /* ---------- Layer 6: HEAD2 LINEAR(8->1): 8 -> 1 ---------- */
+    Trainable head2_out_code;
+    int8_t head2_out_mem[1];
+    head2_out_code = Trainable::make (head2_out_mem, nullptr, zzs::mllee::train::Shape::matrix (1u, 1u), 0u);
+    LinearSpec h2l_spec = make_output_spec (1);
+    h2l_spec._M_out_features = 1u;
+    h2l_spec._M_op_id = 0xC007u;
+    {
+        Pool &pool = *context._M_pool;
+        Tape &tape = *context._M_tape;
+        const Status st = linear_run (tape, h2l_spec, pool_out_code, h2_w, h2_b, head2_out_code);
+        if (!status_ok (st))
+            return st;
+    }
+
+    /* ---------- Layer 7: HEAD3 LINEAR(8->1): 8 -> 1 ---------- */
+    Trainable head3_out_code;
+    int8_t head3_out_mem[1];
+    head3_out_code = Trainable::make (head3_out_mem, nullptr, zzs::mllee::train::Shape::matrix (1u, 1u), 0u);
+    LinearSpec h3l_spec = make_output_spec (1);
+    h3l_spec._M_out_features = 1u;
+    h3l_spec._M_op_id = 0xC008u;
+    {
+        Pool &pool = *context._M_pool;
+        Tape &tape = *context._M_tape;
+        const Status st = linear_run (tape, h3l_spec, pool_out_code, h3_w, h3_b, head3_out_code);
+        if (!status_ok (st))
+            return st;
+    }
+
+    /* ---------- Layer 8: SOFTMAX(head1, in-place) ---------- */
+    {
+        Pool &pool = *context._M_pool;
+        Tape &tape = *context._M_tape;
+        const Status st = softmax_run (tape, make_softmax_spec (), head1_out_code, nullptr, head1_out_code);
+        if (!status_ok (st))
+            return st;
+    }
+
+    /* ---------- Multi-task loss ---------- */
+    Trainable pred = head1_out_code;
+    /* Find the target class index from the one-hot target (127 = true class). */
+    uint16_t target_class = 0;
+    for (uint32_t i = 0; i < target_count; ++i) {
+        if (target[i] == 127) {
+            target_class = static_cast<uint16_t> (i);
+            break;
+        }
+    }
+
+    LossResult ce_result;
+    {
+        Pool &pool = *context._M_pool;
+        Tape &tape = *context._M_tape;
+        const Status st = cross_entropy_forward (pool, &tape, pred, target_class, ce_result);
+        if (!status_ok (st))
+            return st;
+    }
+
+    /* head2 MSE: head2_out[0] vs target[1] */
+    Trainable head2_pred = head2_out_code;
+    int8_t conf_target_mem[1] = {static_cast<int8_t> (target_count > 1 ? target[1] : 0)};
+    Trainable conf_target = Trainable::make (conf_target_mem, nullptr, zzs::mllee::train::Shape::vector (1u), 0u);
+    LossResult mse2_result;
+    {
+        Pool &pool = *context._M_pool;
+        Tape &tape = *context._M_tape;
+        const Status st = mse_forward (pool, &tape, head2_pred, conf_target, mse2_result);
+        if (!status_ok (st))
+            return st;
+    }
+
+    /* head3 MSE: head3_out[0] vs target[2] */
+    Trainable head3_pred = head3_out_code;
+    int8_t time_target_mem[1] = {static_cast<int8_t> (target_count > 2 ? target[2] : 0)};
+    Trainable time_target = Trainable::make (time_target_mem, nullptr, zzs::mllee::train::Shape::vector (1u), 0u);
+    LossResult mse3_result;
+    {
+        Pool &pool = *context._M_pool;
+        Tape &tape = *context._M_tape;
+        const Status st = mse_forward (pool, &tape, head3_pred, time_target, mse3_result);
+        if (!status_ok (st))
+            return st;
+    }
+
+    /* Combine losses: L = CE + 0.5*MSE2 + 0.5*MSE3 (Q7 fixed point). */
+    const int32_t loss_q7 = ce_result._M_loss_q7 + (mse2_result._M_loss_q7 >> 1) + (mse3_result._M_loss_q7 >> 1);
+    output.set_code (0, loss_q7);
+
+    /* Publish loss node: use CE's node as the primary tape entry. */
+    context._M_loss = ce_result._M_node;
+    context._M_loss_q7 = loss_q7;
+
     return Status::OK;
 }
 
-/** @brief Multi-task backward function: stub (returns Status::OK, does nothing). */
+/** @brief Multi-task backward: delegate to mse_backward; tape reverse walk
+ *         propagates through SOFTMAX -> HEAD1 -> GLOBAL_AVG_POOL -> ATTENTION
+ *         -> QKV LINEAR -> CONV1D. */
 [[nodiscard]] inline Status
 multitask_backward_fn (const Trainable &output, const Trainable &grad_output, GradContext &context) noexcept {
     (void) output;
-    (void) grad_output;
-    (void) context;
-    return Status::OK;
+    return mse_backward (output, grad_output, context);
 }
 
 /** @brief Distill forward hook: student CONV1D+Attention+3-head forward with a
@@ -1211,6 +1421,302 @@ distill_forward_hook (StepContext &context, const int8_t *teacher_logits, uint32
     /* Publish the loss node to the trainer context. */
     context._M_loss = loss_result._M_node;
     context._M_loss_q7 = loss_result._M_loss_q7;
+
+    return Status::OK;
+}
+
+/* ======================================================================== */
+/* Tier 5: Distillation training pipeline                                   */
+/* ======================================================================== */
+
+namespace {
+
+/** @brief Q15 code step: 32768 / 127 ≈ 258. */
+inline constexpr int32_t kDistillCodeStep = 258;
+
+/** @brief Adapter matching Trainer::ForwardHook; feeds the one-hot target as
+ *         the teacher logits (hard distillation) into distill_forward_hook. */
+[[nodiscard]] inline Status
+distill_forward_adapter (StepContext &context) noexcept {
+    return distill_forward_hook (context, context._M_target, context._M_target_count);
+}
+
+} // namespace
+
+/** @brief Wire up the DistillParams Trainable views to storage buffers. */
+template <typename Config>
+void
+setup_distill_params (DistillParams &params, int8_t *conv_w_code, int16_t *conv_w_grad, int8_t *conv_b_code,
+                      int16_t *conv_b_grad, int8_t *qkv_w_code, int16_t *qkv_w_grad, int8_t *qkv_b_code,
+                      int16_t *qkv_b_grad, int8_t *head1_w_code, int16_t *head1_w_grad, int8_t *head1_b_code,
+                      int16_t *head1_b_grad, int8_t *head2_w_code, int16_t *head2_w_grad, int8_t *head2_b_code,
+                      int16_t *head2_b_grad, int8_t *head3_w_code, int16_t *head3_w_grad, int8_t *head3_b_code,
+                      int16_t *head3_b_grad, int8_t *output_code, int16_t *output_grad, int8_t *loss_code,
+                      int16_t *loss_grad) noexcept {
+    params._M_conv_w = Trainable::make (
+        conv_w_code, conv_w_grad,
+        zzs::mllee::train::Shape::matrix (static_cast<uint16_t> (Config::conv_channels),
+                                          static_cast<uint16_t> (Config::feature_count * Config::conv_kernel)),
+        zzs::mllee::train::Flag::RequiresGrad);
+    params._M_conv_b = Trainable::make (
+        conv_b_code, conv_b_grad, zzs::mllee::train::Shape::vector (static_cast<uint16_t> (Config::conv_channels)),
+        zzs::mllee::train::Flag::RequiresGrad | zzs::mllee::train::Flag::BiasLike);
+    params._M_qkv_w = Trainable::make (qkv_w_code, qkv_w_grad,
+                                       zzs::mllee::train::Shape::matrix (static_cast<uint16_t> (Config::qkv_output),
+                                                                         static_cast<uint16_t> (Config::conv_output)),
+                                       zzs::mllee::train::Flag::RequiresGrad);
+    params._M_qkv_b = Trainable::make (qkv_b_code, qkv_b_grad,
+                                       zzs::mllee::train::Shape::vector (static_cast<uint16_t> (Config::qkv_output)),
+                                       zzs::mllee::train::Flag::RequiresGrad | zzs::mllee::train::Flag::BiasLike);
+    params._M_head1_w = Trainable::make (head1_w_code, head1_w_grad,
+                                         zzs::mllee::train::Shape::matrix (static_cast<uint16_t> (Config::output_dim),
+                                                                           static_cast<uint16_t> (Config::pooled)),
+                                         zzs::mllee::train::Flag::RequiresGrad);
+    params._M_head1_b = Trainable::make (head1_b_code, head1_b_grad,
+                                         zzs::mllee::train::Shape::vector (static_cast<uint16_t> (Config::output_dim)),
+                                         zzs::mllee::train::Flag::RequiresGrad | zzs::mllee::train::Flag::BiasLike);
+    params._M_head2_w = Trainable::make (
+        head2_w_code, head2_w_grad,
+        zzs::mllee::train::Shape::matrix (static_cast<uint16_t> (1u), static_cast<uint16_t> (Config::pooled)),
+        zzs::mllee::train::Flag::RequiresGrad);
+    params._M_head2_b =
+        Trainable::make (head2_b_code, head2_b_grad, zzs::mllee::train::Shape::vector (static_cast<uint16_t> (1u)),
+                         zzs::mllee::train::Flag::RequiresGrad | zzs::mllee::train::Flag::BiasLike);
+    params._M_head3_w = Trainable::make (
+        head3_w_code, head3_w_grad,
+        zzs::mllee::train::Shape::matrix (static_cast<uint16_t> (1u), static_cast<uint16_t> (Config::pooled)),
+        zzs::mllee::train::Flag::RequiresGrad);
+    params._M_head3_b =
+        Trainable::make (head3_b_code, head3_b_grad, zzs::mllee::train::Shape::vector (static_cast<uint16_t> (1u)),
+                         zzs::mllee::train::Flag::RequiresGrad | zzs::mllee::train::Flag::BiasLike);
+
+    /* Activations: code + grad lanes, require grad so backward writes into them. */
+    params._M_output =
+        Trainable::make (output_code, output_grad, zzs::mllee::train::Shape::matrix (1u, Config::output_dim),
+                         zzs::mllee::train::Flag::RequiresGrad);
+    params._M_loss = Trainable::make (loss_code, loss_grad, zzs::mllee::train::Shape::scalar (), 0u);
+}
+
+/** @brief DistillStorage constructor: wire up pool and tape. */
+template <typename Config>
+DistillStorage<Config>::DistillStorage () noexcept
+    : _M_pool (this->_M_arena, sizeof (this->_M_arena)), _M_tape (this->_M_nodes, 256, this->_M_pool) {
+}
+
+/** @brief Reset all training state to zero. */
+template <typename Config>
+void
+DistillStorage<Config>::reset () noexcept {
+    auto &s = *this;
+    for (uint32_t i = 0; i < Config::conv_channels * Config::feature_count * Config::conv_kernel; ++i) {
+        s._M_conv_w_code[i] = 0;
+        s._M_conv_w_grad[i] = 0;
+    }
+    for (uint32_t i = 0; i < Config::conv_channels; ++i) {
+        s._M_conv_b_code[i] = 0;
+        s._M_conv_b_grad[i] = 0;
+    }
+    for (uint32_t i = 0; i < Config::qkv_output * Config::conv_output; ++i) {
+        s._M_qkv_w_code[i] = 0;
+        s._M_qkv_w_grad[i] = 0;
+    }
+    for (uint32_t i = 0; i < Config::qkv_output; ++i) {
+        s._M_qkv_b_code[i] = 0;
+        s._M_qkv_b_grad[i] = 0;
+    }
+    for (uint32_t i = 0; i < Config::output_dim * Config::pooled; ++i) {
+        s._M_head1_w_code[i] = 0;
+        s._M_head1_w_grad[i] = 0;
+    }
+    for (uint32_t i = 0; i < Config::output_dim; ++i) {
+        s._M_head1_b_code[i] = 0;
+        s._M_head1_b_grad[i] = 0;
+    }
+    for (uint32_t i = 0; i < Config::pooled; ++i) {
+        s._M_head2_w_code[i] = 0;
+        s._M_head2_w_grad[i] = 0;
+    }
+    s._M_head2_b_code[0] = 0;
+    s._M_head2_b_grad[0] = 0;
+    for (uint32_t i = 0; i < Config::pooled; ++i) {
+        s._M_head3_w_code[i] = 0;
+        s._M_head3_w_grad[i] = 0;
+    }
+    s._M_head3_b_code[0] = 0;
+    s._M_head3_b_grad[0] = 0;
+    for (uint32_t i = 0; i < Config::conv_output; ++i) {
+        s._M_conv_out_code[i] = 0;
+        s._M_conv_out_grad[i] = 0;
+    }
+    for (uint32_t i = 0; i < Config::qkv_output; ++i) {
+        s._M_qkv_out_code[i] = 0;
+        s._M_qkv_out_grad[i] = 0;
+    }
+    for (uint32_t i = 0; i < Config::attn_output; ++i) {
+        s._M_attn_out_code[i] = 0;
+        s._M_attn_out_grad[i] = 0;
+    }
+    for (uint32_t i = 0; i < Config::pooled; ++i) {
+        s._M_pool_out_code[i] = 0;
+        s._M_pool_out_grad[i] = 0;
+    }
+    for (uint32_t i = 0; i < Config::output_dim; ++i) {
+        s._M_output_code[i] = 0;
+        s._M_output_grad[i] = 0;
+    }
+    s._M_loss_code[0] = 0;
+    s._M_loss_grad[0] = 0;
+    for (uint32_t i = 0; i < Config::flat_input; ++i)
+        s._M_input_code[i] = 0;
+    for (uint32_t i = 0; i < Config::output_dim; ++i)
+        s._M_target_code[i] = 0;
+
+    s._M_pool.reset ();
+}
+
+/** @brief Run training for @p steps on the compile-time dataset. */
+template <typename Config>
+[[nodiscard]] Status
+DistillPipeline<Config>::run_training (uint32_t steps, zzs::base::Stdout &out) noexcept {
+    (void) out;
+
+    auto &storage = this->_M_storage;
+    setup_distill_params<Config> (
+        storage._M_params, storage._M_conv_w_code, storage._M_conv_w_grad, storage._M_conv_b_code,
+        storage._M_conv_b_grad, storage._M_qkv_w_code, storage._M_qkv_w_grad, storage._M_qkv_b_code,
+        storage._M_qkv_b_grad, storage._M_head1_w_code, storage._M_head1_w_grad, storage._M_head1_b_code,
+        storage._M_head1_b_grad, storage._M_head2_w_code, storage._M_head2_w_grad, storage._M_head2_b_code,
+        storage._M_head2_b_grad, storage._M_head3_w_code, storage._M_head3_w_grad, storage._M_head3_b_code,
+        storage._M_head3_b_grad, storage._M_output_code, storage._M_output_grad, storage._M_loss_code,
+        storage._M_loss_grad);
+
+    Pool &pool = storage._M_pool;
+    Tape &tape = storage._M_tape;
+
+    StepContext ctx;
+    ctx._M_pool = &pool;
+    ctx._M_tape = &tape;
+    ctx._M_batch = 1;
+    ctx._M_input = storage._M_input_code;
+    ctx._M_input_count = Config::flat_input;
+    ctx._M_target = storage._M_target_code;
+    ctx._M_target_count = Config::output_dim;
+
+    /* Contiguous param array for the trainer:
+     * [conv_w, conv_b, qkv_w, qkv_b,
+     *  head1_w, head1_b, head2_w, head2_b, head3_w, head3_b,
+     *  output, loss] */
+    Trainable param_array[12] = {
+        storage._M_params._M_conv_w,  storage._M_params._M_conv_b,  storage._M_params._M_qkv_w,
+        storage._M_params._M_qkv_b,   storage._M_params._M_head1_w, storage._M_params._M_head1_b,
+        storage._M_params._M_head2_w, storage._M_params._M_head2_b, storage._M_params._M_head3_w,
+        storage._M_params._M_head3_b, storage._M_params._M_output,  storage._M_params._M_loss,
+    };
+    ctx._M_params = param_array;
+    ctx._M_param_count = 12;
+
+    StepHooks hooks;
+    hooks._M_forward = distill_forward_adapter;
+    hooks._M_schedule = constant_lr_schedule;
+    hooks._M_post_grad = post_grad_hook;
+    hooks._M_update = sgd_update_hook;
+
+    Trainer trainer (ctx, hooks);
+    Status st = trainer.configure (param_array, 12, 1);
+    if (!status_ok (st))
+        return st;
+
+    for (uint32_t step = 0; step < steps; ++step) {
+        const uint32_t sample_idx = step % dataset_count ();
+        const auto &sample = dataset_sample (sample_idx);
+        flatten_sample (sample, storage._M_input_code);
+        one_hot_target (sample._M_label, storage._M_target_code);
+
+        StepStats stats;
+        st = trainer.step (stats);
+        if (!status_ok (st))
+            return st;
+    }
+
+    return Status::OK;
+}
+
+/** @brief Evaluate the model on the full dataset, report accuracy. */
+template <typename Config>
+[[nodiscard]] Status
+DistillPipeline<Config>::evaluate_model (zzs::base::Stdout &out) noexcept {
+    (void) out;
+
+    auto &storage = this->_M_storage;
+    setup_distill_params<Config> (
+        storage._M_params, storage._M_conv_w_code, storage._M_conv_w_grad, storage._M_conv_b_code,
+        storage._M_conv_b_grad, storage._M_qkv_w_code, storage._M_qkv_w_grad, storage._M_qkv_b_code,
+        storage._M_qkv_b_grad, storage._M_head1_w_code, storage._M_head1_w_grad, storage._M_head1_b_code,
+        storage._M_head1_b_grad, storage._M_head2_w_code, storage._M_head2_w_grad, storage._M_head2_b_code,
+        storage._M_head2_b_grad, storage._M_head3_w_code, storage._M_head3_w_grad, storage._M_head3_b_code,
+        storage._M_head3_b_grad, storage._M_output_code, storage._M_output_grad, storage._M_loss_code,
+        storage._M_loss_grad);
+
+    Pool &pool = storage._M_pool;
+    Tape &tape = storage._M_tape;
+
+    StepContext ctx;
+    ctx._M_pool = &pool;
+    ctx._M_tape = &tape;
+    ctx._M_batch = 1;
+    ctx._M_input = storage._M_input_code;
+    ctx._M_input_count = Config::flat_input;
+    ctx._M_target = storage._M_target_code;
+    ctx._M_target_count = Config::output_dim;
+
+    Trainable param_array[12] = {
+        storage._M_params._M_conv_w,  storage._M_params._M_conv_b,  storage._M_params._M_qkv_w,
+        storage._M_params._M_qkv_b,   storage._M_params._M_head1_w, storage._M_params._M_head1_b,
+        storage._M_params._M_head2_w, storage._M_params._M_head2_b, storage._M_params._M_head3_w,
+        storage._M_params._M_head3_b, storage._M_params._M_output,  storage._M_params._M_loss,
+    };
+    ctx._M_params = param_array;
+    ctx._M_param_count = 12;
+
+    StepHooks hooks;
+    hooks._M_forward = distill_forward_adapter;
+
+    Trainer trainer (ctx, hooks);
+    Status st = trainer.configure (param_array, 12, 1);
+    if (!status_ok (st))
+        return st;
+
+    uint32_t correct = 0;
+    uint32_t total = 0;
+
+    for (uint32_t i = 0; i < dataset_count (); ++i) {
+        const auto &sample = dataset_sample (i);
+        flatten_sample (sample, storage._M_input_code);
+        one_hot_target (sample._M_label, storage._M_target_code);
+
+        ctx._M_input = storage._M_input_code;
+        ctx._M_input_count = Config::flat_input;
+        ctx._M_target = storage._M_target_code;
+        ctx._M_target_count = Config::output_dim;
+
+        StepStats eval_stats;
+        st = trainer.evaluate (eval_stats);
+        if (!status_ok (st))
+            return st;
+
+        int32_t best_code = storage._M_output_code[0];
+        uint32_t best_idx = 0;
+        for (uint32_t c = 1; c < Config::output_dim; ++c) {
+            if (storage._M_output_code[c] > best_code) {
+                best_code = storage._M_output_code[c];
+                best_idx = c;
+            }
+        }
+
+        ++total;
+        if (best_idx == sample._M_label)
+            ++correct;
+    }
 
     return Status::OK;
 }
