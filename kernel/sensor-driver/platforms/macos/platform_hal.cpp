@@ -37,6 +37,8 @@
 #include "kernel/kernel_clock_source.hpp"
 #include "kernel/kernel_config.hpp"
 
+#include "std/maybe.hpp"
+
 #include <cstdint>
 
 namespace zzs::kernel::sensor::driver::platform::macos
@@ -145,7 +147,7 @@ private:
 
 /** @brief Monotonic nanoseconds via mach_absolute_time(). */
 [[nodiscard]] uint64_t
-macos_now_ns (void) noexcept
+_S_macos_now_ns (void) noexcept
 {
 #ifdef __APPLE__
     mach_timebase_info_data_t tb;
@@ -156,20 +158,20 @@ macos_now_ns (void) noexcept
     return 0ull;
 }
 
-static MacosI2cBus i2c_accel_bus (0, 0x6Au);
-static MacosI2cBus i2c_mag_bus (0, 0x1Cu);
-static MacosI2cBus i2c_light_bus (0, 0x39u);
+static MacosI2cBus _S_i2c_accel_bus (0, 0x6Au);
+static MacosI2cBus _S_i2c_mag_bus (0, 0x1Cu);
+static MacosI2cBus _S_i2c_light_bus (0, 0x39u);
 
-static sensors::Lsm6dsoAccelDriver accel_driver (&i2c_accel_bus);
-static sensors::Lsm6dsoGyroDriver gyro_driver (&i2c_accel_bus);
-static sensors::Lis3mdlMagDriver mag_driver (&i2c_mag_bus);
-static sensors::Tsl2561LightDriver light_driver (&i2c_light_bus);
-static sensors::Ics43434SoundDriver sound_driver (&i2c_light_bus, nullptr);
+static sensors::Lsm6dsoAccelDriver _S_accel_driver (&_S_i2c_accel_bus);
+static sensors::Lsm6dsoGyroDriver _S_gyro_driver (&_S_i2c_accel_bus);
+static sensors::Lis3mdlMagDriver _S_mag_driver (&_S_i2c_mag_bus);
+static sensors::Tsl2561LightDriver _S_light_driver (&_S_i2c_light_bus);
+static sensors::Ics43434SoundDriver _S_sound_driver (&_S_i2c_light_bus, nullptr);
 
-static zzs::kernel::hal::_S_SensorHal hal_vtable;
+static zzs::kernel::hal::_S_SensorHal _S_hal_vtable;
 
 [[nodiscard]] zzs::kernel::Status
-hal_read_sample (sensor::Sample &out) noexcept
+_S_hal_read_sample (sensor::Sample &out) noexcept
 {
     static uint8_t idx = 0u;
     zzs::kernel::Status st = zzs::kernel::Status::STALE;
@@ -177,11 +179,11 @@ hal_read_sample (sensor::Sample &out) noexcept
         {
         switch (idx)
             {
-            case 0u: st = accel_driver.read_sample (out); break;
-            case 1u: st = gyro_driver.read_sample (out); break;
-            case 2u: st = mag_driver.read_sample (out); break;
-            case 3u: st = light_driver.read_sample (out); break;
-            default: st = sound_driver.read_sample (out); break;
+            case 0u: st = _S_accel_driver.read_sample (out); break;
+            case 1u: st = _S_gyro_driver.read_sample (out); break;
+            case 2u: st = _S_mag_driver.read_sample (out); break;
+            case 3u: st = _S_light_driver.read_sample (out); break;
+            default: st = _S_sound_driver.read_sample (out); break;
             }
         idx = static_cast<uint8_t> ((idx + 1u) % 5u);
         if (zzs::kernel::status_ok (st))
@@ -191,41 +193,41 @@ hal_read_sample (sensor::Sample &out) noexcept
 }
 
 [[nodiscard]] zzs::kernel::Status
-hal_set_channel_enabled (sensor::Channel ch, bool enabled) noexcept
+_S_hal_set_channel_enabled (sensor::Channel ch, bool enabled) noexcept
 {
-    (void) accel_driver.set_channel_enabled (ch, enabled);
-    (void) gyro_driver.set_channel_enabled (ch, enabled);
-    (void) mag_driver.set_channel_enabled (ch, enabled);
-    (void) light_driver.set_channel_enabled (ch, enabled);
-    (void) sound_driver.set_channel_enabled (ch, enabled);
+    (void) _S_accel_driver.set_channel_enabled (ch, enabled);
+    (void) _S_gyro_driver.set_channel_enabled (ch, enabled);
+    (void) _S_mag_driver.set_channel_enabled (ch, enabled);
+    (void) _S_light_driver.set_channel_enabled (ch, enabled);
+    (void) _S_sound_driver.set_channel_enabled (ch, enabled);
     return zzs::kernel::Status::OK;
 }
 
 [[nodiscard]] uint32_t
-hal_channel_rate_hz (sensor::Channel ch) noexcept
+_S_hal_channel_rate_hz (sensor::Channel ch) noexcept
 {
     return sensor::channel_rate_hz (ch);
 }
 
 [[nodiscard]] zzs::kernel::Status
-hal_init (void) noexcept
+_S_hal_init (void) noexcept
 {
-    zzs::kernel::Status st = clock_source_install (&macos_now_ns);
+    zzs::kernel::Status st = clock_source_install (&_S_macos_now_ns);
     if (!zzs::kernel::status_ok (st))
         return st;
-    st = accel_driver.init ();
+    st = _S_accel_driver.init ();
     if (!zzs::kernel::status_ok (st))
         return st;
-    st = gyro_driver.init ();
+    st = _S_gyro_driver.init ();
     if (!zzs::kernel::status_ok (st))
         return st;
-    st = mag_driver.init ();
+    st = _S_mag_driver.init ();
     if (!zzs::kernel::status_ok (st))
         return st;
-    st = light_driver.init ();
+    st = _S_light_driver.init ();
     if (!zzs::kernel::status_ok (st))
         return st;
-    st = sound_driver.init ();
+    st = _S_sound_driver.init ();
     if (!zzs::kernel::status_ok (st))
         return st;
     return zzs::kernel::Status::OK;
@@ -234,14 +236,13 @@ hal_init (void) noexcept
 } // namespace
 
 [[nodiscard]] const zzs::kernel::hal::_S_SensorHal *
-create_macos_sensor_hal (const PlatformConfig &config) noexcept
+create_macos_sensor_hal () noexcept
 {
-    (void) config;
-    hal_vtable._M_read_sample = &hal_read_sample;
-    hal_vtable._M_set_channel_enabled = &hal_set_channel_enabled;
-    hal_vtable._M_channel_rate_hz = &hal_channel_rate_hz;
-    hal_vtable._M_init = &hal_init;
-    return &hal_vtable;
+    _S_hal_vtable._M_read_sample = &_S_hal_read_sample;
+    _S_hal_vtable._M_set_channel_enabled = &_S_hal_set_channel_enabled;
+    _S_hal_vtable._M_channel_rate_hz = &_S_hal_channel_rate_hz;
+    _S_hal_vtable._M_init = &_S_hal_init;
+    return &_S_hal_vtable;
 }
 
 } // namespace zzs::kernel::sensor::driver::platform::macos

@@ -27,7 +27,6 @@
 #  include <linux/i2c-dev.h>
 #  include <linux/spi/spidev.h>
 #  include <time.h>
-#  include <cstdlib>
 #endif
 
 #include "kernel/sensor-driver/bus/i2c/i2c_bitbang.hpp"
@@ -38,41 +37,43 @@
 #include "kernel/sensor-driver/sensors/tsl2561/tsl2561.hpp"
 #include "kernel/sensor-driver/sensors/veml7700/veml7700.hpp"
 #include "kernel/sensor-driver/sensors/ics43434/ics43434.hpp"
+#include "kernel/sensor-driver/stream/sensor_stream.hpp"
 #include "kernel/kernel_clock_source.hpp"
 #include "kernel/kernel_config.hpp"
 
+#include "std/maybe.hpp"
 #include "std/fmt.hpp"
 
 #include <cstdint>
+#include <cstring>
 
-/* `linux` is a predefined macro (=1) on GCC/Linux; undef it so the
- * `platform::linux` namespace declaration parses correctly. */
-#undef linux
 namespace zzs::kernel::sensor::driver::platform::linux
 {
 
-namespace {
-
-/** @brief Build a /dev/i2c-N device path from a bus number using format_into. */
-[[nodiscard]] bool
-i2c_dev_path (int bus, char (&out)[32]) noexcept
-{
-    const unsigned int n = zzs::base::format_into (out, "/dev/i2c-{}", bus);
-    return n > 0u && n < sizeof (out);
 }
+
+namespace {
 
 /** @brief Platform-native Linux /dev/i2c-N bus adapter. */
 class LinuxI2cBus : public bus::BusInterface
 {
 public:
-    explicit LinuxI2cBus (const char *dev_path, uint8_t addr) noexcept
+    explicit LinuxI2cBus (int bus_num, uint8_t addr) noexcept
         : _M_fd (-1)
         , _M_addr (addr)
+        , _M_open_failed (false)
     {
 #ifdef __linux__
-        _M_fd = ::open (dev_path, O_RDWR);
-        if (_M_fd >= 0)
-            ::ioctl (_M_fd, I2C_SLAVE, _M_addr);
+        char path[32];
+        const unsigned int n = zzs::base::format_into (path, "/dev/i2c-{}", bus_num);
+        if (n > 0u && n < sizeof (path))
+            {
+            _M_fd = ::open (path, O_RDWR);
+            if (_M_fd >= 0)
+                ::ioctl (_M_fd, I2C_SLAVE, _M_addr);
+            else
+                _M_open_failed = true;
+            }
         else
             _M_open_failed = true;
 #endif
@@ -154,22 +155,30 @@ public:
 private:
     int _M_fd;
     uint8_t _M_addr;
-    bool _M_open_failed = false;
+    bool _M_open_failed;
 };
 
 /** @brief Platform-native Linux /dev/spidev-N bus adapter. */
 class LinuxSpiBus : public bus::BusInterface
 {
 public:
-    explicit LinuxSpiBus (const char *dev_path) noexcept
+    explicit LinuxSpiBus (int bus_num) noexcept
         : _M_fd (-1)
         , _M_mode (0)
         , _M_bits (8)
         , _M_speed (1000000u)
+        , _M_open_failed (false)
     {
 #ifdef __linux__
-        _M_fd = ::open (dev_path, O_RDWR);
-        if (_M_fd < 0)
+        char path[32];
+        const unsigned int n = zzs::base::format_into (path, "/dev/spidev{}.0", bus_num);
+        if (n > 0u && n < sizeof (path))
+            {
+            _M_fd = ::open (path, O_RDWR);
+            if (_M_fd < 0)
+                _M_open_failed = true;
+            }
+        else
             _M_open_failed = true;
 #endif
     }
@@ -264,277 +273,136 @@ private:
     uint8_t _M_mode;
     uint8_t _M_bits;
     uint32_t _M_speed;
-    bool _M_open_failed = false;
+    bool _M_open_failed;
 };
 
-/** @brief Monotonic nanoseconds via CLOCK_MONOTONIC_RAW. */
-[[nodiscard]] uint64_t
-linux_now_ns (void) noexcept
+/** @brief Shared scan ring: drivers burst-fill it via read_samples(), the HAL
+ *         drains it one sample per _S_hal_read_sample() call.  Fixed 16-sample
+ *         depth, drop-oldest when full, no heap. */
+static stream::ScanRing _S_ring (16u);
+
+/** @brief Burst-fill the shared scan ring from one driver using read_samples().
+ *         Returns OK even when the driver reports STALE (no new data). */
+[[nodiscard]] zzs::kernel::Status
+_S_fill_ring (sensors::SensorDriver *driver) noexcept
 {
-#ifdef __linux__
-    struct timespec ts;
-    if (::clock_gettime (CLOCK_MONOTONIC_RAW, &ts) == 0)
-    {
-        uint64_t sec = 0ull;
-        uint64_t nsec = 0ull;
-        if (__builtin_mul_overflow (static_cast<uint64_t> (ts.tv_sec),
-                                    1000000000ull, &sec))
-            return 0ull;
-        nsec = static_cast<uint64_t> (ts.tv_nsec);
-        if (__builtin_add_overflow (sec, nsec, &sec))
-            return 0ull;
-        return sec;
-    }
-#endif
-    return 0ull;
+    if (driver == nullptr)
+        return zzs::kernel::Status::OK;
+    sensor::Sample buf[8u];
+    uint16_t filled = 0u;
+    zzs::kernel::Status st = driver->read_samples (buf, 8u, &filled);
+    if (!zzs::kernel::status_ok (st) && st != zzs::kernel::Status::STALE)
+        return st;
+    for (uint16_t i = 0u; i < filled; ++i)
+        _S_ring.push (buf[i]);
+    return zzs::kernel::Status::OK;
 }
 
-/** File-scope storage for config-driven buses/drivers (placement new). */
-struct HalObjects
-{
-    LinuxI2cBus *i2c_accel = nullptr;
-    LinuxI2cBus *i2c_mag = nullptr;
-    LinuxI2cBus *i2c_light = nullptr;
-    LinuxSpiBus *spi = nullptr;
+/* Static bus and driver instances (QNX-style, no config struct, no placement new). */
+static LinuxI2cBus _S_i2c_accel_bus (0, 0x6Au);   // LSM6DSO accel/gyro, bus 0
+static LinuxI2cBus _S_i2c_mag_bus (0, 0x1Cu);     // LIS3MDL, bus 0
+static LinuxI2cBus _S_i2c_light_bus (0, 0x39u);   // TSL2561/VEML7700, bus 0
+static LinuxSpiBus _S_spi_bus (-1);               // No SPI by default
 
-    sensors::Lsm6dsoAccelDriver *accel = nullptr;
-    sensors::Lsm6dsoGyroDriver *gyro = nullptr;
-    sensors::Lis3mdlMagDriver *mag = nullptr;
-    sensors::Tsl2561LightDriver *light = nullptr;
-    sensors::Ics43434SoundDriver *sound = nullptr;
-};
+static sensors::Lsm6dsoAccelDriver _S_accel_driver (&_S_i2c_accel_bus);
+static sensors::Lsm6dsoGyroDriver _S_gyro_driver (&_S_i2c_accel_bus);
+static sensors::Lis3mdlMagDriver _S_mag_driver (&_S_i2c_mag_bus);
+static sensors::Tsl2561LightDriver _S_light_driver (&_S_i2c_light_bus);
+static sensors::Ics43434SoundDriver _S_sound_driver (&_S_i2c_light_bus, nullptr);
 
-alignas (LinuxI2cBus) static unsigned char i2c_accel_storage [sizeof (LinuxI2cBus)];
-alignas (LinuxI2cBus) static unsigned char i2c_mag_storage [sizeof (LinuxI2cBus)];
-alignas (LinuxI2cBus) static unsigned char i2c_light_storage [sizeof (LinuxI2cBus)];
-alignas (LinuxSpiBus) static unsigned char spi_storage [sizeof (LinuxSpiBus)];
-
-alignas (sensors::Lsm6dsoAccelDriver)
-    static unsigned char accel_storage [sizeof (sensors::Lsm6dsoAccelDriver)];
-alignas (sensors::Lsm6dsoGyroDriver)
-    static unsigned char gyro_storage [sizeof (sensors::Lsm6dsoGyroDriver)];
-alignas (sensors::Lis3mdlMagDriver)
-    static unsigned char mag_storage [sizeof (sensors::Lis3mdlMagDriver)];
-alignas (sensors::Tsl2561LightDriver)
-    static unsigned char light_storage [sizeof (sensors::Tsl2561LightDriver)];
-alignas (sensors::Ics43434SoundDriver)
-    static unsigned char sound_storage [sizeof (sensors::Ics43434SoundDriver)];
-
-static HalObjects hal_objs {};
-static zzs::kernel::hal::_S_SensorHal _S_HalVtable {};
-static bool _S_HalConstructed = false;
+static zzs::kernel::hal::_S_SensorHal _S_hal_vtable;
 
 [[nodiscard]] zzs::kernel::Status
-hal_read_sample (sensor::Sample &out) noexcept
+_S_hal_read_sample (sensor::Sample &out) noexcept
 {
-    if (!_S_HalConstructed)
-        return zzs::kernel::Status::NOT_READY;
-    /* Round-robin across enabled drivers: accel, gyro, mag, light, sound. */
+    /* Drain from the shared scan ring first (burst-filled previously). */
+    if (_S_ring.pop (out) == zzs::kernel::Status::OK)
+        return zzs::kernel::Status::OK;
+    /* Ring empty: refill by bursting each enabled driver in round-robin order. */
     static uint8_t idx = 0u;
-    zzs::kernel::Status st = zzs::kernel::Status::STALE;
     for (uint8_t tries = 0u; tries < 5u; ++tries)
         {
         switch (idx)
             {
-            case 0u:
-                if (hal_objs.accel != nullptr)
-                    st = hal_objs.accel->read_sample (out);
-                break;
-            case 1u:
-                if (hal_objs.gyro != nullptr)
-                    st = hal_objs.gyro->read_sample (out);
-                break;
-            case 2u:
-                if (hal_objs.mag != nullptr)
-                    st = hal_objs.mag->read_sample (out);
-                break;
-            case 3u:
-                if (hal_objs.light != nullptr)
-                    st = hal_objs.light->read_sample (out);
-                break;
-            default:
-                if (hal_objs.sound != nullptr)
-                    st = hal_objs.sound->read_sample (out);
-                break;
+            case 0u: (void) _S_fill_ring (&_S_accel_driver); break;
+            case 1u: (void) _S_fill_ring (&_S_gyro_driver); break;
+            case 2u: (void) _S_fill_ring (&_S_mag_driver); break;
+            case 3u: (void) _S_fill_ring (&_S_light_driver); break;
+            default: (void) _S_fill_ring (&_S_sound_driver); break;
             }
         idx = static_cast<uint8_t> ((idx + 1u) % 5u);
-        if (zzs::kernel::status_ok (st))
-            return zzs::kernel::Status::OK;
+        if (_S_ring.filled () > 0u)
+            break;
         }
-    return st;
+    return _S_ring.pop (out);
 }
 
 [[nodiscard]] zzs::kernel::Status
-hal_set_channel_enabled (sensor::Channel ch, bool enabled) noexcept
+_S_hal_set_channel_enabled (sensor::Channel ch, bool enabled) noexcept
 {
-    if (hal_objs.accel != nullptr)
-        (void) hal_objs.accel->set_channel_enabled (ch, enabled);
-    if (hal_objs.gyro != nullptr)
-        (void) hal_objs.gyro->set_channel_enabled (ch, enabled);
-    if (hal_objs.mag != nullptr)
-        (void) hal_objs.mag->set_channel_enabled (ch, enabled);
-    if (hal_objs.light != nullptr)
-        (void) hal_objs.light->set_channel_enabled (ch, enabled);
-    if (hal_objs.sound != nullptr)
-        (void) hal_objs.sound->set_channel_enabled (ch, enabled);
+    (void) _S_accel_driver.set_channel_enabled (ch, enabled);
+    (void) _S_gyro_driver.set_channel_enabled (ch, enabled);
+    (void) _S_mag_driver.set_channel_enabled (ch, enabled);
+    (void) _S_light_driver.set_channel_enabled (ch, enabled);
+    (void) _S_sound_driver.set_channel_enabled (ch, enabled);
     return zzs::kernel::Status::OK;
 }
 
 [[nodiscard]] uint32_t
-hal_channel_rate_hz (sensor::Channel ch) noexcept
+_S_hal_channel_rate_hz (sensor::Channel ch) noexcept
 {
     return sensor::channel_rate_hz (ch);
 }
 
 [[nodiscard]] zzs::kernel::Status
-hal_init (void) noexcept
+_S_hal_init (void) noexcept
 {
-    if (!_S_HalConstructed)
-        return zzs::kernel::Status::NOT_READY;
-    zzs::kernel::Status st = zzs::kernel::Status::OK;
-    st = zzs::kernel::clock::clock_source_install (&linux_now_ns);
+    zzs::kernel::Status st = zzs::kernel::clock::clock_source_install (&_S_linux_now_ns);
     if (!zzs::kernel::status_ok (st))
         return st;
-    if (hal_objs.accel != nullptr)
-        {
-        st = hal_objs.accel->init ();
-        if (!zzs::kernel::status_ok (st))
-            return st;
-        }
-    if (hal_objs.gyro != nullptr)
-        {
-        st = hal_objs.gyro->init ();
-        if (!zzs::kernel::status_ok (st))
-            return st;
-        }
-    if (hal_objs.mag != nullptr)
-        {
-        st = hal_objs.mag->init ();
-        if (!zzs::kernel::status_ok (st))
-            return st;
-        }
-    if (hal_objs.light != nullptr)
-        {
-        st = hal_objs.light->init ();
-        if (!zzs::kernel::status_ok (st))
-            return st;
-        }
-    if (hal_objs.sound != nullptr)
-        {
-        st = hal_objs.sound->init ();
-        if (!zzs::kernel::status_ok (st))
-            return st;
-        }
+    st = _S_accel_driver.init ();
+    if (!zzs::kernel::status_ok (st))
+        return st;
+    st = _S_gyro_driver.init ();
+    if (!zzs::kernel::status_ok (st))
+        return st;
+    st = _S_mag_driver.init ();
+    if (!zzs::kernel::status_ok (st))
+        return st;
+    st = _S_light_driver.init ();
+    if (!zzs::kernel::status_ok (st))
+        return st;
+    st = _S_sound_driver.init ();
+    if (!zzs::kernel::status_ok (st))
+        return st;
     return zzs::kernel::Status::OK;
 }
 
 } // namespace
 
 [[nodiscard]] const zzs::kernel::hal::_S_SensorHal *
-create_linux_sensor_hal (const PlatformConfig &config) noexcept
+create_linux_sensor_hal () noexcept
 {
-    if (_S_HalConstructed)
-        return &_S_HalVtable;
+    /* Auto-detect I2C bus for each sensor address; fall back to bus 0. */
+    int accel_bus = _S_open_i2c_for_addr (0x6Au);
+    int mag_bus   = _S_open_i2c_for_addr (0x1Cu);
+    int light_bus = _S_open_i2c_for_addr (0x39u);
+    int spi_bus_num   = _S_probe_spi_bus ();
 
-    char accel_path[32] = {};
-    char mag_path[32] = {};
-    char light_path[32] = {};
+    if (accel_bus >= 0)
+        _S_i2c_accel_bus = LinuxI2cBus (accel_bus, 0x6Au);
+    if (mag_bus >= 0)
+        _S_i2c_mag_bus = LinuxI2cBus (mag_bus, 0x1Cu);
+    if (light_bus >= 0)
+        _S_i2c_light_bus = LinuxI2cBus (light_bus, 0x39u);
+    if (spi_bus_num >= 0)
+        _S_spi_bus = LinuxSpiBus (spi_bus_num);
 
-    const bool use_accel_path =
-        config.accel_i2c.enabled && i2c_dev_path (config.i2c_bus, accel_path);
-    const bool use_mag_path =
-        config.mag_i2c.enabled && i2c_dev_path (config.i2c_bus, mag_path);
-    const bool use_light_path =
-        config.light_i2c.enabled && i2c_dev_path (config.i2c_bus, light_path);
-
-    /* Accel / gyro share the accel bus. Create it when the accel device is
-     * configured and at least one of accel/gyro is enabled. */
-    const bool accel_bus_needed =
-        config.accel_i2c.enabled &&
-        (has_flag (config.enabled_sensors, SensorMask::accel) ||
-         has_flag (config.enabled_sensors, SensorMask::gyro));
-    if (accel_bus_needed && !use_accel_path)
-        return nullptr;
-    if (config.mag_i2c.enabled && !use_mag_path)
-        return nullptr;
-    if (config.light_i2c.enabled && !use_light_path)
-        return nullptr;
-
-    /* Accel / gyro share the accel bus. */
-    if (accel_bus_needed)
-        {
-        new (i2c_accel_storage) LinuxI2cBus (accel_path, config.accel_i2c.addr);
-        hal_objs.i2c_accel =
-            reinterpret_cast<LinuxI2cBus *> (i2c_accel_storage);
-        }
-    if (config.mag_i2c.enabled)
-        {
-        new (i2c_mag_storage) LinuxI2cBus (mag_path, config.mag_i2c.addr);
-        hal_objs.i2c_mag = reinterpret_cast<LinuxI2cBus *> (i2c_mag_storage);
-        }
-    if (config.light_i2c.enabled)
-        {
-        new (i2c_light_storage) LinuxI2cBus (light_path, config.light_i2c.addr);
-        hal_objs.i2c_light = reinterpret_cast<LinuxI2cBus *> (i2c_light_storage);
-        }
-    if (config.i2c_dev_path != nullptr)
-        {
-        new (spi_storage) LinuxSpiBus (config.i2c_dev_path);
-        hal_objs.spi = reinterpret_cast<LinuxSpiBus *> (spi_storage);
-        }
-
-    bool any_sensor = false;
-    if (has_flag (config.enabled_sensors, SensorMask::accel) &&
-        hal_objs.i2c_accel != nullptr)
-        {
-        new (accel_storage)
-            sensors::Lsm6dsoAccelDriver (hal_objs.i2c_accel);
-        hal_objs.accel = reinterpret_cast<sensors::Lsm6dsoAccelDriver *> (
-            accel_storage);
-        any_sensor = true;
-        }
-    if (has_flag (config.enabled_sensors, SensorMask::gyro) &&
-        hal_objs.i2c_accel != nullptr)
-        {
-        new (gyro_storage)
-            sensors::Lsm6dsoGyroDriver (hal_objs.i2c_accel);
-        hal_objs.gyro = reinterpret_cast<sensors::Lsm6dsoGyroDriver *> (
-            gyro_storage);
-        any_sensor = true;
-        }
-    if (has_flag (config.enabled_sensors, SensorMask::mag) &&
-        hal_objs.i2c_mag != nullptr)
-        {
-        new (mag_storage) sensors::Lis3mdlMagDriver (hal_objs.i2c_mag);
-        hal_objs.mag = reinterpret_cast<sensors::Lis3mdlMagDriver *> (mag_storage);
-        any_sensor = true;
-        }
-    if (has_flag (config.enabled_sensors, SensorMask::light) &&
-        hal_objs.i2c_light != nullptr)
-        {
-        new (light_storage)
-            sensors::Tsl2561LightDriver (hal_objs.i2c_light);
-        hal_objs.light = reinterpret_cast<sensors::Tsl2561LightDriver *> (
-            light_storage);
-        any_sensor = true;
-        }
-    if (has_flag (config.enabled_sensors, SensorMask::sound) &&
-        hal_objs.i2c_light != nullptr)
-        {
-        new (sound_storage)
-            sensors::Ics43434SoundDriver (hal_objs.i2c_light);
-        hal_objs.sound = reinterpret_cast<sensors::Ics43434SoundDriver *> (
-            sound_storage);
-        any_sensor = true;
-        }
-    if (!any_sensor)
-        return nullptr;
-    _S_HalConstructed = true;
-    _S_HalVtable._M_read_sample = &hal_read_sample;
-    _S_HalVtable._M_set_channel_enabled = &hal_set_channel_enabled;
-    _S_HalVtable._M_channel_rate_hz = &hal_channel_rate_hz;
-    _S_HalVtable._M_init = &hal_init;
-    return &_S_HalVtable;
+    _S_hal_vtable._M_read_sample = &_S_hal_read_sample;
+    _S_hal_vtable._M_set_channel_enabled = &_S_hal_set_channel_enabled;
+    _S_hal_vtable._M_channel_rate_hz = &_S_hal_channel_rate_hz;
+    _S_hal_vtable._M_init = &_S_hal_init;
+    return &_S_hal_vtable;
 }
 
 } // namespace zzs::kernel::sensor::driver::platform::linux

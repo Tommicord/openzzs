@@ -318,9 +318,8 @@ hal_init (void) noexcept
 } // namespace
 
 [[nodiscard]] const zzs::kernel::hal::_S_SensorHal *
-create_windows_sensor_hal (const PlatformConfig &config) noexcept
+create_windows_sensor_hal () noexcept
 {
-    (void) config;
     hal_vtable._M_read_sample = &hal_read_sample;
     hal_vtable._M_set_channel_enabled = &hal_set_channel_enabled;
     hal_vtable._M_channel_rate_hz = &hal_channel_rate_hz;
