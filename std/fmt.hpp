@@ -60,6 +60,13 @@
 #define ZZS_USE_NEON_OR_SSE2 0
 #endif
 
+#if defined(__ANDROID__)
+#undef ZZS_USE_NEON
+#undef ZZS_USE_NEON_OR_SSE2
+#define ZZS_USE_NEON 0
+#define ZZS_USE_NEON_OR_SSE2 0
+#endif
+
 #ifndef ZZS_USE_SSE3
 #if ZZS_USE_SSE2 && defined(__SSE3__) && __SSE3__
 #define ZZS_USE_SSE3 1
@@ -105,34 +112,16 @@
 #endif
 
 namespace zzs::base {
-enum class NumberBase : unsigned int { binary = 2, octal = 8, decimal = 10, hexadecimal = 16 };
+enum class NumberBase : unsigned int { BINARY = 2, OCTAL = 8, DECIMAL = 10, HEXADECIMAL = 16 };
 
 template <typename> struct _S_FloatingStringWidth {};
-
-// Floating-point types: based on __FLT/DBL/LDBL macros
 template <> struct _S_FloatingStringWidth<float> {
-    // Maximum decimal string length for float
-    // Format: _M_sign + max significand digits + decimal point + exponent marker + exponent
-    // __FLT_MANT_DIG__ = 24 (bits), so ~7 decimal digits
-    // __FLT_MAX_10_EXP__ = 38
-    // Worst case: "-1.234567e+38" = 1 + 7 + 1 + 1 + 2 + 2 = 14
-    // Using a conservative value to handle various formats
     static constexpr unsigned int size = 32;
 };
 template <> struct _S_FloatingStringWidth<double> {
-    // Maximum decimal string length for double
-    // __DBL_MANT_DIG__ = 53 (bits), so ~15-16 decimal digits
-    // __DBL_MAX_10_EXP__ = 308
-    // Worst case: "-1.234567890123456e+308" = 1 + 16 + 1 + 1 + 3 + 3 = 25
-    // Using a conservative value to handle various formats
     static constexpr unsigned int size = 64;
 };
 template <> struct _S_FloatingStringWidth<long double> {
-    // Maximum decimal string length for long double
-    // __LDBL_MANT_DIG__ = 64 (bits on x86), so ~19-20 decimal digits
-    // __LDBL_MAX_10_EXP__ = 4932 (on x86 extended precision)
-    // Worst case: "-1.234567890123456789e+4932" = 1 + 19 + 1 + 1 + 4 + 4 = 30
-    // Using a conservative value to handle various formats
     static constexpr unsigned int size = 128;
 };
 #if defined(__SIZEOF_INT128__)
@@ -576,18 +565,11 @@ struct _S_ConstValueDouble {
 #if ZZS_USE_NEON && ZZS_NO_MEMMOVE
     uint8_t reverse_shuffle_table[17] = {0, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
 #endif
-#if ZZS_USE_NEON
-    uint8_t shuffle_table_neon[32] = {
-        6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8, 7, 7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8,
-    };
-    uint8_t shuffle_table_memmove[32] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0,
-                                         0, 1, 2, 3, 4, 5, 6, 7, 8, 9,  10, 11, 12, 13, 14, 15};
-#endif
 #if (ZZS_NO_MEMMOVE || ZZS_USE_NEON) && (defined(__SSSE3__) && __SSSE3__)
     uint8_t shuffle_table[32] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0};
 #endif
 };
-constexpr _S_ConstValueDouble constants_double;
+inline _S_ConstValueDouble constants_double;
 alignas (64) constexpr _S_DoubleTable double_table;
 alignas (64) constexpr _S_FloatTable float_table;
 
@@ -1078,70 +1060,71 @@ _S_xjb32 (char *buff, const float v) {
         memmove (&buff[move_pos], &buff[dot_pos], 8);
     } else {
         struct TmpAscii {
-constexpr unsigned long long
-uitoa (char *buff, unsigned long long value, const unsigned int base, const bool upper_case) {
-    if (buff == nullptr)
-        return 0;
-    const unsigned int radix = (base < 2 || base > 36) ? 10u : base;
-    char tmp[64];
-    unsigned int len = 0;
-    do {
-        const unsigned int digit = static_cast<unsigned int> (value % radix);
-        if (digit < 10)
-            tmp[len++] = static_cast<char> ('0' + digit);
-        else
-            tmp[len++] = static_cast<char> ((upper_case ? 'A' : 'a') + digit - 10);
-        value /= radix;
-    } while (value != 0);
-    for (unsigned int i = 0; i < len; ++i)
-        buff[i] = tmp[len - i - 1];
-    buff[len] = '\0';
-    return len;
-}
-constexpr unsigned long long
-uitoa (char *buff, const unsigned long long value, const unsigned int base) {
-    return uitoa (buff, value, base, false);
-}
-constexpr unsigned long long
-uitoa (char *buff, const unsigned long long value) {
-    return uitoa (buff, value, 10, false);
-}
-constexpr unsigned long long
-itoa (char *buff, const long long value, const unsigned int base, const bool upper_case) {
-    if (buff == nullptr)
-        return 0;
-    else {
-        if (value < 0) {
-            buff[0] = '-';
-            return 1ull + uitoa (buff + 1, 0ull - static_cast<unsigned long long> (value), base, upper_case);
-        }
-    }
-    return uitoa (buff, static_cast<unsigned long long> (value), base, upper_case);
-}
-constexpr unsigned long long
-itoa (char *buff, const long long value, const unsigned int base) {
-    return itoa (buff, value, base, false);
-}
-constexpr unsigned long long
-itoa (char *buff, const long long value) {
-    return itoa (buff, value, 10, false);
-}
-constexpr unsigned long long
-uitoa (char *buff, const unsigned long long value, const NumberBase base, const bool upper_case) {
-    return uitoa (buff, value, static_cast<unsigned int> (base), upper_case);
-}
-constexpr unsigned long long
-uitoa (char *buff, const unsigned long long value, const NumberBase base) {
-    return uitoa (buff, value, base, false);
-}
-constexpr unsigned long long
-itoa (char *buff, const long long value, const NumberBase base, const bool upper_case) {
-    return itoa (buff, value, static_cast<unsigned int> (base), upper_case);
-}
-constexpr unsigned long long
-itoa (char *buff, const long long value, const NumberBase base) {
-    return itoa (buff, value, base, false);
-}
+            constexpr unsigned long long
+            uitoa (char *buff, unsigned long long value, const unsigned int base, const bool upper_case) {
+                if (buff == nullptr)
+                    return 0;
+                const unsigned int radix = (base < 2 || base > 36) ? 10u : base;
+                char tmp[64];
+                unsigned int len = 0;
+                do {
+                    const unsigned int digit = static_cast<unsigned int> (value % radix);
+                    if (digit < 10)
+                        tmp[len++] = static_cast<char> ('0' + digit);
+                    else
+                        tmp[len++] = static_cast<char> ((upper_case ? 'A' : 'a') + digit - 10);
+                    value /= radix;
+                } while (value != 0);
+                for (unsigned int i = 0; i < len; ++i)
+                    buff[i] = tmp[len - i - 1];
+                buff[len] = '\0';
+                return len;
+            }
+            constexpr unsigned long long
+            uitoa (char *buff, const unsigned long long value, const unsigned int base) {
+                return uitoa (buff, value, base, false);
+            }
+            constexpr unsigned long long
+            uitoa (char *buff, const unsigned long long value) {
+                return uitoa (buff, value, 10, false);
+            }
+            constexpr unsigned long long
+            itoa (char *buff, const long long value, const unsigned int base, const bool upper_case) {
+                if (buff == nullptr)
+                    return 0;
+                else {
+                    if (value < 0) {
+                        buff[0] = '-';
+                        return 1ull
+                               + uitoa (buff + 1, 0ull - static_cast<unsigned long long> (value), base, upper_case);
+                    }
+                }
+                return uitoa (buff, static_cast<unsigned long long> (value), base, upper_case);
+            }
+            constexpr unsigned long long
+            itoa (char *buff, const long long value, const unsigned int base) {
+                return itoa (buff, value, base, false);
+            }
+            constexpr unsigned long long
+            itoa (char *buff, const long long value) {
+                return itoa (buff, value, 10, false);
+            }
+            constexpr unsigned long long
+            uitoa (char *buff, const unsigned long long value, const NumberBase base, const bool upper_case) {
+                return uitoa (buff, value, static_cast<unsigned int> (base), upper_case);
+            }
+            constexpr unsigned long long
+            uitoa (char *buff, const unsigned long long value, const NumberBase base) {
+                return uitoa (buff, value, base, false);
+            }
+            constexpr unsigned long long
+            itoa (char *buff, const long long value, const NumberBase base, const bool upper_case) {
+                return itoa (buff, value, static_cast<unsigned int> (base), upper_case);
+            }
+            constexpr unsigned long long
+            itoa (char *buff, const long long value, const NumberBase base) {
+                return itoa (buff, value, base, false);
+            }
             ShortestAscii ascii;
         };
         const TmpAscii values{s};
@@ -1397,10 +1380,10 @@ template <unsigned int N, typename CharTy> struct FormatArg<const CharTy[N]> {
 template <typename T> FormatArg (T) -> FormatArg<T>;
 template <unsigned int N, typename CharTy> FormatArg (const CharTy (&)[N]) -> FormatArg<const CharTy[N]>;
 
-enum class SpecAlign : unsigned char { NONE, LHS, RHS, CENTER };
-enum class SpecSign : unsigned char { MINUS, PLUS, SPACE };
-enum class SpecFlag : unsigned char { NONE = 0, ALT = 1, ZERO_PAD = 2 };
-enum class FloatKind : unsigned char { NUMBER, INFINITY, NOT_A_NUMBER };
+enum class SpecAlign : uint8_t { NONE, LHS, RHS, CENTER };
+enum class SpecSign : uint8_t { MINUS, PLUS, SPACE };
+enum class SpecFlag : uint8_t { NONE = 0, ALT = 1, ZERO_PAD = 2 };
+enum class FloatKind : uint8_t { NUMBER, INFINITY_VALUE, NOT_A_NUMBER };
 
 constexpr SpecFlag
 operator| (const SpecFlag lhs, const SpecFlag rhs) noexcept {
@@ -1676,7 +1659,7 @@ parse_float_repr (const char *text, const unsigned int len) noexcept {
         i += 1;
     }
     if (i < len && (text[i] == 'i' || text[i] == 'I')) {
-        repr._M_kind = FloatKind::INFINITY;
+        repr._M_kind = FloatKind::INFINITY_VALUE;
         return repr;
     }
     if (i < len && (text[i] == 'n' || text[i] == 'N')) {
@@ -1866,7 +1849,7 @@ format_pointer (FormatSink<CharTy> &sink, const P ptr, const FormatSpec<CharTy> 
             char raw[24];
             const unsigned long long raw_len =
                 uitoa (raw, static_cast<unsigned long long> (reinterpret_cast<uintptr_t> (ptr)),
-                       NumberBase::hexadecimal, false);
+                       NumberBase::HEXADECIMAL, false);
             emit_padded (
                 sink, spec, SpecAlign::RHS, static_cast<CharTy> ('\0'), 2u, static_cast<unsigned int> (raw_len),
                 [&] () noexcept { put_ascii (sink, "0x", 2u); },
@@ -1887,19 +1870,19 @@ format_integer (FormatSink<CharTy> &sink, const T value, const FormatSpec<CharTy
         emit_char (sink, static_cast<CharTy> (value), spec);
         return;
     }
-    auto base = NumberBase::decimal;
+    auto base = NumberBase::DECIMAL;
     bool upper = false;
     if (type == static_cast<CharTy> ('x')) {
-        base = NumberBase::hexadecimal;
+        base = NumberBase::HEXADECIMAL;
     } else if (type == static_cast<CharTy> ('X')) {
-        base = NumberBase::hexadecimal;
+        base = NumberBase::HEXADECIMAL;
         upper = true;
     } else if (type == static_cast<CharTy> ('o')) {
-        base = NumberBase::octal;
+        base = NumberBase::OCTAL;
     } else if (type == static_cast<CharTy> ('b')) {
-        base = NumberBase::binary;
+        base = NumberBase::BINARY;
     } else if (type == static_cast<CharTy> ('B')) {
-        base = NumberBase::binary;
+        base = NumberBase::BINARY;
         upper = true;
     } else if (type != static_cast<CharTy> ('\0') && type != static_cast<CharTy> ('d')
                && type != static_cast<CharTy> ('u')) {
@@ -1911,7 +1894,7 @@ format_integer (FormatSink<CharTy> &sink, const T value, const FormatSpec<CharTy
     if constexpr (std::is_signed_v<T> && !std::is_same_v<T, bool>) {
         if (value < 0) {
             negative = true;
-            magnitude = base != NumberBase::decimal ? static_cast<unsigned long long> (value)
+            magnitude = base != NumberBase::DECIMAL ? static_cast<unsigned long long> (value)
                                                     : 0ull - static_cast<unsigned long long> (value);
         } else {
             magnitude = static_cast<unsigned long long> (value);
@@ -1929,15 +1912,15 @@ format_integer (FormatSink<CharTy> &sink, const T value, const FormatSpec<CharTy
     CharTy prefix[2];
     unsigned int prefix_len = 0;
     if (has_flag (spec._M_flags, SpecFlag::ALT) || type == static_cast<CharTy> ('B')) {
-        if (base == NumberBase::hexadecimal) {
+        if (base == NumberBase::HEXADECIMAL) {
             prefix[0] = static_cast<CharTy> ('0');
             prefix[1] = upper ? static_cast<CharTy> ('X') : static_cast<CharTy> ('x');
             prefix_len = 2;
-        } else if (base == NumberBase::binary) {
+        } else if (base == NumberBase::BINARY) {
             prefix[0] = static_cast<CharTy> ('0');
             prefix[1] = upper ? static_cast<CharTy> ('B') : static_cast<CharTy> ('b');
             prefix_len = 2;
-        } else if (base == NumberBase::octal) {
+        } else if (base == NumberBase::OCTAL) {
             const bool has_zero = body_len > digits_len || (digits_len != 0 && raw[0] == '0');
             if (!has_zero) {
                 prefix[0] = static_cast<CharTy> ('0');
@@ -1978,7 +1961,8 @@ format_floating (FormatSink<CharTy> &sink, const T value, const FormatSpec<CharT
     const CharTy sign_ch = pick_sign (repr._M_negative, spec);
     const bool alt = has_flag (spec._M_flags, SpecFlag::ALT);
     if (repr._M_kind != FloatKind::NUMBER) {
-        const char *text = repr._M_kind == FloatKind::INFINITY ? (upper ? "INF" : "inf") : (upper ? "NAN" : "nan");
+        const char *text =
+            repr._M_kind == FloatKind::INFINITY_VALUE ? (upper ? "INF" : "inf") : (upper ? "NAN" : "nan");
         const unsigned int text_len = text_length (text);
         emit_padded (sink, spec, SpecAlign::RHS, sign_ch, text_len,
                      [&] () noexcept { put_ascii (sink, text, text_len); });

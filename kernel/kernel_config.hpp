@@ -60,8 +60,7 @@
  * static_assert in kernel_bank.hpp refuses a build that overflows the object's
  * share.  Nothing here allocates, and no header declares a writable static.
  */
-namespace zzs::kernel
-{
+namespace zzs::kernel {
 /**
  * @name SIMD tiers
  *
@@ -82,7 +81,6 @@ namespace zzs::kernel
 #if !defined(ZZS_KERNEL_SCALAR)
 
 #if defined(__ARM_NEON) || defined(__ARM_NEON__)
-#include <arm_neon.h>
 #define ZZS_KERNEL_NEON 1
 #else
 #define ZZS_KERNEL_NEON 0
@@ -123,6 +121,9 @@ namespace zzs::kernel
 #endif
 
 } // namespace zzs::kernel
+#if ZZS_KERNEL_NEON
+#include <arm_neon.h>
+#endif
 #if ZZS_KERNEL_SSE2 || ZZS_KERNEL_AVX2 || ZZS_KERNEL_AVX512
 #include <immintrin.h>
 #endif
@@ -214,8 +215,7 @@ inline constexpr uint32_t _S_envelope_rate_hz = 200u;
 inline constexpr uint32_t _S_envelope_block = 80u;
 
 /** @brief Nanoseconds per grid tick, the denominator every stage shares. */
-inline constexpr uint64_t _S_grid_period_ns
-    = 1000000000ull / _S_grid_rate_hz;
+inline constexpr uint64_t _S_grid_period_ns = 1000000000ull / _S_grid_rate_hz;
 /** @} */
 
 /**
@@ -300,8 +300,8 @@ inline constexpr uint32_t _S_packet_crc_bytes = 2u;
 inline constexpr uint32_t _S_packet_max_payload = 128u;
 
 /** @brief Worst case bytes between two packet boundaries, including stuffing. */
-inline constexpr uint32_t _S_packet_max_frame_bytes
-    = (_S_packet_header_bytes + _S_packet_max_payload + _S_packet_crc_bytes) * 2u;
+inline constexpr uint32_t _S_packet_max_frame_bytes =
+    (_S_packet_header_bytes + _S_packet_max_payload + _S_packet_crc_bytes) * 2u;
 
 /** @brief Receive queue depth in packets; a power of two so the mask is free. */
 inline constexpr uint32_t _S_packet_queue_capacity = 8u;
@@ -319,8 +319,7 @@ inline constexpr uint32_t _S_packet_queue_capacity = 8u;
  */
 inline constexpr uint32_t _S_ram_budget_bytes = 2048u;
 inline constexpr uint32_t _S_stack_budget_bytes = 384u;
-inline constexpr uint32_t _S_bank_budget_bytes
-    = _S_ram_budget_bytes - _S_stack_budget_bytes;
+inline constexpr uint32_t _S_bank_budget_bytes = _S_ram_budget_bytes - _S_stack_budget_bytes;
 inline constexpr uint32_t _S_bank_budget_host_bytes = _S_bank_budget_bytes + 16u;
 /** @} */
 
@@ -333,14 +332,12 @@ inline constexpr uint32_t _S_bank_budget_host_bytes = _S_bank_budget_bytes + 16u
  * @{
  */
 [[nodiscard]] inline constexpr bool
-_S_is_pow2 (const uint32_t value) noexcept
-{
+_S_is_pow2 (const uint32_t value) noexcept {
     return value != 0u && (value & (value - 1u)) == 0u;
 }
 
 [[nodiscard]] inline constexpr uint32_t
-_S_align_up (const uint32_t value, const uint32_t alignment) noexcept
-{
+_S_align_up (const uint32_t value, const uint32_t alignment) noexcept {
     return (value + alignment - 1u) & ~(alignment - 1u);
 }
 /** @} */

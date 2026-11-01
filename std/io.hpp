@@ -33,6 +33,9 @@
 #include <signal.h>
 #include <span>
 #include <type_traits>
+#if !defined(_WIN32)
+#include <unistd.h>
+#endif
 
 namespace zzs::base {
 enum class Infallible {};
