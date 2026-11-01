@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "mllee/arith.hpp"
-#include "mllee/format.hpp"
+#include "mllee/core_arith.hpp"
+#include "mllee/core_format.hpp"
 #include "mllee/packlow.hpp"
 #include "mllee/quant.hpp"
 #include "mllee/simd.hpp"

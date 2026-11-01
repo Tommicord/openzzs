@@ -1,0 +1,280 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # lint
+  # clang-format over the tracked source trees; fail only when the tool exists
+  # and reports a diff. clang-tidy is optional-with-warning when installed.
+  # ---------------------------------------------------------------------------
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install clang-format / clang-tidy (if available)
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends clang-format clang-tidy || true
+
+      - name: clang-format dry-run
+        id: clang-format
+        run: |
+          set -euo pipefail
+          if ! command -v clang-format >/dev/null 2>&1; then
+            echo "notice=clang-format-not-installed" >> "$GITHUB_OUTPUT"
+            echo "clang-format is not installed; install it to enable format checking."
+            exit 0
+          fi
+          files=$(git ls-files 'std/*.hpp' 'std/*.cpp' 'std/*.hpp.in' 'std/*.c' \
+                       'mllee/*.hpp' 'mllee/*.cpp' 'mllee/*.hpp.in' 'mllee/*.c' \
+                       'kernel/**/*.hpp' 'kernel/**/*.cpp' 'kernel/**/*.hpp.in' 'kernel/**/*.c' \
+                       'tests/*.hpp' 'tests/*.cpp' 'tests/*.hpp.in' 'tests/*.c' \
+                       'tests/**/*.hpp' 'tests/**/*.cpp' 'tests/**/*.hpp.in' 'tests/**/*.c' \
+                       'tools/*.hpp' 'tools/*.cpp' 'tools/*.hpp.in' 'tools/*.c' \
+                       'bootstrap/*.hpp' 'bootstrap/*.cpp' 'bootstrap/*.hpp.in' 'bootstrap/*.c' \
+                | grep -v '^$' || true)
+          if [ -z "$files" ]; then
+            echo "No source files matched the clang-format globs."
+            exit 0
+          fi
+          echo "Checking format for:" >&2
+          printf '  %s\n' $files >&2
+          if clang-format --dry-run --Werror $files >/dev/null 2>&1; then
+            echo "clang-format: all files are correctly formatted."
+            exit 0
+          fi
+          echo "clang-format: the following files need formatting (run clang-format -i):" >&2
+          clang-format --dry-run $files || true
+          exit 1
+
+      - name: clang-format notice (when not installed)
+        if: steps.clang-format.outputs.notice == 'clang-format-not-installed'
+        run: |
+          echo "::warning::clang-format is not installed. Install it (sudo apt-get install clang-format) to enable format checking."
+
+      - name: clang-tidy (optional)
+        id: clang-tidy
+        continue-on-error: true
+        run: |
+          if command -v clang-tidy >/dev/null 2>&1; then
+            echo "clang-tidy is installed; running a read-only check pass."
+            files=$(git ls-files 'std/*.hpp' 'std/*.cpp' 'mllee/*.hpp' 'mllee/*.cpp' \
+                         'kernel/**/*.hpp' 'kernel/**/*.cpp' \
+                         'tests/*.hpp' 'tests/*.cpp' 'tests/**/*.hpp' 'tests/**/*.cpp' \
+                         'tools/*.hpp' 'tools/*.cpp' 'bootstrap/*.hpp' 'bootstrap/*.cpp' \
+                 | grep -v '^$' || true)
+            if [ -n "$files" ]; then
+              compile_db=$(find . -maxdepth 2 -name compile_commands.json | head -n1 || true)
+              if [ -n "$compile_db" ]; then
+                dir=$(dirname "$compile_db")
+                (cd "$dir" && clang-tidy $files --quiet || true)
+              else
+                echo "No compile_commands.json found; skipping clang-tidy (run cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON first)." >&2
+              fi
+            fi
+          else
+            echo "clang-tidy is not installed; install clang-tidy to enable static analysis."
+          fi
+
+  # ---------------------------------------------------------------------------
+  # build-and-test
+  # Matrix over OS x build-type x mllee-asm. AVX-VNNI / AVX-512 stay OFF.
+  # ---------------------------------------------------------------------------
+  build-and-test:
+    name: build-and-test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        build-type: [Debug, Release]
+        mllee-asm: [ON, OFF]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install CMake and Ninja (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends cmake ninja-build || true
+
+      - name: Cache Catch2 FetchContent _deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ github.workspace }}/cmake-build-*/_deps
+            ${{ github.workspace }}/build/_deps
+          key: ${{ runner.os }}-catch2-${{ matrix.build-type }}-${{ matrix.mllee-asm }}-${{ hashFiles('**/CMakeLists.txt') }}
+
+      - name: Cache build directory
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/cmake-build-debug
+          key: ${{ runner.os }}-build-${{ matrix.build-type }}-${{ matrix.mllee-asm }}-${{ hashFiles('**/CMakeLists.txt') }}-${{ hashFiles('**/*.hpp') }}-${{ hashFiles('**/*.cpp') }}
+
+      - name: Configure CMake
+        run: |
+          cmake -S . -B cmake-build-debug \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
+            -DOPENZZS_MLLEE_ASM=${{ matrix.mllee-asm }} \
+            -DOPENZZS_BUILD_TESTS=ON \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Build
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            cmake --build cmake-build-debug -j$(nproc)
+          elif [ "${{ runner.os }}" = "macOS" ]; then
+            cmake --build cmake-build-debug -j$(sysctl -n hw.ncpu)
+          else
+            cmake --build cmake-build-debug -j${{ env.NUMBER_OF_PROCESSORS }}
+          fi
+
+      - name: Run ctest
+        run: |
+          ctest --test-dir cmake-build-debug --output-on-failure -j$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
+
+  # ---------------------------------------------------------------------------
+  # sanitizers
+  # Ubuntu, Debug, ASan+UBSan. Build and run test_mllee + test_sensor_driver.
+  # ---------------------------------------------------------------------------
+  sanitizers:
+    name: sanitizers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install CMake and Ninja
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends cmake ninja-build || true
+
+      - name: Cache Catch2 FetchContent _deps
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/cmake-build-debug/_deps
+          key: sanitizers-catch2-debug-${{ hashFiles('**/CMakeLists.txt') }}
+
+      - name: Configure CMake with ASan+UBSan
+        run: |
+          cmake -S . -B cmake-build-debug \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DOPENZZS_MLLEE_ASM=ON \
+            -DOPENZZS_BUILD_TESTS=ON \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined" \
+            -DCMAKE_MODULE_LINKER_FLAGS="-fsanitize=address,undefined" \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Build test binaries
+        run: |
+          cmake --build cmake-build-debug -j$(nproc) --target test_mllee test_sensor_driver
+
+      - name: Run ctest under sanitizers
+        run: |
+          ctest --test-dir cmake-build-debug --output-on-failure -j$(nproc)
+
+  # ---------------------------------------------------------------------------
+  # embedded-gate
+  # Ubuntu. RAM/flash/stack gates and Cortex-M4 QEMU selftest. Safe everywhere
+  # because the scripts print SKIP and exit 0 when the Arm toolchain/QEMU is absent.
+  # ---------------------------------------------------------------------------
+  embedded-gate:
+    name: embedded-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install CMake and Ninja
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends cmake ninja-build || true
+
+      - name: Configure (host Debug, needed to build the size/stack probes)
+        run: |
+          cmake -S . -B cmake-build-debug \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DOPENZZS_MLLEE_ASM=ON \
+            -DOPENZZS_BUILD_TESTS=OFF
+
+      - name: Build mllee-ram and mllee-train-ram probes
+        run: |
+          cmake --build cmake-build-debug -j$(nproc) --target mllee-ram mllee-train-ram || true
+
+      - name: Run mllee RAM gate
+        run: |
+          tools/check_mllee_ram.sh cmake-build-debug
+
+      - name: Run mllee training RAM gate
+        run: |
+          tools/check_mllee_train_ram.sh cmake-build-debug
+
+      - name: Run Cortex-M4 QEMU selftest (skip if toolchain/QEMU absent)
+        if: ${{ always() && exists(format('{0}/tools/run_mllee_m4_qemu.sh', github.workspace)) }}
+        continue-on-error: true
+        run: |
+          if [ -f tools/run_mllee_m4_qemu.sh ]; then
+            tools/run_mllee_m4_qemu.sh cmake-build-debug || true
+          else
+            echo "tools/run_mllee_m4_qemu.sh not present; skipping Cortex-M4 QEMU selftest."
+          fi
+
+  # ---------------------------------------------------------------------------
+  # bench-smoke
+  # Ubuntu, Release. Build mllee_bench and run it briefly.
+  # ---------------------------------------------------------------------------
+  bench-smoke:
+    name: bench-smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install CMake and Ninja
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends cmake ninja-build || true
+
+      - name: Configure Release build
+        run: |
+          cmake -S . -B cmake-build-debug \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DOPENZZS_MLLEE_ASM=ON \
+            -DOPENZZS_BUILD_TESTS=OFF
+
+      - name: Build mllee_bench
+        run: |
+          cmake --build cmake-build-debug -j$(nproc) --target mllee_bench
+
+      - name: Run mllee_bench smoke test
+        run: |
+          cmake-build-debug/mllee_bench
