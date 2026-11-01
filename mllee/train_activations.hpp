@@ -78,19 +78,19 @@ inline constexpr int64_t _S_gelu_gain_den = 1000;
  */
 [[nodiscard]] inline constexpr int64_t
 gelu_derivative_wide_q15 (const int32_t x_q15) noexcept {
-        const int32_t s = q15_sigmoid (x_q15 + q15_mul (x_q15, _S_gelu_tail_q15));
-        const int64_t scaled = static_cast<int64_t> (x_q15) * q15_sigmoid_grad (s) * _S_gelu_gain_num;
-        /* A lane-wide sigmoid derivative means u is near zero, so |x| is too: the
-           product is self-limiting and the divisor only ever shrinks it. */
-        const int64_t denominator = _S_gelu_gain_den << _S_grad_frac_bits;
-        return static_cast<int64_t> (s) + (scaled + (denominator >> 1)) / denominator;
+  const int32_t s = q15_sigmoid (x_q15 + q15_mul (x_q15, _S_gelu_tail_q15));
+  const int64_t scaled = static_cast<int64_t> (x_q15) * q15_sigmoid_grad (s) * _S_gelu_gain_num;
+  /* A lane-wide sigmoid derivative means u is near zero, so |x| is too: the
+     product is self-limiting and the divisor only ever shrinks it. */
+  const int64_t denominator = _S_gelu_gain_den << _S_grad_frac_bits;
+  return static_cast<int64_t> (s) + (scaled + (denominator >> 1)) / denominator;
 }
 
 /** @brief Hard sigmoid clamp((x + 1) / 2, 0, 1) on the normalized code domain. */
 [[nodiscard]] inline constexpr int32_t
 hard_sigmoid_q15 (const int32_t x_q15) noexcept {
-        const int32_t shifted = (x_q15 + _S_q15_one) >> 1;
-        return shifted < 0 ? 0 : (shifted > _S_q15_max ? _S_q15_max : shifted);
+  const int32_t shifted = (x_q15 + _S_q15_one) >> 1;
+  return shifted < 0 ? 0 : (shifted > _S_q15_max ? _S_q15_max : shifted);
 }
 
 /**
@@ -102,33 +102,33 @@ hard_sigmoid_q15 (const int32_t x_q15) noexcept {
  */
 [[nodiscard]] inline constexpr int32_t
 act_q15 (const Act act, const int32_t x_q15, const int32_t aux_code) noexcept {
-        switch (act) {
-        case Act::RELU:
-                return x_q15 < 0 ? 0 : (x_q15 > _S_q15_max ? _S_q15_max : x_q15);
-        case Act::RELU6:
-                /* The normalized domain has no 6: code 127 is 1.0, so the upper
-                   clamp is the representable maximum. */
-                return x_q15 < 0 ? 0 : (x_q15 > _S_q15_max ? _S_q15_max : x_q15);
-        case Act::SIGMOID:
-                return q15_sigmoid (x_q15);
-        case Act::TANH:
-                return q15_tanh (x_q15);
-        case Act::GELU:
-                return q15_mul (x_q15, q15_sigmoid (x_q15 + q15_mul (x_q15, _S_gelu_tail_q15)));
-        case Act::LEAKY_RELU:
-                return x_q15 < 0 ? q15_mul (x_q15, code_to_q15 (aux_code)) : x_q15;
-        case Act::ELU:
-                return x_q15 < 0 ? q15_mul (code_to_q15 (aux_code), q15_exp (x_q15) - _S_q15_one) : x_q15;
-        case Act::SILU:
-                return q15_mul (x_q15, q15_sigmoid (x_q15));
-        case Act::HARDSWISH:
-                return q15_mul (x_q15, hard_sigmoid_q15 (x_q15));
-        case Act::HARDSIGMOID:
-                return hard_sigmoid_q15 (x_q15);
-        case Act::NONE:
-        default:
-                return x_q15 < _S_q15_min ? _S_q15_min : (x_q15 > _S_q15_max ? _S_q15_max : x_q15);
-        }
+  switch (act) {
+  case Act::RELU:
+    return x_q15 < 0 ? 0 : (x_q15 > _S_q15_max ? _S_q15_max : x_q15);
+  case Act::RELU6:
+    /* The normalized domain has no 6: code 127 is 1.0, so the upper
+       clamp is the representable maximum. */
+    return x_q15 < 0 ? 0 : (x_q15 > _S_q15_max ? _S_q15_max : x_q15);
+  case Act::SIGMOID:
+    return q15_sigmoid (x_q15);
+  case Act::TANH:
+    return q15_tanh (x_q15);
+  case Act::GELU:
+    return q15_mul (x_q15, q15_sigmoid (x_q15 + q15_mul (x_q15, _S_gelu_tail_q15)));
+  case Act::LEAKY_RELU:
+    return x_q15 < 0 ? q15_mul (x_q15, code_to_q15 (aux_code)) : x_q15;
+  case Act::ELU:
+    return x_q15 < 0 ? q15_mul (code_to_q15 (aux_code), q15_exp (x_q15) - _S_q15_one) : x_q15;
+  case Act::SILU:
+    return q15_mul (x_q15, q15_sigmoid (x_q15));
+  case Act::HARDSWISH:
+    return q15_mul (x_q15, hard_sigmoid_q15 (x_q15));
+  case Act::HARDSIGMOID:
+    return hard_sigmoid_q15 (x_q15);
+  case Act::NONE:
+  default:
+    return x_q15 < _S_q15_min ? _S_q15_min : (x_q15 > _S_q15_max ? _S_q15_max : x_q15);
+  }
 }
 
 /**
@@ -143,44 +143,44 @@ act_q15 (const Act act, const int32_t x_q15, const int32_t aux_code) noexcept {
  */
 [[nodiscard]] inline constexpr int32_t
 act_derivative_q15 (const Act act, const int32_t x_q15, const int32_t y_q15, const int32_t aux_code) noexcept {
-        switch (act) {
-        case Act::RELU:
-                return y_q15 > 0 ? _S_q15_max : 0;
-        case Act::RELU6:
-                return y_q15 > 0 && y_q15 < _S_q15_max ? _S_q15_max : 0;
-        case Act::SIGMOID:
-                return q15_sigmoid_grad (y_q15);
-        case Act::TANH:
-                return q15_clamp (_S_q15_one - 1 - q15_mul (y_q15, y_q15));
-        case Act::GELU:
-                return q15_clamp (static_cast<int32_t> (gelu_derivative_wide_q15 (x_q15)));
-        case Act::LEAKY_RELU:
-                return x_q15 < 0 ? code_to_q15 (aux_code) : _S_q15_max;
-        case Act::ELU:
-                return x_q15 < 0 ? q15_mul (code_to_q15 (aux_code), q15_exp (x_q15)) : _S_q15_max;
-        case Act::SILU: {
-                const int32_t s = q15_sigmoid (x_q15);
-                return q15_add_sat (s, q15_mul (x_q15, q15_sigmoid_grad (s)));
-        }
-        case Act::HARDSWISH:
-                if (x_q15 <= -_S_q15_one)
-                        return 0;
-                if (x_q15 >= _S_q15_one)
-                        return _S_q15_max;
-                return q15_clamp (x_q15 + _S_q15_half);
-        case Act::HARDSIGMOID:
-                return y_q15 > 0 && y_q15 < _S_q15_max ? _S_q15_half : 0;
-        case Act::NONE:
-        default:
-                return _S_q15_max;
-        }
+  switch (act) {
+  case Act::RELU:
+    return y_q15 > 0 ? _S_q15_max : 0;
+  case Act::RELU6:
+    return y_q15 > 0 && y_q15 < _S_q15_max ? _S_q15_max : 0;
+  case Act::SIGMOID:
+    return q15_sigmoid_grad (y_q15);
+  case Act::TANH:
+    return q15_clamp (_S_q15_one - 1 - q15_mul (y_q15, y_q15));
+  case Act::GELU:
+    return q15_clamp (static_cast<int32_t> (gelu_derivative_wide_q15 (x_q15)));
+  case Act::LEAKY_RELU:
+    return x_q15 < 0 ? code_to_q15 (aux_code) : _S_q15_max;
+  case Act::ELU:
+    return x_q15 < 0 ? q15_mul (code_to_q15 (aux_code), q15_exp (x_q15)) : _S_q15_max;
+  case Act::SILU: {
+    const int32_t s = q15_sigmoid (x_q15);
+    return q15_add_sat (s, q15_mul (x_q15, q15_sigmoid_grad (s)));
+  }
+  case Act::HARDSWISH:
+    if (x_q15 <= -_S_q15_one)
+      return 0;
+    if (x_q15 >= _S_q15_one)
+      return _S_q15_max;
+    return q15_clamp (x_q15 + _S_q15_half);
+  case Act::HARDSIGMOID:
+    return y_q15 > 0 && y_q15 < _S_q15_max ? _S_q15_half : 0;
+  case Act::NONE:
+  default:
+    return _S_q15_max;
+  }
 }
 
 /** @brief d(act)/dx taken straight from a pre-activation code. */
 [[nodiscard]] inline constexpr int32_t
 act_derivative_from_code (const Act act, const int32_t code, const int32_t aux_code) noexcept {
-        const int32_t x_q15 = code_to_q15 (code);
-        return act_derivative_q15 (act, x_q15, act_q15 (act, x_q15, aux_code), aux_code);
+  const int32_t x_q15 = code_to_q15 (code);
+  return act_derivative_q15 (act, x_q15, act_q15 (act, x_q15, aux_code), aux_code);
 }
 
 /**
@@ -194,17 +194,16 @@ act_derivative_from_code (const Act act, const int32_t code, const int32_t aux_c
  */
 [[nodiscard]] inline constexpr int64_t
 act_grad_product (const Act act, const int32_t x_q15, const int32_t grad_q15, const int32_t aux_code) noexcept {
-        if (act == Act::HARDSWISH) {
-                if (x_q15 >= _S_q15_one)
-                        return static_cast<int64_t> (grad_q15) << _S_grad_frac_bits;
-                if (x_q15 > -_S_q15_one)
-                        return static_cast<int64_t> (grad_q15) * (x_q15 + _S_q15_half);
-                return 0;
-        }
-        if (act == Act::GELU)
-                return static_cast<int64_t> (grad_q15) * gelu_derivative_wide_q15 (x_q15);
-        return static_cast<int64_t> (grad_q15)
-               * act_derivative_q15 (act, x_q15, act_q15 (act, x_q15, aux_code), aux_code);
+  if (act == Act::HARDSWISH) {
+    if (x_q15 >= _S_q15_one)
+      return static_cast<int64_t> (grad_q15) << _S_grad_frac_bits;
+    if (x_q15 > -_S_q15_one)
+      return static_cast<int64_t> (grad_q15) * (x_q15 + _S_q15_half);
+    return 0;
+  }
+  if (act == Act::GELU)
+    return static_cast<int64_t> (grad_q15) * gelu_derivative_wide_q15 (x_q15);
+  return static_cast<int64_t> (grad_q15) * act_derivative_q15 (act, x_q15, act_q15 (act, x_q15, aux_code), aux_code);
 }
 
 /**
@@ -216,30 +215,30 @@ act_grad_product (const Act act, const int32_t x_q15, const int32_t grad_q15, co
 [[nodiscard]] inline constexpr int32_t
 act_route_grad_q15 (const Act act, const int32_t x_q15, const int32_t grad_q15, const int32_t aux_code,
                     bool &clamped) noexcept {
-        const int32_t narrowed = _S_round_shift (act_grad_product (act, x_q15, grad_q15, aux_code), _S_grad_frac_bits);
-        clamped = narrowed > _S_q15_max || narrowed < _S_q15_min;
-        return q15_clamp (narrowed);
+  const int32_t narrowed = _S_round_shift (act_grad_product (act, x_q15, grad_q15, aux_code), _S_grad_frac_bits);
+  clamped = narrowed > _S_q15_max || narrowed < _S_q15_min;
+  return q15_clamp (narrowed);
 }
 
 /** @brief Route a gradient, ignoring whether the lane clamped. */
 [[nodiscard]] inline constexpr int32_t
 act_route_grad_q15 (const Act act, const int32_t x_q15, const int32_t grad_q15, const int32_t aux_code) noexcept {
-        bool ignored = false;
-        return act_route_grad_q15 (act, x_q15, grad_q15, aux_code, ignored);
+  bool ignored = false;
+  return act_route_grad_q15 (act, x_q15, grad_q15, aux_code, ignored);
 }
 
 /** @brief True when the op is a pure mask or identity, so a layer can fuse its
  *        backward into the previous one. */
 [[nodiscard]] inline constexpr bool
 act_is_linear (const Act act) noexcept {
-        return act == Act::NONE || act == Act::RELU;
+  return act == Act::NONE || act == Act::RELU;
 }
 
 /** @brief True when the backward needs the pre-activation, not only the output. */
 [[nodiscard]] inline constexpr bool
 act_needs_preactivation (const Act act) noexcept {
-        return act == Act::GELU || act == Act::SILU || act == Act::ELU || act == Act::HARDSWISH
-               || act == Act::LEAKY_RELU || act == Act::HARDSIGMOID;
+  return act == Act::GELU || act == Act::SILU || act == Act::ELU || act == Act::HARDSWISH || act == Act::LEAKY_RELU
+         || act == Act::HARDSIGMOID;
 }
 
 /**
@@ -253,23 +252,23 @@ act_needs_preactivation (const Act act) noexcept {
  */
 [[nodiscard]] inline constexpr int32_t
 act_code (const Act act, const int32_t code, const int32_t aux_code) noexcept {
-        return _S_i8_code (_S_apply_act (act, code, aux_code));
+  return _S_i8_code (_S_apply_act (act, code, aux_code));
 }
 
 /** @brief Elementwise code-domain forward over two stride-1, 4-byte aligned streams. */
 inline void
 act_forward_codes (const Act act, const int8_t *const in, int8_t *const out, const uint32_t count,
                    const int32_t aux_code) noexcept {
-        for (uint32_t i = 0; i < count; ++i)
-                out[i] = static_cast<int8_t> (act_code (act, in[i], aux_code));
+  for (uint32_t i = 0; i < count; ++i)
+    out[i] = static_cast<int8_t> (act_code (act, in[i], aux_code));
 }
 
 /** @brief Elementwise Q15 forward over two stride-1, 4-byte aligned lane streams. */
 inline void
 act_forward_q15 (const Act act, const int16_t *const in, int16_t *const out, const uint32_t count,
                  const int32_t aux_code) noexcept {
-        for (uint32_t i = 0; i < count; ++i)
-                out[i] = q15_to_i16_sat (act_q15 (act, in[i], aux_code));
+  for (uint32_t i = 0; i < count; ++i)
+    out[i] = q15_to_i16_sat (act_q15 (act, in[i], aux_code));
 }
 
 /**
@@ -281,48 +280,47 @@ act_forward_q15 (const Act act, const int16_t *const in, int16_t *const out, con
 inline uint32_t
 act_backward_q15 (const Act act, const int16_t *const pre, const int16_t *const grad_out, int16_t *const grad_in,
                   const uint32_t count, const int32_t aux_code) noexcept {
-        uint32_t saturated = 0u;
-        if (act_is_linear (act)) {
-                /* RELU and identity are a mask or a copy: no transcendental, and the
-                   only saturation possible is the incoming lane's own. */
-                for (uint32_t i = 0; i < count; ++i) {
-                        const int32_t keep = (act == Act::NONE || pre[i] >= 0) ? grad_out[i] : 0;
-                        if (!q15_in_range (keep))
-                                ++saturated;
-                        grad_in[i] = q15_to_i16_sat (keep);
-                }
-                return saturated;
-        }
-        for (uint32_t i = 0; i < count; ++i) {
-                bool clamped = false;
-                grad_in[i] = q15_to_i16_sat (act_route_grad_q15 (act, pre[i], grad_out[i], aux_code, clamped));
-                if (clamped)
-                        ++saturated;
-        }
-        return saturated;
+  uint32_t saturated = 0u;
+  if (act_is_linear (act)) {
+    /* RELU and identity are a mask or a copy: no transcendental, and the
+       only saturation possible is the incoming lane's own. */
+    for (uint32_t i = 0; i < count; ++i) {
+      const int32_t keep = (act == Act::NONE || pre[i] >= 0) ? grad_out[i] : 0;
+      if (!q15_in_range (keep))
+        ++saturated;
+      grad_in[i] = q15_to_i16_sat (keep);
+    }
+    return saturated;
+  }
+  for (uint32_t i = 0; i < count; ++i) {
+    bool clamped = false;
+    grad_in[i] = q15_to_i16_sat (act_route_grad_q15 (act, pre[i], grad_out[i], aux_code, clamped));
+    if (clamped)
+      ++saturated;
+  }
+  return saturated;
 }
 
 /** @brief Backward against saved int8 pre-activations (the quantized forward path). */
 inline uint32_t
 act_backward_codes (const Act act, const int8_t *const pre, const int16_t *const grad_out, int16_t *const grad_in,
                     const uint32_t count, const int32_t aux_code) noexcept {
-        uint32_t saturated = 0u;
-        if (act_is_linear (act)) {
-                for (uint32_t i = 0; i < count; ++i) {
-                        const int32_t keep = (act == Act::NONE || pre[i] >= 0) ? grad_out[i] : 0;
-                        if (!q15_in_range (keep))
-                                ++saturated;
-                        grad_in[i] = q15_to_i16_sat (keep);
-                }
-                return saturated;
-        }
-        for (uint32_t i = 0; i < count; ++i) {
-                bool clamped = false;
-                grad_in[i] =
-                    q15_to_i16_sat (act_route_grad_q15 (act, code_to_q15 (pre[i]), grad_out[i], aux_code, clamped));
-                if (clamped)
-                        ++saturated;
-        }
-        return saturated;
+  uint32_t saturated = 0u;
+  if (act_is_linear (act)) {
+    for (uint32_t i = 0; i < count; ++i) {
+      const int32_t keep = (act == Act::NONE || pre[i] >= 0) ? grad_out[i] : 0;
+      if (!q15_in_range (keep))
+        ++saturated;
+      grad_in[i] = q15_to_i16_sat (keep);
+    }
+    return saturated;
+  }
+  for (uint32_t i = 0; i < count; ++i) {
+    bool clamped = false;
+    grad_in[i] = q15_to_i16_sat (act_route_grad_q15 (act, code_to_q15 (pre[i]), grad_out[i], aux_code, clamped));
+    if (clamped)
+      ++saturated;
+  }
+  return saturated;
 }
 } // namespace zzs::mllee::train

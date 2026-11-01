@@ -93,19 +93,19 @@ inline constexpr uint16_t _S_reg_max_norm = 1u << 3;
 
 /** @brief Accumulated regularization accounting, one per run or per hook call. */
 struct RegularizationStats {
-        /** @brief Sum of applied penalty VALUES in Q7 (0 for parameter-side forms
-         *        that contribute no loss term, e.g. decoupled decay). */
-        int64_t _M_penalty_q7 = 0;
-        /** @brief Codes or lanes the kernel actually changed. */
-        uint32_t _M_terms_applied = 0u;
-        /** @brief Parameter rows rescaled by the max-norm constraint. */
-        uint32_t _M_rows_clamped = 0u;
-        /** @brief Lanes clamped to a Q15 rail by add_grad. */
-        uint32_t _M_saturation_events = 0u;
-        /** @brief Lanes whose value was already at a rail / edge and was skipped. */
-        uint32_t _M_lanes_skipped = 0u;
-        /** @brief Parameters skipped entirely (frozen or bias-like). */
-        uint32_t _M_params_skipped = 0u;
+  /** @brief Sum of applied penalty VALUES in Q7 (0 for parameter-side forms
+   *        that contribute no loss term, e.g. decoupled decay). */
+  int64_t _M_penalty_q7 = 0;
+  /** @brief Codes or lanes the kernel actually changed. */
+  uint32_t _M_terms_applied = 0u;
+  /** @brief Parameter rows rescaled by the max-norm constraint. */
+  uint32_t _M_rows_clamped = 0u;
+  /** @brief Lanes clamped to a Q15 rail by add_grad. */
+  uint32_t _M_saturation_events = 0u;
+  /** @brief Lanes whose value was already at a rail / edge and was skipped. */
+  uint32_t _M_lanes_skipped = 0u;
+  /** @brief Parameters skipped entirely (frozen or bias-like). */
+  uint32_t _M_params_skipped = 0u;
 };
 
 static_assert (sizeof (RegularizationStats) == 32u,
@@ -113,17 +113,17 @@ static_assert (sizeof (RegularizationStats) == 32u,
 
 /** @brief An immutable penalty configuration, installable through the driver. */
 struct RegularizationPolicy {
-        const Trainable *_M_params = nullptr;
-        uint32_t _M_param_count = 0u;
-        uint16_t _M_flags = 0u;
-        /** @brief Column count for row max-norm (0 = read from the tensor Shape). */
-        uint16_t _M_row_cols = 0u;
-        int32_t _M_lr_q15 = 0;    /* 0 = take the trainer's schedule value */
-        int32_t _M_decay_q15 = 0; /* AdamW lambda, Q15 */
-        int32_t _M_l2_q15 = 0;    /* coupled lambda, Q15 */
-        int32_t _M_l1_q15 = 0;    /* subgradient lambda, Q15 */
-        int32_t _M_max_row_norm_q15 = _S_q15_max;
-        int32_t _M_pad = 0;
+  const Trainable *_M_params = nullptr;
+  uint32_t _M_param_count = 0u;
+  uint16_t _M_flags = 0u;
+  /** @brief Column count for row max-norm (0 = read from the tensor Shape). */
+  uint16_t _M_row_cols = 0u;
+  int32_t _M_lr_q15 = 0;    /* 0 = take the trainer's schedule value */
+  int32_t _M_decay_q15 = 0; /* AdamW lambda, Q15 */
+  int32_t _M_l2_q15 = 0;    /* coupled lambda, Q15 */
+  int32_t _M_l1_q15 = 0;    /* subgradient lambda, Q15 */
+  int32_t _M_max_row_norm_q15 = _S_q15_max;
+  int32_t _M_pad = 0;
 };
 
 static_assert (sizeof (RegularizationPolicy) == sizeof (void *) + 32u, "policy is one pointer plus eight words");
@@ -139,9 +139,9 @@ static_assert (sizeof (RegularizationPolicy) == sizeof (void *) + 32u, "policy i
  */
 [[nodiscard]] inline constexpr int32_t
 decay_retention_q15 (const int32_t lr_q15, const int32_t decay_q15) noexcept {
-        const int32_t lr_lambda = q15_mul (q15_clamp (lr_q15), q15_clamp (decay_q15));
-        const int32_t retention = _S_q15_one - 1 - lr_lambda; /* R as a lane value */
-        return retention < 0 ? 0 : retention;
+  const int32_t lr_lambda = q15_mul (q15_clamp (lr_q15), q15_clamp (decay_q15));
+  const int32_t retention = _S_q15_one - 1 - lr_lambda; /* R as a lane value */
+  return retention < 0 ? 0 : retention;
 }
 
 /**
@@ -160,33 +160,32 @@ decay_retention_q15 (const int32_t lr_q15, const int32_t decay_q15) noexcept {
 inline Status
 weight_decay_decoupled (const Trainable &param, const int32_t retention_q15, const bool skip_bias,
                         RegularizationStats &stats) noexcept {
-        const Status status = param.validate ();
-        if (!status_ok (status))
-                return status;
-        if (!param.requires_grad () || param._M_grad == nullptr) {
-                ++stats._M_params_skipped;
-                return Status::OK;
-        }
-        if (skip_bias && (param._M_flags & Flag::BiasLike) != 0u) {
-                ++stats._M_params_skipped;
-                return Status::OK;
-        }
-        const int32_t retention = q15_clamp (retention_q15);
-        for (uint32_t i = 0; i < param._M_count; ++i) {
-                const int32_t code = param._M_code[i];
-                if (code == 0) {
-                        ++stats._M_lanes_skipped; /* nothing to shrink */
-                        continue;
-                }
-                const int32_t decayed = div_round (retention * code, _S_q15_one);
-                const int32_t bounded =
-                    q15_abs (decayed) > q15_abs (code) ? (code < 0 ? -q15_abs (code) : code) : decayed;
-                if (bounded != code) {
-                        param._M_code[i] = _S_i8_code (bounded);
-                        ++stats._M_terms_applied;
-                }
-        }
-        return Status::OK;
+  const Status status = param.validate ();
+  if (!status_ok (status))
+    return status;
+  if (!param.requires_grad () || param._M_grad == nullptr) {
+    ++stats._M_params_skipped;
+    return Status::OK;
+  }
+  if (skip_bias && (param._M_flags & Flag::BiasLike) != 0u) {
+    ++stats._M_params_skipped;
+    return Status::OK;
+  }
+  const int32_t retention = q15_clamp (retention_q15);
+  for (uint32_t i = 0; i < param._M_count; ++i) {
+    const int32_t code = param._M_code[i];
+    if (code == 0) {
+      ++stats._M_lanes_skipped; /* nothing to shrink */
+      continue;
+    }
+    const int32_t decayed = div_round (retention * code, _S_q15_one);
+    const int32_t bounded = q15_abs (decayed) > q15_abs (code) ? (code < 0 ? -q15_abs (code) : code) : decayed;
+    if (bounded != code) {
+      param._M_code[i] = _S_i8_code (bounded);
+      ++stats._M_terms_applied;
+    }
+  }
+  return Status::OK;
 }
 
 /**
@@ -202,21 +201,21 @@ weight_decay_decoupled (const Trainable &param, const int32_t retention_q15, con
  */
 inline Status
 l2_gradient_penalty (const Trainable &param, const int32_t lambda_q15, RegularizationStats &stats) noexcept {
-        const Status status = param.validate ();
-        if (!status_ok (status))
-                return status;
-        if (!param.requires_grad () || param._M_grad == nullptr) {
-                ++stats._M_params_skipped;
-                return Status::OK;
-        }
-        const int32_t lambda = q15_clamp (lambda_q15);
-        for (uint32_t i = 0; i < param._M_count; ++i) {
-                const int32_t delta = q15_mul (lambda, code_to_q15 (param._M_code[i]));
-                if (param.add_grad (i, delta))
-                        ++stats._M_saturation_events;
-                ++stats._M_terms_applied;
-        }
-        return Status::OK;
+  const Status status = param.validate ();
+  if (!status_ok (status))
+    return status;
+  if (!param.requires_grad () || param._M_grad == nullptr) {
+    ++stats._M_params_skipped;
+    return Status::OK;
+  }
+  const int32_t lambda = q15_clamp (lambda_q15);
+  for (uint32_t i = 0; i < param._M_count; ++i) {
+    const int32_t delta = q15_mul (lambda, code_to_q15 (param._M_code[i]));
+    if (param.add_grad (i, delta))
+      ++stats._M_saturation_events;
+    ++stats._M_terms_applied;
+  }
+  return Status::OK;
 }
 
 /**
@@ -234,27 +233,27 @@ l2_gradient_penalty (const Trainable &param, const int32_t lambda_q15, Regulariz
  */
 inline Status
 l1_gradient_penalty (const Trainable &param, const int32_t lambda_q15, RegularizationStats &stats) noexcept {
-        const Status status = param.validate ();
-        if (!status_ok (status))
-                return status;
-        if (!param.requires_grad () || param._M_grad == nullptr) {
-                ++stats._M_params_skipped;
-                return Status::OK;
-        }
-        const int32_t lambda = q15_clamp (lambda_q15);
-        for (uint32_t i = 0; i < param._M_count; ++i) {
-                const int32_t code = param._M_code[i];
-                if (code == 0) {
-                        /* the zero-avoidance choice: subgradient 0 at the kink */
-                        ++stats._M_lanes_skipped;
-                        continue;
-                }
-                const int32_t delta = code > 0 ? -lambda : lambda;
-                if (param.add_grad (i, delta))
-                        ++stats._M_saturation_events;
-                ++stats._M_terms_applied;
-        }
-        return Status::OK;
+  const Status status = param.validate ();
+  if (!status_ok (status))
+    return status;
+  if (!param.requires_grad () || param._M_grad == nullptr) {
+    ++stats._M_params_skipped;
+    return Status::OK;
+  }
+  const int32_t lambda = q15_clamp (lambda_q15);
+  for (uint32_t i = 0; i < param._M_count; ++i) {
+    const int32_t code = param._M_code[i];
+    if (code == 0) {
+      /* the zero-avoidance choice: subgradient 0 at the kink */
+      ++stats._M_lanes_skipped;
+      continue;
+    }
+    const int32_t delta = code > 0 ? -lambda : lambda;
+    if (param.add_grad (i, delta))
+      ++stats._M_saturation_events;
+    ++stats._M_terms_applied;
+  }
+  return Status::OK;
 }
 
 /**
@@ -282,65 +281,64 @@ l1_gradient_penalty (const Trainable &param, const int32_t lambda_q15, Regulariz
 inline Status
 max_norm_rows (const Trainable &param, const uint32_t cols, const int32_t max_norm_q15,
                RegularizationStats &stats) noexcept {
-        const Status status = param.validate ();
-        if (!status_ok (status))
-                return status;
-        if (!param.requires_grad ()) {
-                ++stats._M_params_skipped;
-                return Status::OK;
-        }
-        const uint32_t count = param._M_count;
-        uint32_t row_len = cols;
-        if (row_len == 0u) {
-                if (param._M_shape._M_rank == 2u)
-                        row_len = param._M_shape._M_dims[1];
-                else
-                        row_len = count; /* rank-1 vector: one row */
-        }
-        if (row_len == 0u || count % row_len != 0u)
-                return Status::BAD_LAYOUT;
-        const int32_t limit = max_norm_q15 < 0 ? -max_norm_q15 : max_norm_q15;
-        const uint32_t rows = count / row_len;
-        for (uint32_t row = 0; row < rows; ++row) {
-                int64_t squares_q30 = 0;
-                for (uint32_t k = 0; k < row_len; ++k) {
-                        const int32_t lane = code_to_q15 (param._M_code[row * row_len + k]);
-                        squares_q30 += static_cast<int64_t> (lane) * lane;
-                }
-                if (squares_q30 == 0)
-                        continue;
-                /* Norm in Q15 lane units: prefer the q15_sqrt domain (the squared
-                   sum re-based to Q15 stays inside the helper's sound input range
-                   of [0, 131071]); otherwise take the raw root, with a power-of-two
-                   detour when even the raw square sum leaves uint32. */
-                const int64_t squares_q15 = squares_q30 >> 15;
-                int32_t norm_q15 = 0;
-                if (squares_q15 >= 1 && squares_q15 <= 131071)
-                        norm_q15 = q15_sqrt (static_cast<int32_t> (squares_q15));
-                else if (squares_q30 <= static_cast<int64_t> (0xFFFFFFFFull))
-                        norm_q15 = static_cast<int32_t> (_S_isqrt (static_cast<uint32_t> (squares_q30)));
-                else {
-                        const int32_t half =
-                            static_cast<int32_t> (_S_isqrt (static_cast<uint32_t> (squares_q30 >> 18)));
-                        norm_q15 = half > (_S_q15_max * 2) ? _S_q15_max * 2 : half * 512;
-                }
-                if (norm_q15 <= limit)
-                        continue; /* the row already satisfies the budget */
-                const int32_t factor =
-                    norm_q15 >= _S_q15_one ? q15_mul (limit, q15_reciprocal (norm_q15)) : ratio_q15 (limit, norm_q15);
-                ++stats._M_rows_clamped;
-                for (uint32_t k = 0; k < row_len; ++k) {
-                        const int32_t index = static_cast<int32_t> (row * row_len + k);
-                        const int32_t code = param._M_code[index];
-                        const int32_t scaled = div_round (factor * code, _S_q15_one);
-                        const int32_t bounded = q15_abs (scaled) > q15_abs (code) ? code : scaled;
-                        if (bounded != code) {
-                                param._M_code[index] = _S_i8_code (bounded);
-                                ++stats._M_terms_applied;
-                        }
-                }
-        }
-        return Status::OK;
+  const Status status = param.validate ();
+  if (!status_ok (status))
+    return status;
+  if (!param.requires_grad ()) {
+    ++stats._M_params_skipped;
+    return Status::OK;
+  }
+  const uint32_t count = param._M_count;
+  uint32_t row_len = cols;
+  if (row_len == 0u) {
+    if (param._M_shape._M_rank == 2u)
+      row_len = param._M_shape._M_dims[1];
+    else
+      row_len = count; /* rank-1 vector: one row */
+  }
+  if (row_len == 0u || count % row_len != 0u)
+    return Status::BAD_LAYOUT;
+  const int32_t limit = max_norm_q15 < 0 ? -max_norm_q15 : max_norm_q15;
+  const uint32_t rows = count / row_len;
+  for (uint32_t row = 0; row < rows; ++row) {
+    int64_t squares_q30 = 0;
+    for (uint32_t k = 0; k < row_len; ++k) {
+      const int32_t lane = code_to_q15 (param._M_code[row * row_len + k]);
+      squares_q30 += static_cast<int64_t> (lane) * lane;
+    }
+    if (squares_q30 == 0)
+      continue;
+    /* Norm in Q15 lane units: prefer the q15_sqrt domain (the squared
+       sum re-based to Q15 stays inside the helper's sound input range
+       of [0, 131071]); otherwise take the raw root, with a power-of-two
+       detour when even the raw square sum leaves uint32. */
+    const int64_t squares_q15 = squares_q30 >> 15;
+    int32_t norm_q15 = 0;
+    if (squares_q15 >= 1 && squares_q15 <= 131071)
+      norm_q15 = q15_sqrt (static_cast<int32_t> (squares_q15));
+    else if (squares_q30 <= static_cast<int64_t> (0xFFFFFFFFull))
+      norm_q15 = static_cast<int32_t> (_S_isqrt (static_cast<uint32_t> (squares_q30)));
+    else {
+      const int32_t half = static_cast<int32_t> (_S_isqrt (static_cast<uint32_t> (squares_q30 >> 18)));
+      norm_q15 = half > (_S_q15_max * 2) ? _S_q15_max * 2 : half * 512;
+    }
+    if (norm_q15 <= limit)
+      continue; /* the row already satisfies the budget */
+    const int32_t factor =
+        norm_q15 >= _S_q15_one ? q15_mul (limit, q15_reciprocal (norm_q15)) : ratio_q15 (limit, norm_q15);
+    ++stats._M_rows_clamped;
+    for (uint32_t k = 0; k < row_len; ++k) {
+      const int32_t index = static_cast<int32_t> (row * row_len + k);
+      const int32_t code = param._M_code[index];
+      const int32_t scaled = div_round (factor * code, _S_q15_one);
+      const int32_t bounded = q15_abs (scaled) > q15_abs (code) ? code : scaled;
+      if (bounded != code) {
+        param._M_code[index] = _S_i8_code (bounded);
+        ++stats._M_terms_applied;
+      }
+    }
+  }
+  return Status::OK;
 }
 
 /**
@@ -361,41 +359,41 @@ max_norm_rows (const Trainable &param, const uint32_t cols, const int32_t max_no
  */
 inline Status
 entropy_penalty (const Trainable &probs, const int32_t beta_q15, RegularizationStats &stats) noexcept {
-        const Status status = probs.validate ();
-        if (!status_ok (status))
-                return status;
-        if (probs._M_grad == nullptr)
-                return Status::BAD_LAYOUT;
-        const int32_t beta = q15_clamp (beta_q15);
-        int64_t entropy_q7 = 0;
-        for (uint32_t i = 0; i < probs._M_count; ++i) {
-                const int32_t code = probs._M_code[i];
-                const int32_t p_q15 = code > 0 ? code_to_q15 (code) : 0;
-                const int32_t neg_log = p_q15 > 0 ? q7_neg_log_q15 (p_q15) : 0;
-                entropy_q7 += (static_cast<int64_t> (p_q15) * neg_log) >> 15;
-                if (p_q15 <= 0) {
-                        ++stats._M_saturation_events; /* log-sentinel slope */
-                        if (probs.add_grad (i, _S_q15_min + 1))
-                                ++stats._M_saturation_events;
-                        continue;
-                }
-                /* dH/dp (Q7 per unit real) = neg_log - 1.0; the bonus term is the
-                   negative of that scaled by beta, still in Q7. */
-                const int32_t dH_q7 = neg_log - _S_q7_one;
-                const int32_t slope_q7 = -q15_scale_shift (beta, dH_q7, 15u);
-                const int64_t lane_wide = static_cast<int64_t> (slope_q7) << 8;
-                const int32_t overflowed = lane_wide > _S_q15_max || lane_wide < _S_q15_min;
-                if (overflowed)
-                        ++stats._M_saturation_events;
-                if (probs.add_grad (i, static_cast<int32_t> (lane_wide > _S_q15_max
-                                                                 ? _S_q15_max
-                                                                 : (lane_wide < _S_q15_min ? _S_q15_min : lane_wide))))
-                        ++stats._M_saturation_events;
-                ++stats._M_terms_applied;
-        }
-        stats._M_penalty_q7 -=
-            q15_scale_shift (beta, static_cast<int32_t> (entropy_q7 > _S_q15_max ? _S_q15_max : entropy_q7), 15u);
-        return Status::OK;
+  const Status status = probs.validate ();
+  if (!status_ok (status))
+    return status;
+  if (probs._M_grad == nullptr)
+    return Status::BAD_LAYOUT;
+  const int32_t beta = q15_clamp (beta_q15);
+  int64_t entropy_q7 = 0;
+  for (uint32_t i = 0; i < probs._M_count; ++i) {
+    const int32_t code = probs._M_code[i];
+    const int32_t p_q15 = code > 0 ? code_to_q15 (code) : 0;
+    const int32_t neg_log = p_q15 > 0 ? q7_neg_log_q15 (p_q15) : 0;
+    entropy_q7 += (static_cast<int64_t> (p_q15) * neg_log) >> 15;
+    if (p_q15 <= 0) {
+      ++stats._M_saturation_events; /* log-sentinel slope */
+      if (probs.add_grad (i, _S_q15_min + 1))
+        ++stats._M_saturation_events;
+      continue;
+    }
+    /* dH/dp (Q7 per unit real) = neg_log - 1.0; the bonus term is the
+       negative of that scaled by beta, still in Q7. */
+    const int32_t dH_q7 = neg_log - _S_q7_one;
+    const int32_t slope_q7 = -q15_scale_shift (beta, dH_q7, 15u);
+    const int64_t lane_wide = static_cast<int64_t> (slope_q7) << 8;
+    const int32_t overflowed = lane_wide > _S_q15_max || lane_wide < _S_q15_min;
+    if (overflowed)
+      ++stats._M_saturation_events;
+    if (probs.add_grad (i, static_cast<int32_t> (lane_wide > _S_q15_max
+                                                     ? _S_q15_max
+                                                     : (lane_wide < _S_q15_min ? _S_q15_min : lane_wide))))
+      ++stats._M_saturation_events;
+    ++stats._M_terms_applied;
+  }
+  stats._M_penalty_q7 -=
+      q15_scale_shift (beta, static_cast<int32_t> (entropy_q7 > _S_q15_max ? _S_q15_max : entropy_q7), 15u);
+  return Status::OK;
 }
 
 /**
@@ -413,41 +411,41 @@ entropy_penalty (const Trainable &probs, const int32_t beta_q15, RegularizationS
 inline Status
 kl_penalty (const Trainable &probs, const int8_t *const ref_codes, const uint32_t ref_count, const int32_t beta_q15,
             RegularizationStats &stats) noexcept {
-        const Status status = probs.validate ();
-        if (!status_ok (status))
-                return status;
-        if (ref_codes == nullptr || ref_count != probs._M_count || probs._M_grad == nullptr)
-                return Status::BAD_LAYOUT;
-        const int32_t beta = q15_clamp (beta_q15);
-        int64_t kl_q7 = 0;
-        for (uint32_t i = 0; i < probs._M_count; ++i) {
-                const int32_t p_code = probs._M_code[i];
-                const int32_t t_code = ref_codes[i];
-                const int32_t p_q15 = p_code > 0 ? code_to_q15 (p_code) : 0;
-                const int32_t t_q15 = t_code > 0 ? code_to_q15 (t_code) : 0;
-                if (p_q15 <= 0) {
-                        ++stats._M_saturation_events;
-                        continue; /* 0 * ln 0 = 0 in the value; sentinel slope */
-                }
-                const int32_t neg_p = q7_neg_log_q15 (p_q15);
-                const int32_t neg_t = q7_neg_log_q15 (t_q15);
-                /* ln p - ln t = neg_t - neg_p, still Q7. */
-                const int32_t log_ratio_q7 = neg_t - neg_p;
-                kl_q7 += (static_cast<int64_t> (p_q15) * log_ratio_q7) >> 15;
-                const int32_t d_q7 = log_ratio_q7 + _S_q7_one;
-                const int32_t slope_q7 = q15_scale_shift (beta, d_q7, 15u);
-                const int64_t lane_wide = static_cast<int64_t> (slope_q7) << 8;
-                if (lane_wide > _S_q15_max || lane_wide < _S_q15_min)
-                        ++stats._M_saturation_events;
-                if (probs.add_grad (i, static_cast<int32_t> (lane_wide > _S_q15_max
-                                                                 ? _S_q15_max
-                                                                 : (lane_wide < _S_q15_min ? _S_q15_min : lane_wide))))
-                        ++stats._M_saturation_events;
-                ++stats._M_terms_applied;
-        }
-        stats._M_penalty_q7 += q15_scale_shift (
-            beta, static_cast<int32_t> (kl_q7 > _S_q15_max ? _S_q15_max : (kl_q7 < 0 ? 0 : kl_q7)), 15u);
-        return Status::OK;
+  const Status status = probs.validate ();
+  if (!status_ok (status))
+    return status;
+  if (ref_codes == nullptr || ref_count != probs._M_count || probs._M_grad == nullptr)
+    return Status::BAD_LAYOUT;
+  const int32_t beta = q15_clamp (beta_q15);
+  int64_t kl_q7 = 0;
+  for (uint32_t i = 0; i < probs._M_count; ++i) {
+    const int32_t p_code = probs._M_code[i];
+    const int32_t t_code = ref_codes[i];
+    const int32_t p_q15 = p_code > 0 ? code_to_q15 (p_code) : 0;
+    const int32_t t_q15 = t_code > 0 ? code_to_q15 (t_code) : 0;
+    if (p_q15 <= 0) {
+      ++stats._M_saturation_events;
+      continue; /* 0 * ln 0 = 0 in the value; sentinel slope */
+    }
+    const int32_t neg_p = q7_neg_log_q15 (p_q15);
+    const int32_t neg_t = q7_neg_log_q15 (t_q15);
+    /* ln p - ln t = neg_t - neg_p, still Q7. */
+    const int32_t log_ratio_q7 = neg_t - neg_p;
+    kl_q7 += (static_cast<int64_t> (p_q15) * log_ratio_q7) >> 15;
+    const int32_t d_q7 = log_ratio_q7 + _S_q7_one;
+    const int32_t slope_q7 = q15_scale_shift (beta, d_q7, 15u);
+    const int64_t lane_wide = static_cast<int64_t> (slope_q7) << 8;
+    if (lane_wide > _S_q15_max || lane_wide < _S_q15_min)
+      ++stats._M_saturation_events;
+    if (probs.add_grad (i, static_cast<int32_t> (lane_wide > _S_q15_max
+                                                     ? _S_q15_max
+                                                     : (lane_wide < _S_q15_min ? _S_q15_min : lane_wide))))
+      ++stats._M_saturation_events;
+    ++stats._M_terms_applied;
+  }
+  stats._M_penalty_q7 +=
+      q15_scale_shift (beta, static_cast<int32_t> (kl_q7 > _S_q15_max ? _S_q15_max : (kl_q7 < 0 ? 0 : kl_q7)), 15u);
+  return Status::OK;
 }
 
 /**
@@ -464,30 +462,30 @@ kl_penalty (const Trainable &probs, const int8_t *const ref_codes, const uint32_
 inline Status
 mean_activity_penalty (const Trainable &activations, const int32_t target_mean_q15, const int32_t beta_q15,
                        RegularizationStats &stats) noexcept {
-        const Status status = activations.validate ();
-        if (!status_ok (status))
-                return status;
-        if (activations._M_grad == nullptr || activations._M_count == 0u)
-                return Status::BAD_LAYOUT;
-        const int32_t beta = q15_clamp (beta_q15);
-        int64_t total_q15 = 0;
-        for (uint32_t i = 0; i < activations._M_count; ++i)
-                total_q15 += code_to_q15 (activations._M_code[i]);
-        const int32_t mean_q15 =
-            static_cast<int32_t> (total_q15 >= 0 ? (total_q15 + activations._M_count / 2) / activations._M_count
-                                                 : -(((-total_q15) + activations._M_count / 2) / activations._M_count));
-        const int32_t diff_q15 = q15_sub_sat (mean_q15, target_mean_q15);
-        stats._M_penalty_q7 +=
-            (static_cast<int64_t> (beta) * diff_q15 * diff_q15) >> 38; /* beta_q15 * diff^2 / (n-free): see block */
-        const int64_t numer = 2 * static_cast<int64_t> (beta) * diff_q15;
-        const int32_t scaled = static_cast<int32_t> (_S_round_shift (numer, 15u));
-        const int32_t per_element = div_round (scaled, static_cast<int32_t> (activations._M_count));
-        for (uint32_t i = 0; i < activations._M_count; ++i) {
-                if (activations.add_grad (i, per_element))
-                        ++stats._M_saturation_events;
-                ++stats._M_terms_applied;
-        }
-        return Status::OK;
+  const Status status = activations.validate ();
+  if (!status_ok (status))
+    return status;
+  if (activations._M_grad == nullptr || activations._M_count == 0u)
+    return Status::BAD_LAYOUT;
+  const int32_t beta = q15_clamp (beta_q15);
+  int64_t total_q15 = 0;
+  for (uint32_t i = 0; i < activations._M_count; ++i)
+    total_q15 += code_to_q15 (activations._M_code[i]);
+  const int32_t mean_q15 =
+      static_cast<int32_t> (total_q15 >= 0 ? (total_q15 + activations._M_count / 2) / activations._M_count
+                                           : -(((-total_q15) + activations._M_count / 2) / activations._M_count));
+  const int32_t diff_q15 = q15_sub_sat (mean_q15, target_mean_q15);
+  stats._M_penalty_q7 +=
+      (static_cast<int64_t> (beta) * diff_q15 * diff_q15) >> 38; /* beta_q15 * diff^2 / (n-free): see block */
+  const int64_t numer = 2 * static_cast<int64_t> (beta) * diff_q15;
+  const int32_t scaled = static_cast<int32_t> (_S_round_shift (numer, 15u));
+  const int32_t per_element = div_round (scaled, static_cast<int32_t> (activations._M_count));
+  for (uint32_t i = 0; i < activations._M_count; ++i) {
+    if (activations.add_grad (i, per_element))
+      ++stats._M_saturation_events;
+    ++stats._M_terms_applied;
+  }
+  return Status::OK;
 }
 
 /**
@@ -502,29 +500,29 @@ mean_activity_penalty (const Trainable &activations, const int32_t target_mean_q
  */
 inline Status
 squared_activity_penalty (const Trainable &activations, const int32_t beta_q15, RegularizationStats &stats) noexcept {
-        const Status status = activations.validate ();
-        if (!status_ok (status))
-                return status;
-        if (activations._M_grad == nullptr || activations._M_count == 0u)
-                return Status::BAD_LAYOUT;
-        const int32_t beta = q15_clamp (beta_q15);
-        int64_t squares_q30 = 0;
-        for (uint32_t i = 0; i < activations._M_count; ++i) {
-                const int32_t lane = code_to_q15 (activations._M_code[i]);
-                squares_q30 += static_cast<int64_t> (lane) * lane;
-        }
-        stats._M_penalty_q7 +=
-            (static_cast<int64_t> (beta) * squares_q30) / (static_cast<int64_t> (activations._M_count) << 38);
-        for (uint32_t i = 0; i < activations._M_count; ++i) {
-                const int64_t lane = code_to_q15 (activations._M_code[i]);
-                const int64_t numer = 2 * static_cast<int64_t> (beta) * lane;
-                const int32_t scaled = static_cast<int32_t> (_S_round_shift (numer, 15u));
-                const int32_t per_element = div_round (scaled, static_cast<int32_t> (activations._M_count));
-                if (activations.add_grad (i, per_element))
-                        ++stats._M_saturation_events;
-                ++stats._M_terms_applied;
-        }
-        return Status::OK;
+  const Status status = activations.validate ();
+  if (!status_ok (status))
+    return status;
+  if (activations._M_grad == nullptr || activations._M_count == 0u)
+    return Status::BAD_LAYOUT;
+  const int32_t beta = q15_clamp (beta_q15);
+  int64_t squares_q30 = 0;
+  for (uint32_t i = 0; i < activations._M_count; ++i) {
+    const int32_t lane = code_to_q15 (activations._M_code[i]);
+    squares_q30 += static_cast<int64_t> (lane) * lane;
+  }
+  stats._M_penalty_q7 +=
+      (static_cast<int64_t> (beta) * squares_q30) / (static_cast<int64_t> (activations._M_count) << 38);
+  for (uint32_t i = 0; i < activations._M_count; ++i) {
+    const int64_t lane = code_to_q15 (activations._M_code[i]);
+    const int64_t numer = 2 * static_cast<int64_t> (beta) * lane;
+    const int32_t scaled = static_cast<int32_t> (_S_round_shift (numer, 15u));
+    const int32_t per_element = div_round (scaled, static_cast<int32_t> (activations._M_count));
+    if (activations.add_grad (i, per_element))
+      ++stats._M_saturation_events;
+    ++stats._M_terms_applied;
+  }
+  return Status::OK;
 }
 
 /**
@@ -545,27 +543,27 @@ squared_activity_penalty (const Trainable &activations, const int32_t beta_q15, 
 inline Status
 regularization_post_grad (StepContext &context, const uint32_t saturated, const RegularizationPolicy &policy,
                           RegularizationStats &stats) noexcept {
-        if (policy._M_params == nullptr || policy._M_param_count == 0u || policy._M_param_count > _S_max_trainer_params)
-                return Status::BAD_LAYOUT;
-        if (saturated != 0u)
-                return Status::OK;
-        const int32_t lr = policy._M_lr_q15 != 0 ? policy._M_lr_q15 : context._M_lr_q15;
-        const int32_t retention = decay_retention_q15 (lr, policy._M_decay_q15);
-        for (uint32_t i = 0; i < policy._M_param_count; ++i) {
-                const Trainable &param = policy._M_params[i];
-                Status status = Status::OK;
-                if ((policy._M_flags & _S_reg_decay) != 0u)
-                        status = weight_decay_decoupled (param, retention, true, stats);
-                if (status_ok (status) && (policy._M_flags & _S_reg_l2) != 0u)
-                        status = l2_gradient_penalty (param, policy._M_l2_q15, stats);
-                if (status_ok (status) && (policy._M_flags & _S_reg_l1) != 0u)
-                        status = l1_gradient_penalty (param, policy._M_l1_q15, stats);
-                if (status_ok (status) && (policy._M_flags & _S_reg_max_norm) != 0u)
-                        status = max_norm_rows (param, policy._M_row_cols, policy._M_max_row_norm_q15, stats);
-                if (!status_ok (status))
-                        return status;
-        }
-        return Status::OK;
+  if (policy._M_params == nullptr || policy._M_param_count == 0u || policy._M_param_count > _S_max_trainer_params)
+    return Status::BAD_LAYOUT;
+  if (saturated != 0u)
+    return Status::OK;
+  const int32_t lr = policy._M_lr_q15 != 0 ? policy._M_lr_q15 : context._M_lr_q15;
+  const int32_t retention = decay_retention_q15 (lr, policy._M_decay_q15);
+  for (uint32_t i = 0; i < policy._M_param_count; ++i) {
+    const Trainable &param = policy._M_params[i];
+    Status status = Status::OK;
+    if ((policy._M_flags & _S_reg_decay) != 0u)
+      status = weight_decay_decoupled (param, retention, true, stats);
+    if (status_ok (status) && (policy._M_flags & _S_reg_l2) != 0u)
+      status = l2_gradient_penalty (param, policy._M_l2_q15, stats);
+    if (status_ok (status) && (policy._M_flags & _S_reg_l1) != 0u)
+      status = l1_gradient_penalty (param, policy._M_l1_q15, stats);
+    if (status_ok (status) && (policy._M_flags & _S_reg_max_norm) != 0u)
+      status = max_norm_rows (param, policy._M_row_cols, policy._M_max_row_norm_q15, stats);
+    if (!status_ok (status))
+      return status;
+  }
+  return Status::OK;
 }
 
 /* ======================================================================== */
@@ -590,47 +588,47 @@ inline constexpr int32_t _S_reg_default_l1_q15 = 258;
  */
 inline Status
 weight_decay_post_grad (StepContext &context, const uint32_t saturated) noexcept {
-        if (saturated != 0u || context._M_params == nullptr)
-                return Status::OK;
-        const int32_t retention = decay_retention_q15 (context._M_lr_q15, _S_reg_default_decay_q15);
-        /* The hook carries its own throwaway counters: it exists so a device
-           caller can install decay without defining anything; a caller that
-           wants the accounting uses regularization_post_grad with a stats block.
-           Stats live in the caller's frame here, so no writable static. */
-        RegularizationStats stats;
-        for (uint32_t i = 0; i < context._M_param_count; ++i) {
-                const Status status = weight_decay_decoupled (context._M_params[i], retention, true, stats);
-                if (!status_ok (status))
-                        return status;
-        }
-        return Status::OK;
+  if (saturated != 0u || context._M_params == nullptr)
+    return Status::OK;
+  const int32_t retention = decay_retention_q15 (context._M_lr_q15, _S_reg_default_decay_q15);
+  /* The hook carries its own throwaway counters: it exists so a device
+     caller can install decay without defining anything; a caller that
+     wants the accounting uses regularization_post_grad with a stats block.
+     Stats live in the caller's frame here, so no writable static. */
+  RegularizationStats stats;
+  for (uint32_t i = 0; i < context._M_param_count; ++i) {
+    const Status status = weight_decay_decoupled (context._M_params[i], retention, true, stats);
+    if (!status_ok (status))
+      return status;
+  }
+  return Status::OK;
 }
 
 /** @brief Installable hook: coupled L2 at the compiled default. */
 inline Status
 l2_post_grad (StepContext &context, const uint32_t saturated) noexcept {
-        if (saturated != 0u || context._M_params == nullptr)
-                return Status::OK;
-        RegularizationStats stats;
-        for (uint32_t i = 0; i < context._M_param_count; ++i) {
-                const Status status = l2_gradient_penalty (context._M_params[i], _S_reg_default_l2_q15, stats);
-                if (!status_ok (status))
-                        return status;
-        }
-        return Status::OK;
+  if (saturated != 0u || context._M_params == nullptr)
+    return Status::OK;
+  RegularizationStats stats;
+  for (uint32_t i = 0; i < context._M_param_count; ++i) {
+    const Status status = l2_gradient_penalty (context._M_params[i], _S_reg_default_l2_q15, stats);
+    if (!status_ok (status))
+      return status;
+  }
+  return Status::OK;
 }
 
 /** @brief Installable hook: L1 subgradient at the compiled default. */
 inline Status
 l1_post_grad (StepContext &context, const uint32_t saturated) noexcept {
-        if (saturated != 0u || context._M_params == nullptr)
-                return Status::OK;
-        RegularizationStats stats;
-        for (uint32_t i = 0; i < context._M_param_count; ++i) {
-                const Status status = l1_gradient_penalty (context._M_params[i], _S_reg_default_l1_q15, stats);
-                if (!status_ok (status))
-                        return status;
-        }
-        return Status::OK;
+  if (saturated != 0u || context._M_params == nullptr)
+    return Status::OK;
+  RegularizationStats stats;
+  for (uint32_t i = 0; i < context._M_param_count; ++i) {
+    const Status status = l1_gradient_penalty (context._M_params[i], _S_reg_default_l1_q15, stats);
+    if (!status_ok (status))
+      return status;
+  }
+  return Status::OK;
 }
 } // namespace zzs::mllee::train

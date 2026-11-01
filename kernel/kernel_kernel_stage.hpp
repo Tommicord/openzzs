@@ -51,62 +51,62 @@ struct _S_StageState;
 
 /** @brief Stage vtable. */
 struct _S_StageVtable {
-        /** @brief Configure from runtime parameters (rates, windows, gains). */
-        Status (*_M_configure) (void *const state) noexcept;
+  /** @brief Configure from runtime parameters (rates, windows, gains). */
+  Status (*_M_configure) (void *const state) noexcept;
 
-        /** @brief Reset all stage state to its post-configure defaults. */
-        void (*_M_reset) (void *const state) noexcept;
+  /** @brief Reset all stage state to its post-configure defaults. */
+  void (*_M_reset) (void *const state) noexcept;
 
-        /** @brief Feed one resampled Q15 sample for a channel. */
-        Status (*_M_feed) (void *const state, const sensor::Channel channel, const int16_t sample_q15) noexcept;
+  /** @brief Feed one resampled Q15 sample for a channel. */
+  Status (*_M_feed) (void *const state, const sensor::Channel channel, const int16_t sample_q15) noexcept;
 
-        /** @brief Produce Q15 feature values into `slots` (count slots) when a
-         *        window is complete; returns NOT_READY when no window finished. */
-        Status (*_M_produce) (void *const state, int32_t *const slots, const uint32_t slot_count) noexcept;
+  /** @brief Produce Q15 feature values into `slots` (count slots) when a
+   *        window is complete; returns NOT_READY when no window finished. */
+  Status (*_M_produce) (void *const state, int32_t *const slots, const uint32_t slot_count) noexcept;
 };
 
 /** @brief A registered stage: vtable plus its state object. */
 struct _S_Stage {
-        const _S_StageVtable *_M_vtable;
-        void *_M_state;
+  const _S_StageVtable *_M_vtable;
+  void *_M_state;
 };
 
 /** @brief Feed one sample into every registered stage. */
 [[nodiscard]] inline Status
 stage_feed_all (const _S_Stage *const stages, const uint32_t stage_count, const sensor::Channel channel,
                 const int16_t sample_q15) noexcept {
-        Status last = Status::OK;
-        for (uint32_t i = 0; i < stage_count; ++i) {
-                const Status st = stages[i]._M_vtable->_M_feed (stages[i]._M_state, channel, sample_q15);
-                if (st != Status::OK)
-                        last = st;
-        }
-        return last;
+  Status last = Status::OK;
+  for (uint32_t i = 0; i < stage_count; ++i) {
+    const Status st = stages[i]._M_vtable->_M_feed (stages[i]._M_state, channel, sample_q15);
+    if (st != Status::OK)
+      last = st;
+  }
+  return last;
 }
 
 /** @brief Produce features from every stage into a single flat slot buffer. */
 [[nodiscard]] inline Status
 stage_produce_all (const _S_Stage *const stages, const uint32_t stage_count, int32_t *const slots,
                    const uint32_t slot_count) noexcept {
-        if (slots == nullptr)
-                return Status::OUT_OF_RANGE;
-        if (slot_count < zzs::kernel::_S_feature_count)
-                return Status::OUT_OF_RANGE;
-        Status last = Status::OK;
-        for (uint32_t i = 0; i < stage_count; ++i) {
-                if (stages[i]._M_vtable == nullptr)
-                        return Status::OUT_OF_RANGE;
-                if (stages[i]._M_state == nullptr)
-                        return Status::OUT_OF_RANGE;
-                const Status st = stages[i]._M_vtable->_M_produce (stages[i]._M_state, slots, slot_count);
-                if (st == Status::OK)
-                        zzs::base::log_debug ("stage {} produced window", i);
-                else if (st != Status::NOT_READY) {
-                        zzs::base::log_error ("stage {} produce failed ({})", i, status_name (st));
-                        last = st;
-                }
-        }
-        return last;
+  if (slots == nullptr)
+    return Status::OUT_OF_RANGE;
+  if (slot_count < zzs::kernel::_S_feature_count)
+    return Status::OUT_OF_RANGE;
+  Status last = Status::OK;
+  for (uint32_t i = 0; i < stage_count; ++i) {
+    if (stages[i]._M_vtable == nullptr)
+      return Status::OUT_OF_RANGE;
+    if (stages[i]._M_state == nullptr)
+      return Status::OUT_OF_RANGE;
+    const Status st = stages[i]._M_vtable->_M_produce (stages[i]._M_state, slots, slot_count);
+    if (st == Status::OK)
+      zzs::base::log_debug ("stage {} produced window", i);
+    else if (st != Status::NOT_READY) {
+      zzs::base::log_error ("stage {} produce failed ({})", i, status_name (st));
+      last = st;
+    }
+  }
+  return last;
 }
 
 /** @} */

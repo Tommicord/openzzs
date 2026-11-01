@@ -39,21 +39,21 @@ namespace zzs::kernel::sensor::driver::bus {
 
 /** @brief Abstract bus interface implemented by I2C/SPI bit-bang and native controllers. */
 class BusInterface {
-      public:
-        /** @brief Virtual destructor, defaulted. */
-        virtual ~BusInterface () = default;
+public:
+  /** @brief Virtual destructor, defaulted. */
+  virtual ~BusInterface () = default;
 
-        /** @brief Write `len` bytes to register `reg` on the bus device. */
-        [[nodiscard]] virtual Status
-        write_reg (uint8_t reg, const uint8_t *data, uint16_t len) noexcept = 0;
+  /** @brief Write `len` bytes to register `reg` on the bus device. */
+  [[nodiscard]] virtual Status
+  write_reg (uint8_t reg, const uint8_t *data, uint16_t len) noexcept = 0;
 
-        /** @brief Read `len` bytes from register `reg` on the bus device. */
-        [[nodiscard]] virtual Status
-        read_reg (uint8_t reg, uint8_t *data, uint16_t len) noexcept = 0;
+  /** @brief Read `len` bytes from register `reg` on the bus device. */
+  [[nodiscard]] virtual Status
+  read_reg (uint8_t reg, uint8_t *data, uint16_t len) noexcept = 0;
 
-        /** @brief Block for at least `ms` milliseconds. */
-        virtual void
-        delay_ms (uint32_t ms) noexcept = 0;
+  /** @brief Block for at least `ms` milliseconds. */
+  virtual void
+  delay_ms (uint32_t ms) noexcept = 0;
 };
 
 /** @} */

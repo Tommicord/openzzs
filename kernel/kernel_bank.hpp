@@ -59,15 +59,15 @@ inline constexpr uint32_t _S_bank_max_channels = 12u;
 
 /** @brief Bank configuration: stage list and grid tracker. */
 struct _S_BankConfig {
-        _S_Stage _M_stages[_S_bank_max_stages];
-        uint32_t _M_stage_count;
-        clock::_S_GridTracker _M_grid;
+  _S_Stage _M_stages[_S_bank_max_stages];
+  uint32_t _M_stage_count;
+  clock::_S_GridTracker _M_grid;
 };
 
 /** @brief Bank runtime state. */
 struct _S_PreprocessingBank {
-        _S_BankConfig *_M_config;
-        bool _M_initialized;
+  _S_BankConfig *_M_config;
+  bool _M_initialized;
 };
 
 /** @brief Static RAM-share check: the bank object plus pointer overhead must
@@ -78,35 +78,35 @@ static_assert (sizeof (_S_PreprocessingBank) <= _S_bank_budget_bytes,
 /** @brief Initialize the bank from a config. */
 [[nodiscard]] inline Status
 bank_init (_S_PreprocessingBank &bank, _S_BankConfig &config) noexcept {
-        bank._M_config = &config;
-        bank._M_initialized = true;
-        for (uint32_t i = 0; i < config._M_stage_count; ++i) {
-                const Status st = config._M_stages[i]._M_vtable->_M_configure (config._M_stages[i]._M_state);
-                if (st != Status::OK) {
-                        zzs::base::log_error ("stage {} configure failed ({})", i, status_name (st));
-                        return st;
-                }
-                zzs::base::log_debug ("stage {} configured", i);
-                config._M_stages[i]._M_vtable->_M_reset (config._M_stages[i]._M_state);
-                zzs::base::log_debug ("stage {} reset", i);
-        }
-        const Status st = clock::grid_tracker_init (config._M_grid, 0ull);
-        if (st != Status::OK) {
-                zzs::base::log_error ("grid tracker init failed ({})", status_name (st));
-                return st;
-        }
-        zzs::base::log_info ("bank initialized, {} stages", config._M_stage_count);
-        return Status::OK;
+  bank._M_config = &config;
+  bank._M_initialized = true;
+  for (uint32_t i = 0; i < config._M_stage_count; ++i) {
+    const Status st = config._M_stages[i]._M_vtable->_M_configure (config._M_stages[i]._M_state);
+    if (st != Status::OK) {
+      zzs::base::log_error ("stage {} configure failed ({})", i, status_name (st));
+      return st;
+    }
+    zzs::base::log_debug ("stage {} configured", i);
+    config._M_stages[i]._M_vtable->_M_reset (config._M_stages[i]._M_state);
+    zzs::base::log_debug ("stage {} reset", i);
+  }
+  const Status st = clock::grid_tracker_init (config._M_grid, 0ull);
+  if (st != Status::OK) {
+    zzs::base::log_error ("grid tracker init failed ({})", status_name (st));
+    return st;
+  }
+  zzs::base::log_info ("bank initialized, {} stages", config._M_stage_count);
+  return Status::OK;
 }
 
 /** @brief Reset every stage and the grid tracker. */
 inline void
 bank_reset (_S_PreprocessingBank &bank) noexcept {
-        if (bank._M_config == nullptr)
-                return;
-        zzs::base::log_debug ("bank reset, {} stages", bank._M_config->_M_stage_count);
-        for (uint32_t i = 0; i < bank._M_config->_M_stage_count; ++i)
-                bank._M_config->_M_stages[i]._M_vtable->_M_reset (bank._M_config->_M_stages[i]._M_state);
+  if (bank._M_config == nullptr)
+    return;
+  zzs::base::log_debug ("bank reset, {} stages", bank._M_config->_M_stage_count);
+  for (uint32_t i = 0; i < bank._M_config->_M_stage_count; ++i)
+    bank._M_config->_M_stages[i]._M_vtable->_M_reset (bank._M_config->_M_stages[i]._M_state);
 }
 
 /** @brief Feed one raw sensor sample into the bank.
@@ -117,24 +117,23 @@ bank_reset (_S_PreprocessingBank &bank) noexcept {
  */
 [[nodiscard]] inline Status
 bank_feed_sample (_S_PreprocessingBank &bank, const sensor::Sample &sample) noexcept {
-        if (!bank._M_initialized || bank._M_config == nullptr)
-                return Status::OUT_OF_RANGE;
-        if (bank._M_config->_M_stage_count > _S_bank_max_stages)
-                return Status::OUT_OF_RANGE;
-        for (uint32_t i = 0; i < bank._M_config->_M_stage_count; ++i) {
-                if (bank._M_config->_M_stages[i]._M_vtable == nullptr)
-                        return Status::OUT_OF_RANGE;
-                if (bank._M_config->_M_stages[i]._M_state == nullptr)
-                        return Status::OUT_OF_RANGE;
-        }
+  if (!bank._M_initialized || bank._M_config == nullptr)
+    return Status::OUT_OF_RANGE;
+  if (bank._M_config->_M_stage_count > _S_bank_max_stages)
+    return Status::OUT_OF_RANGE;
+  for (uint32_t i = 0; i < bank._M_config->_M_stage_count; ++i) {
+    if (bank._M_config->_M_stages[i]._M_vtable == nullptr)
+      return Status::OUT_OF_RANGE;
+    if (bank._M_config->_M_stages[i]._M_state == nullptr)
+      return Status::OUT_OF_RANGE;
+  }
 
-        /* Advance the common grid with this sample's timestamp so the grid
-           actually progresses (was previously dead: never advanced). */
-        (void) clock::grid_tracker_advance (bank._M_config->_M_grid, sample._M_timestamp_ns);
+  /* Advance the common grid with this sample's timestamp so the grid
+     actually progresses (was previously dead: never advanced). */
+  (void) clock::grid_tracker_advance (bank._M_config->_M_grid, sample._M_timestamp_ns);
 
-        const int16_t sample_q15 = sample._M_sample_q15;
-        return stage_feed_all (bank._M_config->_M_stages, bank._M_config->_M_stage_count, sample._M_channel,
-                               sample_q15);
+  const int16_t sample_q15 = sample._M_sample_q15;
+  return stage_feed_all (bank._M_config->_M_stages, bank._M_config->_M_stage_count, sample._M_channel, sample_q15);
 }
 
 /** @brief Produce features from every stage into a packed int8 feature row.
@@ -144,24 +143,24 @@ bank_feed_sample (_S_PreprocessingBank &bank, const sensor::Sample &sample) noex
  */
 [[nodiscard]] inline Status
 bank_produce_row (_S_PreprocessingBank &bank, int8_t *const row) noexcept {
-        if (!bank._M_initialized || bank._M_config == nullptr)
-                return Status::OUT_OF_RANGE;
-        if (row == nullptr)
-                return Status::OUT_OF_RANGE;
-        feat::feat_row_clear (row);
-        int32_t slots[_S_feature_count];
-        for (uint32_t i = 0; i < _S_feature_count; ++i)
-                slots[i] = 0;
-        const Status st =
-            stage_produce_all (bank._M_config->_M_stages, bank._M_config->_M_stage_count, slots, _S_feature_count);
-        if (st == Status::NOT_READY)
-                return Status::NOT_READY;
-        if (st != Status::OK)
-                zzs::base::log_error ("stage produce failed ({})", status_name (st));
-        else
-                zzs::base::log_debug ("feature row produced");
-        feat::feat_pack_row (row, slots, _S_feature_count);
-        return Status::OK;
+  if (!bank._M_initialized || bank._M_config == nullptr)
+    return Status::OUT_OF_RANGE;
+  if (row == nullptr)
+    return Status::OUT_OF_RANGE;
+  feat::feat_row_clear (row);
+  int32_t slots[_S_feature_count];
+  for (uint32_t i = 0; i < _S_feature_count; ++i)
+    slots[i] = 0;
+  const Status st =
+      stage_produce_all (bank._M_config->_M_stages, bank._M_config->_M_stage_count, slots, _S_feature_count);
+  if (st == Status::NOT_READY)
+    return Status::NOT_READY;
+  if (st != Status::OK)
+    zzs::base::log_error ("stage produce failed ({})", status_name (st));
+  else
+    zzs::base::log_debug ("feature row produced");
+  feat::feat_pack_row (row, slots, _S_feature_count);
+  return Status::OK;
 }
 
 /** @} */

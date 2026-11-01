@@ -39,56 +39,56 @@ namespace zzs::kernel::frames {
 
 /** @brief One feature frame: seq_len rows x feature_count int8 codes. */
 struct FeatureFrame {
-        int8_t _M_row[zzs::kernel::_S_seq_len][zzs::kernel::_S_feature_count];
-        uint32_t _M_row_count;
-        bool _M_complete;
+  int8_t _M_row[zzs::kernel::_S_seq_len][zzs::kernel::_S_feature_count];
+  uint32_t _M_row_count;
+  bool _M_complete;
 };
 
 /** @brief Initialize a frame. */
 inline void
 frame_init (FeatureFrame &frame) noexcept {
-        for (uint32_t r = 0; r < zzs::kernel::_S_seq_len; ++r)
-                for (uint32_t c = 0; c < zzs::kernel::_S_feature_count; ++c)
-                        frame._M_row[r][c] = 0;
-        frame._M_row_count = 0;
-        frame._M_complete = false;
+  for (uint32_t r = 0; r < zzs::kernel::_S_seq_len; ++r)
+    for (uint32_t c = 0; c < zzs::kernel::_S_feature_count; ++c)
+      frame._M_row[r][c] = 0;
+  frame._M_row_count = 0;
+  frame._M_complete = false;
 }
 
 /** @brief Append one packed feature row. Returns true when the frame completes. */
 [[nodiscard]] inline bool
 frame_append_row (FeatureFrame &frame, const int8_t *const row) noexcept {
-        if (row == nullptr || frame._M_complete || frame._M_row_count >= zzs::kernel::_S_seq_len)
-                return frame._M_complete;
-        for (uint32_t c = 0; c < zzs::kernel::_S_feature_count; ++c)
-                frame._M_row[frame._M_row_count][c] = row[c];
-        ++frame._M_row_count;
-        if (frame._M_row_count >= zzs::kernel::_S_seq_len)
-                frame._M_complete = true;
-        return frame._M_complete;
+  if (row == nullptr || frame._M_complete || frame._M_row_count >= zzs::kernel::_S_seq_len)
+    return frame._M_complete;
+  for (uint32_t c = 0; c < zzs::kernel::_S_feature_count; ++c)
+    frame._M_row[frame._M_row_count][c] = row[c];
+  ++frame._M_row_count;
+  if (frame._M_row_count >= zzs::kernel::_S_seq_len)
+    frame._M_complete = true;
+  return frame._M_complete;
 }
 
 /** @brief Apply one packed feature row (alias for frame_append_row). */
 [[nodiscard]] inline bool
 apply_row (FeatureFrame &frame, const int8_t *const row) noexcept {
-        return frame_append_row (frame, row);
+  return frame_append_row (frame, row);
 }
 
 /** @brief True when a full frame is available. */
 [[nodiscard]] inline bool
 frame_complete (const FeatureFrame &frame) noexcept {
-        return frame._M_complete;
+  return frame._M_complete;
 }
 
 /** @brief Bytes of one frame. */
 [[nodiscard]] inline constexpr uint32_t
 frame_bytes (void) noexcept {
-        return zzs::kernel::_S_sequence_bytes;
+  return zzs::kernel::_S_sequence_bytes;
 }
 
 /** @brief Reset the frame for the next inference. */
 inline void
 frame_reset (FeatureFrame &frame) noexcept {
-        frame_init (frame);
+  frame_init (frame);
 }
 
 /** @} */

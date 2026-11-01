@@ -57,14 +57,14 @@ namespace zzs::mllee {
  * I8..F3E1M1 values keep their numeric identity.
  */
 enum class Dtype : uint8_t {
-        I8 = 0,
-        I4,
-        F8E4M3,
-        F8E5M2,
-        F4E2M1,
-        I2,
-        F3E1M1,
-        I3,
+  I8 = 0,
+  I4,
+  F8E4M3,
+  F8E5M2,
+  F4E2M1,
+  I2,
+  F3E1M1,
+  I3,
 };
 
 /** @brief Largest legal `Dtype` value; the format validator bounds against it. */
@@ -74,15 +74,15 @@ inline constexpr uint8_t _S_dtype_max = static_cast<uint8_t> (Dtype::I3);
 [[nodiscard]] constexpr uint32_t
 _S_ilog2 (const uint32_t value) noexcept {
 #if defined(__has_builtin) && __has_builtin(__builtin_clz)
-        if !consteval {
-                if (value != 0)
-                        return 31u - static_cast<uint32_t> (__builtin_clz (value));
-        }
+  if !consteval {
+    if (value != 0)
+      return 31u - static_cast<uint32_t> (__builtin_clz (value));
+  }
 #endif
-        uint32_t bits = 0;
-        while ((value >> bits) > 1u)
-                ++bits;
-        return bits;
+  uint32_t bits = 0;
+  while ((value >> bits) > 1u)
+    ++bits;
+  return bits;
 }
 
 /**
@@ -94,24 +94,24 @@ _S_ilog2 (const uint32_t value) noexcept {
  */
 [[nodiscard]] inline constexpr uint32_t
 _S_code_bits (const Dtype dtype) noexcept {
-        switch (dtype) {
-        case Dtype::I2:
-                return 2u;
-        case Dtype::I3:
-        case Dtype::F3E1M1:
-                return 3u;
-        case Dtype::I4:
-        case Dtype::F4E2M1:
-                return 4u;
-        default:
-                return 8u;
-        }
+  switch (dtype) {
+  case Dtype::I2:
+    return 2u;
+  case Dtype::I3:
+  case Dtype::F3E1M1:
+    return 3u;
+  case Dtype::I4:
+  case Dtype::F4E2M1:
+    return 4u;
+  default:
+    return 8u;
+  }
 }
 
 /** @brief True for integer formats (no Flash LUT needed). */
 [[nodiscard]] inline constexpr bool
 _S_integer_dtype (const Dtype dtype) noexcept {
-        return dtype == Dtype::I8 || dtype == Dtype::I4 || dtype == Dtype::I3 || dtype == Dtype::I2;
+  return dtype == Dtype::I8 || dtype == Dtype::I4 || dtype == Dtype::I3 || dtype == Dtype::I2;
 }
 
 /**
@@ -123,7 +123,7 @@ _S_integer_dtype (const Dtype dtype) noexcept {
  */
 [[nodiscard]] inline constexpr bool
 _S_byte_divisible (const Dtype dtype) noexcept {
-        return (8u % _S_code_bits (dtype)) == 0u;
+  return (8u % _S_code_bits (dtype)) == 0u;
 }
 
 /**
@@ -135,37 +135,37 @@ _S_byte_divisible (const Dtype dtype) noexcept {
  */
 [[nodiscard]] inline constexpr uint32_t
 _S_codes_per_byte (const Dtype dtype) noexcept {
-        const uint32_t bits = _S_code_bits (dtype);
-        return (8u % bits) == 0u ? 8u / bits : 0u;
+  const uint32_t bits = _S_code_bits (dtype);
+  return (8u % bits) == 0u ? 8u / bits : 0u;
 }
 
 /** @brief log2 of the codes per stream byte for byte-divisible formats, else 0. */
 [[nodiscard]] inline constexpr uint32_t
 _S_code_shift (const Dtype dtype) noexcept {
-        const uint32_t codes = _S_codes_per_byte (dtype);
-        if (codes == 0u)
-                return 0u;
+  const uint32_t codes = _S_codes_per_byte (dtype);
+  if (codes == 0u)
+    return 0u;
 #if defined(__has_builtin) && __has_builtin(__builtin_ctz)
-        if !consteval {
-                return static_cast<uint32_t> (__builtin_ctz (codes));
-        }
+  if !consteval {
+    return static_cast<uint32_t> (__builtin_ctz (codes));
+  }
 #endif
-        uint32_t shift = 0;
-        while ((1u << shift) < codes)
-                ++shift;
-        return shift;
+  uint32_t shift = 0;
+  while ((1u << shift) < codes)
+    ++shift;
+  return shift;
 }
 
 /** @brief True when several codes share one stream byte. */
 [[nodiscard]] inline constexpr bool
 _S_packed_dtype (const Dtype dtype) noexcept {
-        return _S_code_bits (dtype) != 8u;
+  return _S_code_bits (dtype) != 8u;
 }
 
 /** @brief Mask of one packed code, i.e. the field width of `dtype`. */
 [[nodiscard]] inline constexpr uint32_t
 _S_code_mask (const Dtype dtype) noexcept {
-        return (1u << _S_code_bits (dtype)) - 1u;
+  return (1u << _S_code_bits (dtype)) - 1u;
 }
 
 /**
@@ -178,7 +178,7 @@ _S_code_mask (const Dtype dtype) noexcept {
  */
 [[nodiscard]] inline constexpr uint32_t
 _S_row_bytes (const Dtype dtype, const uint32_t count) noexcept {
-        return (count * _S_code_bits (dtype) + 7u) / 8u;
+  return (count * _S_code_bits (dtype) + 7u) / 8u;
 }
 
 /**
@@ -192,25 +192,25 @@ _S_row_bytes (const Dtype dtype, const uint32_t count) noexcept {
  */
 [[nodiscard]] inline constexpr bool
 _S_codes_aligned (const Dtype dtype, const uint32_t count) noexcept {
-        return _S_byte_divisible (dtype) || (count % 8u) == 0u;
+  return _S_byte_divisible (dtype) || (count % 8u) == 0u;
 }
 
 /** @brief Byte index of code `index` in a bit-packed row. */
 [[nodiscard]] inline constexpr uint32_t
 _S_code_byte (const Dtype dtype, const uint32_t index) noexcept {
-        return (index * _S_code_bits (dtype)) >> 3;
+  return (index * _S_code_bits (dtype)) >> 3;
 }
 
 /** @brief Bit offset of code `index` inside `_S_code_byte (dtype, index)`. */
 [[nodiscard]] inline constexpr uint32_t
 _S_code_bit (const Dtype dtype, const uint32_t index) noexcept {
-        return (index * _S_code_bits (dtype)) & 7u;
+  return (index * _S_code_bits (dtype)) & 7u;
 }
 
 /** @brief Code value range of an integer `dtype`: {I8: [-128, 127], I4: [-8, 7], I3: [-4, 3], I2: [-2, 1]}. */
 [[nodiscard]] inline constexpr int32_t
 _S_code_qmin (const Dtype dtype) noexcept {
-        return -(1 << (_S_code_bits (dtype) - 1u));
+  return -(1 << (_S_code_bits (dtype) - 1u));
 }
 
 /**
@@ -221,17 +221,17 @@ _S_code_qmin (const Dtype dtype) noexcept {
  */
 [[nodiscard]] inline constexpr int32_t
 _S_code_qmax (const Dtype dtype) noexcept {
-        return (1 << (_S_code_bits (dtype) - 1u)) - 1;
+  return (1 << (_S_code_bits (dtype) - 1u)) - 1;
 }
 
 [[nodiscard]] constexpr int32_t
 _S_clamp_i8 (const int32_t value) noexcept {
-        return value < -127 ? -127 : (value > 127 ? 127 : value);
+  return value < -127 ? -127 : (value > 127 ? 127 : value);
 }
 
 [[nodiscard]] constexpr int8_t
 _S_i8_code (const int32_t value) noexcept {
-        return static_cast<int8_t> (_S_clamp_i8 (value));
+  return static_cast<int8_t> (_S_clamp_i8 (value));
 }
 
 /**
@@ -242,33 +242,33 @@ _S_i8_code (const int32_t value) noexcept {
  */
 [[nodiscard]] constexpr int32_t
 _S_from_int_bits (const uint32_t code, const uint32_t bits) noexcept {
-        const uint32_t field = code & ((1u << bits) - 1u);
-        const uint32_t sign = 1u << (bits - 1u);
-        return (field & sign) != 0u ? static_cast<int32_t> (field) - static_cast<int32_t> (sign * 2u)
-                                    : static_cast<int32_t> (field);
+  const uint32_t field = code & ((1u << bits) - 1u);
+  const uint32_t sign = 1u << (bits - 1u);
+  return (field & sign) != 0u ? static_cast<int32_t> (field) - static_cast<int32_t> (sign * 2u)
+                              : static_cast<int32_t> (field);
 }
 
 [[nodiscard]] constexpr int32_t
 _S_from_int4 (const uint8_t nibble) noexcept {
-        return _S_from_int_bits (nibble, 4u);
+  return _S_from_int_bits (nibble, 4u);
 }
 
 /** @brief Two's-complement int2 code: 0, 1 map to 0, 1 and 2, 3 to -2, -1. */
 [[nodiscard]] constexpr int32_t
 _S_from_int2 (const uint8_t code) noexcept {
-        return _S_from_int_bits (code, 2u);
+  return _S_from_int_bits (code, 2u);
 }
 
 /** @brief Two's-complement int3 code: 0..3 map to 0..3 and 4..7 to -4..-1. */
 [[nodiscard]] constexpr int32_t
 _S_from_int3 (const uint8_t code) noexcept {
-        return _S_from_int_bits (code, 3u);
+  return _S_from_int_bits (code, 3u);
 }
 
 /** @brief Pack two int4 codes, low nibble first (PyTorch/torchao order). */
 [[nodiscard]] constexpr uint8_t
 _S_pack_int4 (const int8_t low, const int8_t high) noexcept {
-        return static_cast<uint8_t> ((static_cast<uint8_t> (low) & 0x0F) | ((static_cast<uint8_t> (high) & 0x0F) << 4));
+  return static_cast<uint8_t> ((static_cast<uint8_t> (low) & 0x0F) | ((static_cast<uint8_t> (high) & 0x0F) << 4));
 }
 
 /**
@@ -279,9 +279,8 @@ _S_pack_int4 (const int8_t low, const int8_t high) noexcept {
  */
 [[nodiscard]] constexpr uint8_t
 _S_pack_int2 (const int8_t c0, const int8_t c1, const int8_t c2, const int8_t c3) noexcept {
-        return static_cast<uint8_t> ((static_cast<uint8_t> (c0) & 0x03) | ((static_cast<uint8_t> (c1) & 0x03) << 2)
-                                     | ((static_cast<uint8_t> (c2) & 0x03) << 4)
-                                     | ((static_cast<uint8_t> (c3) & 0x03) << 6));
+  return static_cast<uint8_t> ((static_cast<uint8_t> (c0) & 0x03) | ((static_cast<uint8_t> (c1) & 0x03) << 2)
+                               | ((static_cast<uint8_t> (c2) & 0x03) << 4) | ((static_cast<uint8_t> (c3) & 0x03) << 6));
 }
 
 /**
@@ -294,14 +293,14 @@ _S_pack_int2 (const int8_t c0, const int8_t c1, const int8_t c2, const int8_t c3
  */
 [[nodiscard]] constexpr uint32_t
 _S_code_at (const uint8_t *const data, const uint32_t index, const uint32_t bits) noexcept {
-        const uint32_t bit = index * bits;
-        const uint32_t byte = bit >> 3;
-        const uint32_t shift = bit & 7u;
-        const uint32_t field = (1u << bits) - 1u;
-        uint32_t word = static_cast<uint32_t> (data[byte]);
-        if (shift + bits > 8u)
-                word |= static_cast<uint32_t> (data[byte + 1u]) << 8;
-        return (word >> shift) & field;
+  const uint32_t bit = index * bits;
+  const uint32_t byte = bit >> 3;
+  const uint32_t shift = bit & 7u;
+  const uint32_t field = (1u << bits) - 1u;
+  uint32_t word = static_cast<uint32_t> (data[byte]);
+  if (shift + bits > 8u)
+    word |= static_cast<uint32_t> (data[byte + 1u]) << 8;
+  return (word >> shift) & field;
 }
 
 /**
@@ -313,10 +312,10 @@ _S_code_at (const uint8_t *const data, const uint32_t index, const uint32_t bits
  */
 [[nodiscard]] constexpr uint32_t
 _S_code_at (const uint8_t byte, const uint32_t index, const uint32_t bits) noexcept {
-        if ((8u % bits) != 0u)
-                return 0u;
-        const uint32_t per_byte = 8u / bits;
-        return (static_cast<uint32_t> (byte) >> ((index % per_byte) * bits)) & ((1u << bits) - 1u);
+  if ((8u % bits) != 0u)
+    return 0u;
+  const uint32_t per_byte = 8u / bits;
+  return (static_cast<uint32_t> (byte) >> ((index % per_byte) * bits)) & ((1u << bits) - 1u);
 }
 
 /**
@@ -328,17 +327,17 @@ _S_code_at (const uint8_t byte, const uint32_t index, const uint32_t bits) noexc
  */
 constexpr void
 _S_pack_code_at (uint8_t *const data, const uint32_t bit, const int32_t code, const uint32_t bits) noexcept {
-        const uint32_t byte = bit >> 3;
-        const uint32_t shift = bit & 7u;
-        const uint32_t field = (1u << bits) - 1u;
-        const uint32_t value = static_cast<uint32_t> (code) & field;
-        data[byte] = static_cast<uint8_t> ((static_cast<uint32_t> (data[byte]) & ~(field << shift))
-                                           | ((value << shift) & 0xFFu));
-        if (shift + bits > 8u) {
-                const uint32_t high_shift = 8u - shift;
-                data[byte + 1u] = static_cast<uint8_t> (
-                    (static_cast<uint32_t> (data[byte + 1u]) & ~(field >> high_shift)) | (value >> high_shift));
-        }
+  const uint32_t byte = bit >> 3;
+  const uint32_t shift = bit & 7u;
+  const uint32_t field = (1u << bits) - 1u;
+  const uint32_t value = static_cast<uint32_t> (code) & field;
+  data[byte] =
+      static_cast<uint8_t> ((static_cast<uint32_t> (data[byte]) & ~(field << shift)) | ((value << shift) & 0xFFu));
+  if (shift + bits > 8u) {
+    const uint32_t high_shift = 8u - shift;
+    data[byte + 1u] = static_cast<uint8_t> ((static_cast<uint32_t> (data[byte + 1u]) & ~(field >> high_shift))
+                                            | (value >> high_shift));
+  }
 }
 
 /**
@@ -350,18 +349,18 @@ _S_pack_code_at (uint8_t *const data, const uint32_t bit, const int32_t code, co
  */
 inline uint32_t
 _S_pack_codes (uint8_t *const out, const int8_t *const codes, const uint32_t count, const uint32_t bits) noexcept {
-        const uint32_t bytes = (count * bits + 7u) / 8u;
-        for (uint32_t i = 0; i < bytes; ++i)
-                out[i] = 0;
-        for (uint32_t i = 0; i < count; ++i)
-                _S_pack_code_at (out, i * bits, codes[i], bits);
-        return bytes;
+  const uint32_t bytes = (count * bits + 7u) / 8u;
+  for (uint32_t i = 0; i < bytes; ++i)
+    out[i] = 0;
+  for (uint32_t i = 0; i < count; ++i)
+    _S_pack_code_at (out, i * bits, codes[i], bits);
+  return bytes;
 }
 
 /** @brief Pack a row of `count` codes of `dtype` into `out`; returns bytes written. */
 inline uint32_t
 _S_pack_codes (const Dtype dtype, const int8_t *const codes, const uint32_t count, uint8_t *const out) noexcept {
-        return _S_pack_codes (out, codes, count, _S_code_bits (dtype));
+  return _S_pack_codes (out, codes, count, _S_code_bits (dtype));
 }
 
 /**
@@ -372,20 +371,19 @@ _S_pack_codes (const Dtype dtype, const int8_t *const codes, const uint32_t coun
  */
 [[nodiscard]] constexpr uint8_t
 _S_pack_codes (const int8_t *const codes, const uint32_t count, const uint32_t bits) noexcept {
-        uint8_t byte = 0;
-        for (uint32_t i = 0; i < count; ++i)
-                byte = static_cast<uint8_t> (byte
-                                             | ((static_cast<uint8_t> (codes[i]) & ((1u << bits) - 1u)) << (i * bits)));
-        return byte;
+  uint8_t byte = 0;
+  for (uint32_t i = 0; i < count; ++i)
+    byte = static_cast<uint8_t> (byte | ((static_cast<uint8_t> (codes[i]) & ((1u << bits) - 1u)) << (i * bits)));
+  return byte;
 }
 
 /** @brief Arithmetic right shift with round-half-up (ties toward +infinity). */
 [[nodiscard]] constexpr int32_t
 _S_round_shift (const int64_t value, const unsigned int shift) noexcept {
-        if (shift == 0)
-                return static_cast<int32_t> (value);
-        const int64_t half = static_cast<int64_t> (1) << (shift - 1u);
-        return static_cast<int32_t> ((value + half) >> shift);
+  if (shift == 0)
+    return static_cast<int32_t> (value);
+  const int64_t half = static_cast<int64_t> (1) << (shift - 1u);
+  return static_cast<int32_t> ((value + half) >> shift);
 }
 
 /**
@@ -396,7 +394,7 @@ _S_round_shift (const int64_t value, const unsigned int shift) noexcept {
  */
 [[nodiscard]] constexpr int32_t
 _S_requant_q15 (const int64_t accumulator, const int32_t multiplier_q15) noexcept {
-        return _S_round_shift (accumulator * static_cast<int64_t> (multiplier_q15), 15u);
+  return _S_round_shift (accumulator * static_cast<int64_t> (multiplier_q15), 15u);
 }
 
 /**
@@ -408,20 +406,20 @@ _S_requant_q15 (const int64_t accumulator, const int32_t multiplier_q15) noexcep
  */
 [[nodiscard]] constexpr uint32_t
 _S_isqrt (const uint32_t value) noexcept {
-        if (value <= 1u)
-                return value;
-        uint32_t root = 0;
-        uint32_t bit = static_cast<uint32_t> (1) << ((_S_ilog2 (value) / 2u) * 2u);
-        uint32_t remainder = value;
-        while (bit != 0) {
-                if (remainder >= root + bit) {
-                        remainder -= root + bit;
-                        root = (root >> 1) + bit;
-                } else
-                        root >>= 1;
-                bit >>= 2;
-        }
-        return root;
+  if (value <= 1u)
+    return value;
+  uint32_t root = 0;
+  uint32_t bit = static_cast<uint32_t> (1) << ((_S_ilog2 (value) / 2u) * 2u);
+  uint32_t remainder = value;
+  while (bit != 0) {
+    if (remainder >= root + bit) {
+      remainder -= root + bit;
+      root = (root >> 1) + bit;
+    } else
+      root >>= 1;
+    bit >>= 2;
+  }
+  return root;
 }
 
 #ifdef ZZS_MLLEE_HOST
@@ -434,17 +432,17 @@ _S_isqrt (const uint32_t value) noexcept {
  */
 [[nodiscard]] inline int32_t
 quantize_affine_i8 (const float value, const float scale, const int32_t zero_point) noexcept {
-        if (!(scale > 0.0f))
-                return 0;
-        const float quotient = value / scale;
-        if (!(quotient == quotient))
-                return 0;
-        const float shifted = std::nearbyint (quotient) + static_cast<float> (zero_point);
-        if (!(shifted > -127.0f))
-                return -127;
-        if (shifted >= 127.0f)
-                return 127;
-        return static_cast<int32_t> (shifted);
+  if (!(scale > 0.0f))
+    return 0;
+  const float quotient = value / scale;
+  if (!(quotient == quotient))
+    return 0;
+  const float shifted = std::nearbyint (quotient) + static_cast<float> (zero_point);
+  if (!(shifted > -127.0f))
+    return -127;
+  if (shifted >= 127.0f)
+    return 127;
+  return static_cast<int32_t> (shifted);
 }
 
 /**
@@ -456,44 +454,44 @@ quantize_affine_i8 (const float value, const float scale, const int32_t zero_poi
  */
 [[nodiscard]] inline int32_t
 quantize_symmetric (const float value, const float scale, const int32_t qmax) noexcept {
-        if (!(scale > 0.0f) || qmax <= 0)
-                return 0;
-        const float quotient = value / scale;
-        if (!(quotient == quotient))
-                return 0;
-        const float rounded = std::nearbyint (quotient);
-        if (!(rounded > -static_cast<float> (qmax)))
-                return -qmax;
-        if (rounded >= static_cast<float> (qmax))
-                return qmax;
-        return static_cast<int32_t> (rounded);
+  if (!(scale > 0.0f) || qmax <= 0)
+    return 0;
+  const float quotient = value / scale;
+  if (!(quotient == quotient))
+    return 0;
+  const float rounded = std::nearbyint (quotient);
+  if (!(rounded > -static_cast<float> (qmax)))
+    return -qmax;
+  if (rounded >= static_cast<float> (qmax))
+    return qmax;
+  return static_cast<int32_t> (rounded);
 }
 
 /** @brief Symmetric quantization driven by a width in bits (2, 3, 4 or 8). */
 [[nodiscard]] inline int32_t
 quantize_symmetric_bits (const float value, const float scale, const uint32_t bits) noexcept {
-        if (bits < 2u || bits > 8u)
-                return 0;
-        return quantize_symmetric (value, scale, (1 << (bits - 1u)) - 1);
+  if (bits < 2u || bits > 8u)
+    return 0;
+  return quantize_symmetric (value, scale, (1 << (bits - 1u)) - 1);
 }
 
 /** @brief Symmetric quantization driven by an integer `Dtype` (I8/I4/I3/I2). */
 [[nodiscard]] inline int32_t
 quantize_symmetric_dtype (const float value, const float scale, const Dtype dtype) noexcept {
-        if (!_S_integer_dtype (dtype))
-                return 0;
-        return quantize_symmetric (value, scale, _S_code_qmax (dtype));
+  if (!_S_integer_dtype (dtype))
+    return 0;
+  return quantize_symmetric (value, scale, _S_code_qmax (dtype));
 }
 
 /** @brief Dequantize one integer code from any width: `code * scale`. */
 [[nodiscard]] inline float
 dequantize_code (const int32_t code, const float scale) noexcept {
-        return static_cast<float> (code) * scale;
+  return static_cast<float> (code) * scale;
 }
 
 [[nodiscard]] inline float
 dequantize_i8 (const int32_t q, const float scale) noexcept {
-        return dequantize_code (q, scale);
+  return dequantize_code (q, scale);
 }
 
 /**
@@ -505,9 +503,9 @@ dequantize_i8 (const int32_t q, const float scale) noexcept {
  */
 [[nodiscard]] inline uint32_t
 _S_float_bits (const float value) noexcept {
-        uint32_t bits = 0u;
-        std::memcpy (&bits, &value, sizeof (bits));
-        return bits;
+  uint32_t bits = 0u;
+  std::memcpy (&bits, &value, sizeof (bits));
+  return bits;
 }
 
 /**
@@ -522,11 +520,11 @@ _S_float_bits (const float value) noexcept {
  */
 [[nodiscard]] inline uint32_t
 _S_shr_rne (const uint32_t value, const uint32_t shift) noexcept {
-        const uint32_t quotient = value >> shift;
-        const uint32_t remainder = value & ((1u << shift) - 1u);
-        const uint32_t half = 1u << (shift - 1u);
-        const bool round_up = remainder > half || (remainder == half && (quotient & 1u) != 0u);
-        return quotient + (round_up ? 1u : 0u);
+  const uint32_t quotient = value >> shift;
+  const uint32_t remainder = value & ((1u << shift) - 1u);
+  const uint32_t half = 1u << (shift - 1u);
+  const bool round_up = remainder > half || (remainder == half && (quotient & 1u) != 0u);
+  return quotient + (round_up ? 1u : 0u);
 }
 
 /**
@@ -537,23 +535,23 @@ _S_shr_rne (const uint32_t value, const uint32_t shift) noexcept {
  */
 [[nodiscard]] inline int32_t
 _S_float_exponent (const uint32_t bits) noexcept {
-        return static_cast<int32_t> (bits >> 23) - 127;
+  return static_cast<int32_t> (bits >> 23) - 127;
 }
 
 /** @brief e4m3fn (bias 7, max 448, no infinities, 0x7F/0xFF are NaN). */
 [[nodiscard]] inline float
 f8_e4m3_to_float (const uint8_t bits) noexcept {
-        const bool negative = (bits & 0x80u) != 0;
-        const int exponent = (bits >> 3) & 0x0F;
-        const int mantissa = bits & 0x07;
-        if (exponent == 0x0F && mantissa == 0x07)
-                return std::numeric_limits<float>::quiet_NaN ();
-        if (exponent == 0) {
-                const float value = std::ldexp (static_cast<float> (mantissa) / 8.0f, 1 - 7);
-                return negative ? -value : value;
-        }
-        const float value = std::ldexp (1.0f + static_cast<float> (mantissa) / 8.0f, exponent - 7);
-        return negative ? -value : value;
+  const bool negative = (bits & 0x80u) != 0;
+  const int exponent = (bits >> 3) & 0x0F;
+  const int mantissa = bits & 0x07;
+  if (exponent == 0x0F && mantissa == 0x07)
+    return std::numeric_limits<float>::quiet_NaN ();
+  if (exponent == 0) {
+    const float value = std::ldexp (static_cast<float> (mantissa) / 8.0f, 1 - 7);
+    return negative ? -value : value;
+  }
+  const float value = std::ldexp (1.0f + static_cast<float> (mantissa) / 8.0f, exponent - 7);
+  return negative ? -value : value;
 }
 
 /**
@@ -569,45 +567,45 @@ f8_e4m3_to_float (const uint8_t bits) noexcept {
  */
 [[nodiscard]] inline uint8_t
 f8_e4m3_from_float (const float value) noexcept {
-        if (std::isnan (value))
-                return 0x7F;
-        const bool negative = std::signbit (value);
-        float magnitude = std::fabs (value);
-        if (!(magnitude < 448.0f))
-                magnitude = 448.0f;
-        uint8_t code;
-        if (magnitude < 0.015625f)
-                code = static_cast<uint8_t> (static_cast<int32_t> (std::nearbyint (magnitude * 512.0f)));
-        else {
-                const uint32_t bits = _S_float_bits (magnitude);
-                int32_t exponent = _S_float_exponent (bits) + 7;
-                uint32_t mantissa = _S_shr_rne (bits & 0x7FFFFFu, 20u);
-                if (mantissa > 7u) {
-                        mantissa = 0u;
-                        ++exponent;
-                }
-                code = static_cast<uint8_t> ((exponent << 3) | static_cast<int32_t> (mantissa));
-        }
-        return static_cast<uint8_t> (code | (negative ? 0x80u : 0u));
+  if (std::isnan (value))
+    return 0x7F;
+  const bool negative = std::signbit (value);
+  float magnitude = std::fabs (value);
+  if (!(magnitude < 448.0f))
+    magnitude = 448.0f;
+  uint8_t code;
+  if (magnitude < 0.015625f)
+    code = static_cast<uint8_t> (static_cast<int32_t> (std::nearbyint (magnitude * 512.0f)));
+  else {
+    const uint32_t bits = _S_float_bits (magnitude);
+    int32_t exponent = _S_float_exponent (bits) + 7;
+    uint32_t mantissa = _S_shr_rne (bits & 0x7FFFFFu, 20u);
+    if (mantissa > 7u) {
+      mantissa = 0u;
+      ++exponent;
+    }
+    code = static_cast<uint8_t> ((exponent << 3) | static_cast<int32_t> (mantissa));
+  }
+  return static_cast<uint8_t> (code | (negative ? 0x80u : 0u));
 }
 
 /** @brief e5m2 (bias 15, infinities and NaNs supported). */
 [[nodiscard]] inline float
 f8_e5m2_to_float (const uint8_t bits) noexcept {
-        const bool negative = (bits & 0x80u) != 0;
-        const int exponent = (bits >> 2) & 0x1F;
-        const int mantissa = bits & 0x03;
-        if (exponent == 0x1F) {
-                if (mantissa != 0)
-                        return std::numeric_limits<float>::quiet_NaN ();
-                return negative ? -std::numeric_limits<float>::infinity () : std::numeric_limits<float>::infinity ();
-        }
-        if (exponent == 0) {
-                const float value = std::ldexp (static_cast<float> (mantissa) / 4.0f, 1 - 15);
-                return negative ? -value : value;
-        }
-        const float value = std::ldexp (1.0f + static_cast<float> (mantissa) / 4.0f, exponent - 15);
-        return negative ? -value : value;
+  const bool negative = (bits & 0x80u) != 0;
+  const int exponent = (bits >> 2) & 0x1F;
+  const int mantissa = bits & 0x03;
+  if (exponent == 0x1F) {
+    if (mantissa != 0)
+      return std::numeric_limits<float>::quiet_NaN ();
+    return negative ? -std::numeric_limits<float>::infinity () : std::numeric_limits<float>::infinity ();
+  }
+  if (exponent == 0) {
+    const float value = std::ldexp (static_cast<float> (mantissa) / 4.0f, 1 - 15);
+    return negative ? -value : value;
+  }
+  const float value = std::ldexp (1.0f + static_cast<float> (mantissa) / 4.0f, exponent - 15);
+  return negative ? -value : value;
 }
 
 /**
@@ -619,34 +617,34 @@ f8_e5m2_to_float (const uint8_t bits) noexcept {
  */
 [[nodiscard]] inline uint8_t
 f8_e5m2_from_float (const float value) noexcept {
-        if (std::isnan (value))
-                return 0x7F;
-        const bool negative = std::signbit (value);
-        float magnitude = std::fabs (value);
-        if (!(magnitude < 57344.0f))
-                magnitude = 57344.0f;
-        uint8_t code;
-        if (magnitude < 6.103515625e-05f)
-                code = static_cast<uint8_t> (static_cast<int32_t> (std::nearbyint (magnitude * 65536.0f)));
-        else {
-                const uint32_t bits = _S_float_bits (magnitude);
-                int32_t exponent = _S_float_exponent (bits) + 15;
-                uint32_t mantissa = _S_shr_rne (bits & 0x7FFFFFu, 21u);
-                if (mantissa > 3u) {
-                        mantissa = 0u;
-                        ++exponent;
-                }
-                code = static_cast<uint8_t> ((exponent << 2) | static_cast<int32_t> (mantissa));
-        }
-        return static_cast<uint8_t> (code | (negative ? 0x80u : 0u));
+  if (std::isnan (value))
+    return 0x7F;
+  const bool negative = std::signbit (value);
+  float magnitude = std::fabs (value);
+  if (!(magnitude < 57344.0f))
+    magnitude = 57344.0f;
+  uint8_t code;
+  if (magnitude < 6.103515625e-05f)
+    code = static_cast<uint8_t> (static_cast<int32_t> (std::nearbyint (magnitude * 65536.0f)));
+  else {
+    const uint32_t bits = _S_float_bits (magnitude);
+    int32_t exponent = _S_float_exponent (bits) + 15;
+    uint32_t mantissa = _S_shr_rne (bits & 0x7FFFFFu, 21u);
+    if (mantissa > 3u) {
+      mantissa = 0u;
+      ++exponent;
+    }
+    code = static_cast<uint8_t> ((exponent << 2) | static_cast<int32_t> (mantissa));
+  }
+  return static_cast<uint8_t> (code | (negative ? 0x80u : 0u));
 }
 
 /** @brief e2m1 values: {0, 0.5, 1, 1.5, 2, 3, 4, 6}, sign in bit 3. */
 [[nodiscard]] inline float
 f4_e2m1_to_float (const uint8_t bits) noexcept {
-        constexpr float values[8] = {0.0f, 0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 4.0f, 6.0f};
-        const float value = values[bits & 0x07];
-        return (bits & 0x08u) != 0 ? -value : value;
+  constexpr float values[8] = {0.0f, 0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 4.0f, 6.0f};
+  const float value = values[bits & 0x07];
+  return (bits & 0x08u) != 0 ? -value : value;
 }
 
 /**
@@ -661,24 +659,24 @@ f4_e2m1_to_float (const uint8_t bits) noexcept {
  */
 [[nodiscard]] inline uint8_t
 f4_e2m1_from_float (const float value) noexcept {
-        const bool negative = std::signbit (value);
-        if (std::isnan (value))
-                return static_cast<uint8_t> (negative ? 0x08u : 0u);
-        const float magnitude = std::fabs (value);
-        uint8_t code;
-        if (magnitude < 1.0f)
-                code = static_cast<uint8_t> (static_cast<int32_t> (std::nearbyint (magnitude * 2.0f)));
-        else {
-                const uint32_t bits = _S_float_bits (magnitude);
-                int32_t exponent = _S_float_exponent (bits) + 1;
-                uint32_t mantissa = _S_shr_rne (bits & 0x7FFFFFu, 22u);
-                if (mantissa > 1u) {
-                        mantissa = 0u;
-                        ++exponent;
-                }
-                code = exponent > 3 ? 7u : static_cast<uint8_t> ((exponent << 1) | static_cast<int32_t> (mantissa));
-        }
-        return static_cast<uint8_t> (code | (negative ? 0x08u : 0u));
+  const bool negative = std::signbit (value);
+  if (std::isnan (value))
+    return static_cast<uint8_t> (negative ? 0x08u : 0u);
+  const float magnitude = std::fabs (value);
+  uint8_t code;
+  if (magnitude < 1.0f)
+    code = static_cast<uint8_t> (static_cast<int32_t> (std::nearbyint (magnitude * 2.0f)));
+  else {
+    const uint32_t bits = _S_float_bits (magnitude);
+    int32_t exponent = _S_float_exponent (bits) + 1;
+    uint32_t mantissa = _S_shr_rne (bits & 0x7FFFFFu, 22u);
+    if (mantissa > 1u) {
+      mantissa = 0u;
+      ++exponent;
+    }
+    code = exponent > 3 ? 7u : static_cast<uint8_t> ((exponent << 1) | static_cast<int32_t> (mantissa));
+  }
+  return static_cast<uint8_t> (code | (negative ? 0x08u : 0u));
 }
 
 /**
@@ -701,9 +699,9 @@ f4_e2m1_from_float (const float value) noexcept {
  */
 [[nodiscard]] inline float
 f3_e1m1_to_float (const uint8_t bits) noexcept {
-        constexpr float values[4] = {0.0f, 0.5f, 1.0f, 1.5f};
-        const float value = values[bits & 0x03u];
-        return (bits & 0x04u) != 0 ? -value : value;
+  constexpr float values[4] = {0.0f, 0.5f, 1.0f, 1.5f};
+  const float value = values[bits & 0x03u];
+  return (bits & 0x04u) != 0 ? -value : value;
 }
 
 /**
@@ -716,72 +714,69 @@ f3_e1m1_to_float (const uint8_t bits) noexcept {
  */
 [[nodiscard]] inline uint8_t
 f3_e1m1_from_float (const float value) noexcept {
-        const bool negative = std::signbit (value);
-        if (std::isnan (value))
-                return static_cast<uint8_t> (negative ? 0x04u : 0u);
-        const float magnitude = std::fabs (value);
-        uint8_t code;
-        if (!(magnitude < 1.5f))
-                code = 3u;
-        else
-                code = static_cast<uint8_t> (static_cast<int32_t> (std::nearbyint (magnitude * 2.0f)));
-        return static_cast<uint8_t> (code | (negative ? 0x04u : 0u));
+  const bool negative = std::signbit (value);
+  if (std::isnan (value))
+    return static_cast<uint8_t> (negative ? 0x04u : 0u);
+  const float magnitude = std::fabs (value);
+  uint8_t code;
+  if (!(magnitude < 1.5f))
+    code = 3u;
+  else
+    code = static_cast<uint8_t> (static_cast<int32_t> (std::nearbyint (magnitude * 2.0f)));
+  return static_cast<uint8_t> (code | (negative ? 0x04u : 0u));
 }
 
 /** @brief Build the Flash weight LUT mapping an f8 code to a normalized int8 code. */
 inline void
 build_weight_lut_e4m3 (const float max_abs, int8_t *lut) noexcept {
-        const float scale = max_abs > 0.0f ? max_abs : 1.0f;
-        for (int code = 0; code < 256; ++code) {
-                const float value = f8_e4m3_to_float (static_cast<uint8_t> (code));
-                lut[code] = std::isnan (value)
-                                ? 0
-                                : _S_i8_code (static_cast<int32_t> (std::nearbyint (value / scale * 127.0f)));
-        }
+  const float scale = max_abs > 0.0f ? max_abs : 1.0f;
+  for (int code = 0; code < 256; ++code) {
+    const float value = f8_e4m3_to_float (static_cast<uint8_t> (code));
+    lut[code] = std::isnan (value) ? 0 : _S_i8_code (static_cast<int32_t> (std::nearbyint (value / scale * 127.0f)));
+  }
 }
 
 inline void
 build_weight_lut_e5m2 (const float max_abs, int8_t *lut) noexcept {
-        const float scale = max_abs > 0.0f ? max_abs : 1.0f;
-        for (int code = 0; code < 256; ++code) {
-                const float value = f8_e5m2_to_float (static_cast<uint8_t> (code));
-                lut[code] = (!std::isfinite (value))
-                                ? 0
-                                : _S_i8_code (static_cast<int32_t> (std::nearbyint (value / scale * 127.0f)));
-        }
+  const float scale = max_abs > 0.0f ? max_abs : 1.0f;
+  for (int code = 0; code < 256; ++code) {
+    const float value = f8_e5m2_to_float (static_cast<uint8_t> (code));
+    lut[code] =
+        (!std::isfinite (value)) ? 0 : _S_i8_code (static_cast<int32_t> (std::nearbyint (value / scale * 127.0f)));
+  }
 }
 
 inline void
 build_weight_lut_e2m1 (const float max_abs, int8_t *lut) noexcept {
-        const float scale = max_abs > 0.0f ? max_abs : 1.0f;
-        for (int code = 0; code < 16; ++code) {
-                const float value = f4_e2m1_to_float (static_cast<uint8_t> (code));
-                lut[code] = _S_i8_code (static_cast<int32_t> (std::nearbyint (value / scale * 127.0f)));
-        }
+  const float scale = max_abs > 0.0f ? max_abs : 1.0f;
+  for (int code = 0; code < 16; ++code) {
+    const float value = f4_e2m1_to_float (static_cast<uint8_t> (code));
+    lut[code] = _S_i8_code (static_cast<int32_t> (std::nearbyint (value / scale * 127.0f)));
+  }
 }
 
 /** @brief Build the 8-entry Flash LUT for F3E1M1 (codes {0, ±0.5, ±1, ±1.5}). */
 inline void
 build_weight_lut_e1m1 (const float max_abs, int8_t *lut) noexcept {
-        const float scale = max_abs > 0.0f ? max_abs : 1.0f;
-        for (int code = 0; code < 8; ++code) {
-                const float value = f3_e1m1_to_float (static_cast<uint8_t> (code));
-                lut[code] = _S_i8_code (static_cast<int32_t> (std::nearbyint (value / scale * 127.0f)));
-        }
+  const float scale = max_abs > 0.0f ? max_abs : 1.0f;
+  for (int code = 0; code < 8; ++code) {
+    const float value = f3_e1m1_to_float (static_cast<uint8_t> (code));
+    lut[code] = _S_i8_code (static_cast<int32_t> (std::nearbyint (value / scale * 127.0f)));
+  }
 }
 
 /** @brief Q15 requant multiplier from a float scale ratio. */
 [[nodiscard]] inline int32_t
 requant_multiplier (const double weight_scale, const double input_scale, const double output_scale) noexcept {
-        if (!(output_scale > 0.0))
-                return 0;
-        const double ratio = weight_scale * input_scale / output_scale;
-        const double scaled = ratio * 32768.0;
-        if (scaled <= -2147483648.0)
-                return std::numeric_limits<int32_t>::min ();
-        if (scaled >= 2147483647.0)
-                return std::numeric_limits<int32_t>::max ();
-        return static_cast<int32_t> (std::nearbyint (scaled));
+  if (!(output_scale > 0.0))
+    return 0;
+  const double ratio = weight_scale * input_scale / output_scale;
+  const double scaled = ratio * 32768.0;
+  if (scaled <= -2147483648.0)
+    return std::numeric_limits<int32_t>::min ();
+  if (scaled >= 2147483647.0)
+    return std::numeric_limits<int32_t>::max ();
+  return static_cast<int32_t> (std::nearbyint (scaled));
 }
 #endif // ZZS_MLLEE_HOST
 } // namespace zzs::mllee

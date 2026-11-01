@@ -46,23 +46,23 @@ inline constexpr uint32_t _S_goertzel_max_bins = 16u;
 
 /** @brief One configured bin: descriptor plus resonator state. */
 struct _S_GoertzelBinEntry {
-        uint32_t _M_frequency_hz;
-        uint32_t _M_sample_rate_hz;
-        _S_GoertzelBin _M_resonator;
+  uint32_t _M_frequency_hz;
+  uint32_t _M_sample_rate_hz;
+  _S_GoertzelBin _M_resonator;
 };
 
 /** @brief The bank: bins plus the number configured. */
 struct _S_GoertzelBank {
-        _S_GoertzelBinEntry _M_bin[_S_goertzel_max_bins];
-        uint32_t _M_bin_count;
+  _S_GoertzelBinEntry _M_bin[_S_goertzel_max_bins];
+  uint32_t _M_bin_count;
 };
 
 /** @brief Reset all resonator states; coefficients are unchanged. */
 inline void
 goertzel_bank_reset (_S_GoertzelBank &bank) noexcept {
-        zzs::base::log_debug ("goertzel_bank_reset: bins={}", bank._M_bin_count);
-        for (uint32_t i = 0; i < bank._M_bin_count; ++i)
-                zzs::kernel::dsp::goertzel_bin_reset (bank._M_bin[i]._M_resonator);
+  zzs::base::log_debug ("goertzel_bank_reset: bins={}", bank._M_bin_count);
+  for (uint32_t i = 0; i < bank._M_bin_count; ++i)
+    zzs::kernel::dsp::goertzel_bin_reset (bank._M_bin[i]._M_resonator);
 }
 
 /**
@@ -71,58 +71,57 @@ goertzel_bank_reset (_S_GoertzelBank &bank) noexcept {
  */
 [[nodiscard]] inline zzs::kernel::Status
 goertzel_bank_add_bin (_S_GoertzelBank &bank, const uint32_t frequency_hz, const uint32_t sample_rate_hz) noexcept {
-        if (sample_rate_hz == 0u || bank._M_bin_count >= _S_goertzel_max_bins) {
-                zzs::base::log_error ("goertzel_bank_add_bin: freq={} rate={} bins={} -> {}", frequency_hz,
-                                      sample_rate_hz, bank._M_bin_count,
-                                      zzs::kernel::status_name (zzs::kernel::Status::OUT_OF_RANGE));
-                return zzs::kernel::Status::OUT_OF_RANGE;
-        }
-        _S_GoertzelBinEntry &entry = bank._M_bin[bank._M_bin_count];
-        entry._M_frequency_hz = frequency_hz;
-        entry._M_sample_rate_hz = sample_rate_hz;
-        const zzs::kernel::Status st =
-            zzs::kernel::dsp::goertzel_bin_configure (entry._M_resonator, frequency_hz, sample_rate_hz);
-        if (st != zzs::kernel::Status::OK) {
-                zzs::base::log_error ("goertzel_bank_add_bin: freq={} rate={} bins={} -> {}", frequency_hz,
-                                      sample_rate_hz, bank._M_bin_count, zzs::kernel::status_name (st));
-                return st;
-        }
-        ++bank._M_bin_count;
-        zzs::base::log_debug ("goertzel_bank_add_bin: ok freq={} rate={} bins={}", frequency_hz, sample_rate_hz,
-                              bank._M_bin_count);
-        return zzs::kernel::Status::OK;
+  if (sample_rate_hz == 0u || bank._M_bin_count >= _S_goertzel_max_bins) {
+    zzs::base::log_error ("goertzel_bank_add_bin: freq={} rate={} bins={} -> {}", frequency_hz, sample_rate_hz,
+                          bank._M_bin_count, zzs::kernel::status_name (zzs::kernel::Status::OUT_OF_RANGE));
+    return zzs::kernel::Status::OUT_OF_RANGE;
+  }
+  _S_GoertzelBinEntry &entry = bank._M_bin[bank._M_bin_count];
+  entry._M_frequency_hz = frequency_hz;
+  entry._M_sample_rate_hz = sample_rate_hz;
+  const zzs::kernel::Status st =
+      zzs::kernel::dsp::goertzel_bin_configure (entry._M_resonator, frequency_hz, sample_rate_hz);
+  if (st != zzs::kernel::Status::OK) {
+    zzs::base::log_error ("goertzel_bank_add_bin: freq={} rate={} bins={} -> {}", frequency_hz, sample_rate_hz,
+                          bank._M_bin_count, zzs::kernel::status_name (st));
+    return st;
+  }
+  ++bank._M_bin_count;
+  zzs::base::log_debug ("goertzel_bank_add_bin: ok freq={} rate={} bins={}", frequency_hz, sample_rate_hz,
+                        bank._M_bin_count);
+  return zzs::kernel::Status::OK;
 }
 
 /** @brief Feed one Q15 sample into every resonator in the bank. */
 [[nodiscard]] inline zzs::kernel::Status
 goertzel_bank_step (_S_GoertzelBank &bank, const int16_t sample_q15) noexcept {
-        for (uint32_t i = 0; i < bank._M_bin_count; ++i)
-                zzs::kernel::dsp::goertzel_bin_step (bank._M_bin[i]._M_resonator, sample_q15);
-        return zzs::kernel::Status::OK;
+  for (uint32_t i = 0; i < bank._M_bin_count; ++i)
+    zzs::kernel::dsp::goertzel_bin_step (bank._M_bin[i]._M_resonator, sample_q15);
+  return zzs::kernel::Status::OK;
 }
 
 /** @brief Squared magnitude (Q14) of bin `index` after its window is done. */
 [[nodiscard]] inline uint32_t
 goertzel_bank_power_q14 (const _S_GoertzelBank &bank, const uint32_t index) noexcept {
-        if (index >= bank._M_bin_count)
-                return 0u;
-        return zzs::kernel::dsp::goertzel_bin_power_q14 (bank._M_bin[index]._M_resonator);
+  if (index >= bank._M_bin_count)
+    return 0u;
+  return zzs::kernel::dsp::goertzel_bin_power_q14 (bank._M_bin[index]._M_resonator);
 }
 
 /** @brief Magnitude (Q7) of bin `index` after its window is done. */
 [[nodiscard]] inline int32_t
 goertzel_bank_magnitude_q7 (const _S_GoertzelBank &bank, const uint32_t index) noexcept {
-        if (index >= bank._M_bin_count)
-                return 0;
-        return zzs::kernel::dsp::goertzel_bin_magnitude_q7 (bank._M_bin[index]._M_resonator);
+  if (index >= bank._M_bin_count)
+    return 0;
+  return zzs::kernel::dsp::goertzel_bin_magnitude_q7 (bank._M_bin[index]._M_resonator);
 }
 
 /** @brief Frequency of bin `index`. */
 [[nodiscard]] inline uint32_t
 goertzel_bank_frequency_hz (const _S_GoertzelBank &bank, const uint32_t index) noexcept {
-        if (index >= bank._M_bin_count)
-                return 0u;
-        return bank._M_bin[index]._M_frequency_hz;
+  if (index >= bank._M_bin_count)
+    return 0u;
+  return bank._M_bin[index]._M_frequency_hz;
 }
 
 /** @} */

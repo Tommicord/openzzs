@@ -31,204 +31,178 @@
 #include <cstdint>
 #include <cstring>
 
-namespace test
-{
+namespace test {
 
 /** @brief In-memory register bank implementing BusInterface. */
-class MockBus : public zzs::kernel::sensor::driver::bus::BusInterface
-{
+class MockBus : public zzs::kernel::sensor::driver::bus::BusInterface {
 public:
-    MockBus () noexcept = default;
+  MockBus () noexcept = default;
 
-    [[nodiscard]] zzs::kernel::Status
-    write_reg (uint8_t reg, const uint8_t *data, uint16_t len) noexcept override
-    {
-        if (data == nullptr || len == 0u)
-            return zzs::kernel::Status::OUT_OF_RANGE;
-        if (!_M_initialized)
-            return zzs::kernel::Status::INTERNAL;
-        for (uint16_t i = 0u; i < len; ++i)
-            _M_regs[static_cast<uint32_t> (reg) + i] = data[i];
-        _M_last_written_reg = reg;
-        return zzs::kernel::Status::OK;
-    }
+  [[nodiscard]] zzs::kernel::Status
+  write_reg (uint8_t reg, const uint8_t *data, uint16_t len) noexcept override {
+    if (data == nullptr || len == 0u)
+      return zzs::kernel::Status::OUT_OF_RANGE;
+    if (!_M_initialized)
+      return zzs::kernel::Status::INTERNAL;
+    for (uint16_t i = 0u; i < len; ++i)
+      _M_regs[static_cast<uint32_t> (reg) + i] = data[i];
+    _M_last_written_reg = reg;
+    return zzs::kernel::Status::OK;
+  }
 
-    [[nodiscard]] zzs::kernel::Status
-    read_reg (uint8_t reg, uint8_t *data, uint16_t len) noexcept override
-    {
-        if (data == nullptr || len == 0u)
-            return zzs::kernel::Status::OUT_OF_RANGE;
-        if (!_M_initialized)
-            return zzs::kernel::Status::INTERNAL;
-        _M_read_reg_calls += 1u;
-        for (uint16_t i = 0u; i < len; ++i)
-            data[i] = _M_regs[static_cast<uint32_t> (reg) + i];
-        _M_last_read_reg = reg;
-        return zzs::kernel::Status::OK;
-    }
+  [[nodiscard]] zzs::kernel::Status
+  read_reg (uint8_t reg, uint8_t *data, uint16_t len) noexcept override {
+    if (data == nullptr || len == 0u)
+      return zzs::kernel::Status::OUT_OF_RANGE;
+    if (!_M_initialized)
+      return zzs::kernel::Status::INTERNAL;
+    _M_read_reg_calls += 1u;
+    for (uint16_t i = 0u; i < len; ++i)
+      data[i] = _M_regs[static_cast<uint32_t> (reg) + i];
+    _M_last_read_reg = reg;
+    return zzs::kernel::Status::OK;
+  }
 
-    void
-    delay_ms (uint32_t ms) noexcept override
-    {
-        _M_delay_calls += 1u;
-        _M_delay_total_ms += ms;
-    }
+  void
+  delay_ms (uint32_t ms) noexcept override {
+    _M_delay_calls += 1u;
+    _M_delay_total_ms += ms;
+  }
 
-    /** @brief Inject a register value so a driver read observes it. */
-    void
-    set_reg (uint8_t reg, uint8_t value) noexcept
-    {
-        _M_regs[static_cast<uint32_t> (reg)] = value;
-    }
+  /** @brief Inject a register value so a driver read observes it. */
+  void
+  set_reg (uint8_t reg, uint8_t value) noexcept {
+    _M_regs[static_cast<uint32_t> (reg)] = value;
+  }
 
-    /** @brief Inject a multi-byte block at a starting register. */
-    void
-    set_block (uint8_t reg, const uint8_t *data, uint16_t len) noexcept
-    {
-        if (data == nullptr || len == 0u)
-            return;
-        for (uint16_t i = 0u; i < len; ++i)
-            _M_regs[static_cast<uint32_t> (reg) + i] = data[i];
-    }
+  /** @brief Inject a multi-byte block at a starting register. */
+  void
+  set_block (uint8_t reg, const uint8_t *data, uint16_t len) noexcept {
+    if (data == nullptr || len == 0u)
+      return;
+    for (uint16_t i = 0u; i < len; ++i)
+      _M_regs[static_cast<uint32_t> (reg) + i] = data[i];
+  }
 
-    uint8_t
-    get_reg (uint8_t reg) const noexcept
-    {
-        return _M_regs[static_cast<uint32_t> (reg)];
-    }
+  uint8_t
+  get_reg (uint8_t reg) const noexcept {
+    return _M_regs[static_cast<uint32_t> (reg)];
+  }
 
-    void
-    set_initialized (bool initialized) noexcept
-    {
-        _M_initialized = initialized;
-    }
+  void
+  set_initialized (bool initialized) noexcept {
+    _M_initialized = initialized;
+  }
 
-    bool
-    is_initialized () const noexcept
-    {
-        return _M_initialized;
-    }
+  bool
+  is_initialized () const noexcept {
+    return _M_initialized;
+  }
 
-    uint32_t
-    delay_calls () const noexcept
-    {
-        return _M_delay_calls;
-    }
+  uint32_t
+  delay_calls () const noexcept {
+    return _M_delay_calls;
+  }
 
-    uint32_t
-    delay_total_ms () const noexcept
-    {
-        return _M_delay_total_ms;
-    }
+  uint32_t
+  delay_total_ms () const noexcept {
+    return _M_delay_total_ms;
+  }
 
-    uint32_t
-    read_reg_calls () const noexcept
-    {
-        return _M_read_reg_calls;
-    }
+  uint32_t
+  read_reg_calls () const noexcept {
+    return _M_read_reg_calls;
+  }
 
-    uint8_t
-    last_written_reg () const noexcept
-    {
-        return _M_last_written_reg;
-    }
+  uint8_t
+  last_written_reg () const noexcept {
+    return _M_last_written_reg;
+  }
 
-    uint8_t
-    last_read_reg () const noexcept
-    {
-        return _M_last_read_reg;
-    }
+  uint8_t
+  last_read_reg () const noexcept {
+    return _M_last_read_reg;
+  }
 
-    void
-    clear () noexcept
-    {
-        _M_regs.fill (0);
-        _M_last_written_reg = 0;
-        _M_last_read_reg = 0;
-        _M_delay_calls = 0;
-        _M_delay_total_ms = 0;
-        _M_read_reg_calls = 0;
-    }
+  void
+  clear () noexcept {
+    _M_regs.fill (0);
+    _M_last_written_reg = 0;
+    _M_last_read_reg = 0;
+    _M_delay_calls = 0;
+    _M_delay_total_ms = 0;
+    _M_read_reg_calls = 0;
+  }
 
 private:
-    std::array<uint8_t, 256u> _M_regs{};
-    bool _M_initialized = false;
-    uint32_t _M_delay_calls = 0u;
-    uint32_t _M_delay_total_ms = 0u;
-    uint32_t _M_read_reg_calls = 0u;
-    uint8_t _M_last_written_reg = 0u;
-    uint8_t _M_last_read_reg = 0u;
+  std::array<uint8_t, 256u> _M_regs{};
+  bool _M_initialized = false;
+  uint32_t _M_delay_calls = 0u;
+  uint32_t _M_delay_total_ms = 0u;
+  uint32_t _M_read_reg_calls = 0u;
+  uint8_t _M_last_written_reg = 0u;
+  uint8_t _M_last_read_reg = 0u;
 };
 
 /** @brief Minimal HAL producing Q15 sample values on demand. */
-class MockHal
-{
+class MockHal {
 public:
-    MockHal () noexcept = default;
+  MockHal () noexcept = default;
 
-    [[nodiscard]] bool
-    init () noexcept
-    {
-        _M_initialized = true;
-        return true;
-    }
+  [[nodiscard]] bool
+  init () noexcept {
+    _M_initialized = true;
+    return true;
+  }
 
-    [[nodiscard]] bool
-    is_initialized () const noexcept
-    {
-        return _M_initialized;
-    }
+  [[nodiscard]] bool
+  is_initialized () const noexcept {
+    return _M_initialized;
+  }
 
-    [[nodiscard]] int16_t
-    read_channel (uint32_t ch) noexcept
-    {
-        return _M_values[ch % _M_values.size ()];
-    }
+  [[nodiscard]] int16_t
+  read_channel (uint32_t ch) noexcept {
+    return _M_values[ch % _M_values.size ()];
+  }
 
-    void
-    set_value (uint32_t ch, int16_t q15) noexcept
-    {
-        if (ch < _M_values.size ())
-            _M_values[ch] = q15;
-    }
+  void
+  set_value (uint32_t ch, int16_t q15) noexcept {
+    if (ch < _M_values.size ())
+      _M_values[ch] = q15;
+  }
 
-    [[nodiscard]] bool
-    channel_enabled (uint32_t ch) const noexcept
-    {
-        return ch < _M_values.size () && _M_enabled[ch];
-    }
+  [[nodiscard]] bool
+  channel_enabled (uint32_t ch) const noexcept {
+    return ch < _M_values.size () && _M_enabled[ch];
+  }
 
-    void
-    set_channel_enabled (uint32_t ch, bool enabled) noexcept
-    {
-        if (ch < _M_values.size ())
-            _M_enabled[ch] = enabled;
-    }
+  void
+  set_channel_enabled (uint32_t ch, bool enabled) noexcept {
+    if (ch < _M_values.size ())
+      _M_enabled[ch] = enabled;
+  }
 
-    [[nodiscard]] uint32_t
-    channel_rate_hz (uint32_t ch) const noexcept
-    {
-        return 100u;
-    }
+  [[nodiscard]] uint32_t
+  channel_rate_hz (uint32_t ch) const noexcept {
+    return 100u;
+  }
 
-    void
-    set_initialized (bool initialized) noexcept
-    {
-        _M_initialized = initialized;
-    }
+  void
+  set_initialized (bool initialized) noexcept {
+    _M_initialized = initialized;
+  }
 
-    void
-    reset () noexcept
-    {
-        _M_initialized = false;
-        _M_values.fill (0);
-        _M_enabled.fill (false);
-    }
+  void
+  reset () noexcept {
+    _M_initialized = false;
+    _M_values.fill (0);
+    _M_enabled.fill (false);
+  }
 
 private:
-    bool _M_initialized = false;
-    std::array<int16_t, 12u> _M_values{};
-    std::array<bool, 12u> _M_enabled{};
+  bool _M_initialized = false;
+  std::array<int16_t, 12u> _M_values{};
+  std::array<bool, 12u> _M_enabled{};
 };
 
 } // namespace test

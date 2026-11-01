@@ -79,15 +79,15 @@ inline constexpr uint32_t _S_chunk_hint_bytes = 64;
  * only needs the dense part of a model.
  */
 enum LoaderFlag : uint32_t {
-        LOADER_STRICT = 1u << 0,
-        LOADER_ALLOW_SUBGRAPHS = 1u << 1,
-        LOADER_ALLOW_SPARSE = 1u << 2,
-        LOADER_ALLOW_EXTERNAL = 1u << 3,
-        LOADER_ALLOW_TRAILING_BYTES = 1u << 4,
+  LOADER_STRICT = 1u << 0,
+  LOADER_ALLOW_SUBGRAPHS = 1u << 1,
+  LOADER_ALLOW_SPARSE = 1u << 2,
+  LOADER_ALLOW_EXTERNAL = 1u << 3,
+  LOADER_ALLOW_TRAILING_BYTES = 1u << 4,
 };
 
 [[nodiscard]] constexpr uint32_t
 loader_default_flags () noexcept {
-        return LOADER_ALLOW_TRAILING_BYTES;
+  return LOADER_ALLOW_TRAILING_BYTES;
 }
 } // namespace zzs::mllee::onnx

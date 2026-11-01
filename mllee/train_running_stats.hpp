@@ -72,12 +72,12 @@ inline constexpr int32_t _S_running_momentum_default_q15 = 3277;
  * SIMD pass over the mean half never crosses into the variance half.
  */
 struct RunningStats {
-        int16_t *_M_mean = nullptr;
-        int16_t *_M_var = nullptr;
-        uint32_t _M_windows = 0u;
-        uint32_t _M_step = 0u;
-        uint32_t _M_frozen = 0u;
-        uint32_t _M_saturated = 0u;
+  int16_t *_M_mean = nullptr;
+  int16_t *_M_var = nullptr;
+  uint32_t _M_windows = 0u;
+  uint32_t _M_step = 0u;
+  uint32_t _M_frozen = 0u;
+  uint32_t _M_saturated = 0u;
 };
 
 static_assert (sizeof (RunningStats) == (sizeof (void *) == 4u ? 24u : 32u),
@@ -86,13 +86,13 @@ static_assert (sizeof (RunningStats) == (sizeof (void *) == 4u ? 24u : 32u),
 /** @brief Pool bytes of the two lane buffers for @p windows windows. */
 [[nodiscard]] inline constexpr uint32_t
 running_stats_bytes (const uint32_t windows) noexcept {
-        return 4u * windows;
+  return 4u * windows;
 }
 
 /** @brief Pool bytes of a checkpoint copy of the same block. */
 [[nodiscard]] inline constexpr uint32_t
 running_stats_snapshot_bytes (const uint32_t windows) noexcept {
-        return 4u * windows + 4u;
+  return 4u * windows + 4u;
 }
 
 /**
@@ -103,83 +103,83 @@ running_stats_snapshot_bytes (const uint32_t windows) noexcept {
  */
 [[nodiscard]] inline constexpr int32_t
 bessel_ratio_q14 (const uint32_t elements) noexcept {
-        if (elements <= 1u)
-                return 16384;
-        const uint64_t scaled = (static_cast<uint64_t> (elements) << 14u) / (elements - 1u);
-        return scaled > 0xFFFFull ? 16384 : static_cast<int32_t> (scaled);
+  if (elements <= 1u)
+    return 16384;
+  const uint64_t scaled = (static_cast<uint64_t> (elements) << 14u) / (elements - 1u);
+  return scaled > 0xFFFFull ? 16384 : static_cast<int32_t> (scaled);
 }
 
 /** @brief Turn a biased window variance into the unbiased convention. */
 [[nodiscard]] inline constexpr int32_t
 running_stats_unbiased_q15 (const int32_t biased_var_q15, const uint32_t elements) noexcept {
-        const int32_t ratio = bessel_ratio_q14 (elements);
-        const int32_t value = q15_scale_shift (biased_var_q15, ratio, 14u);
-        return q15_clamp (value);
+  const int32_t ratio = bessel_ratio_q14 (elements);
+  const int32_t value = q15_scale_shift (biased_var_q15, ratio, 14u);
+  return q15_clamp (value);
 }
 
 /** @brief Bind already-owned lane buffers (the non-pool path, e.g. a .bss block). */
 [[nodiscard]] inline Status
 running_stats_bind (RunningStats &stats, int16_t *const mean, int16_t *const var, const uint32_t windows) noexcept {
-        if (mean == nullptr || var == nullptr)
-                return Status::BAD_LAYOUT;
-        if (windows == 0u || windows > _S_max_running_windows)
-                return Status::OUT_OF_RANGE;
-        stats._M_mean = mean;
-        stats._M_var = var;
-        stats._M_windows = windows;
-        stats._M_step = 0u;
-        stats._M_frozen = 0u;
-        stats._M_saturated = 0u;
-        return Status::OK;
+  if (mean == nullptr || var == nullptr)
+    return Status::BAD_LAYOUT;
+  if (windows == 0u || windows > _S_max_running_windows)
+    return Status::OUT_OF_RANGE;
+  stats._M_mean = mean;
+  stats._M_var = var;
+  stats._M_windows = windows;
+  stats._M_step = 0u;
+  stats._M_frozen = 0u;
+  stats._M_saturated = 0u;
+  return Status::OK;
 }
 
 /** @brief Carve and zero the two buffers from the training pool. */
 [[nodiscard]] inline Status
 running_stats_alloc (Pool &pool, RunningStats &stats, const uint32_t windows) noexcept {
-        if (windows == 0u || windows > _S_max_running_windows)
-                return Status::OUT_OF_RANGE;
-        int16_t *mean = nullptr;
-        int16_t *var = nullptr;
-        const Status first = pool.carve_typed (windows, mean);
-        if (!status_ok (first)) {
-                stats = RunningStats{};
-                return first;
-        }
-        const Status second = pool.carve_typed (windows, var);
-        if (!status_ok (second)) {
-                stats = RunningStats{};
-                return second;
-        }
-        return running_stats_bind (stats, mean, var, windows);
+  if (windows == 0u || windows > _S_max_running_windows)
+    return Status::OUT_OF_RANGE;
+  int16_t *mean = nullptr;
+  int16_t *var = nullptr;
+  const Status first = pool.carve_typed (windows, mean);
+  if (!status_ok (first)) {
+    stats = RunningStats{};
+    return first;
+  }
+  const Status second = pool.carve_typed (windows, var);
+  if (!status_ok (second)) {
+    stats = RunningStats{};
+    return second;
+  }
+  return running_stats_bind (stats, mean, var, windows);
 }
 
 /** @brief Zero both buffers and the counters: the "fresh layer" state. */
 inline void
 running_stats_reset (RunningStats &stats) noexcept {
-        if (stats._M_mean != nullptr)
-                fill_lanes (stats._M_mean, 0, stats._M_windows);
-        if (stats._M_var != nullptr)
-                fill_lanes (stats._M_var, 0, stats._M_windows);
-        stats._M_step = 0u;
-        stats._M_saturated = 0u;
+  if (stats._M_mean != nullptr)
+    fill_lanes (stats._M_mean, 0, stats._M_windows);
+  if (stats._M_var != nullptr)
+    fill_lanes (stats._M_var, 0, stats._M_windows);
+  stats._M_step = 0u;
+  stats._M_saturated = 0u;
 }
 
 /** @brief Eval mode: the buffers stop moving but stay readable. */
 inline void
 running_stats_freeze (RunningStats &stats) noexcept {
-        stats._M_frozen = 1u;
+  stats._M_frozen = 1u;
 }
 
 /** @brief Training mode again. */
 inline void
 running_stats_thaw (RunningStats &stats) noexcept {
-        stats._M_frozen = 0u;
+  stats._M_frozen = 0u;
 }
 
 /** @brief True when @p stats ignores updates (and the norm layer reads it). */
 [[nodiscard]] inline constexpr bool
 running_stats_active (const RunningStats &stats) noexcept {
-        return stats._M_frozen == 0u && stats._M_mean != nullptr && stats._M_var != nullptr;
+  return stats._M_frozen == 0u && stats._M_mean != nullptr && stats._M_var != nullptr;
 }
 
 /**
@@ -192,12 +192,12 @@ running_stats_active (const RunningStats &stats) noexcept {
 [[nodiscard]] inline constexpr int32_t
 running_stats_lerp_q15 (const int32_t current_q15, const int32_t target_q15, const int32_t momentum_q15,
                         bool &saturated) noexcept {
-        const int32_t delta = target_q15 - current_q15;
-        const int32_t step = q15_scale_shift (delta, momentum_q15, _S_grad_frac_bits);
-        const int32_t raw = current_q15 + step;
-        const int32_t value = q15_clamp (raw);
-        saturated = value != raw;
-        return value;
+  const int32_t delta = target_q15 - current_q15;
+  const int32_t step = q15_scale_shift (delta, momentum_q15, _S_grad_frac_bits);
+  const int32_t raw = current_q15 + step;
+  const int32_t value = q15_clamp (raw);
+  saturated = value != raw;
+  return value;
 }
 
 /**
@@ -215,26 +215,25 @@ running_stats_lerp_q15 (const int32_t current_q15, const int32_t target_q15, con
 [[nodiscard]] inline Status
 running_stats_update (RunningStats &stats, const int16_t *const batch_mean, const int16_t *const batch_var,
                       const uint32_t elements, const int32_t momentum_q15) noexcept {
-        if (!running_stats_active (stats))
-                return Status::OK;
-        if (batch_mean == nullptr || batch_var == nullptr)
-                return Status::BAD_LAYOUT;
-        const int32_t momentum = momentum_q15 < 0 ? 0 : (momentum_q15 > _S_q15_max ? _S_q15_max : momentum_q15);
-        for (uint32_t window = 0u; window < stats._M_windows; ++window) {
-                bool saturated = false;
-                const int32_t mean_next =
-                    running_stats_lerp_q15 (stats._M_mean[window], batch_mean[window], momentum, saturated);
-                if (saturated)
-                        ++stats._M_saturated;
-                const int32_t unbiased = running_stats_unbiased_q15 (batch_var[window], elements);
-                const int32_t var_next = running_stats_lerp_q15 (stats._M_var[window], unbiased, momentum, saturated);
-                if (saturated)
-                        ++stats._M_saturated;
-                stats._M_mean[window] = static_cast<int16_t> (mean_next);
-                stats._M_var[window] = static_cast<int16_t> (var_next);
-        }
-        ++stats._M_step;
-        return Status::OK;
+  if (!running_stats_active (stats))
+    return Status::OK;
+  if (batch_mean == nullptr || batch_var == nullptr)
+    return Status::BAD_LAYOUT;
+  const int32_t momentum = momentum_q15 < 0 ? 0 : (momentum_q15 > _S_q15_max ? _S_q15_max : momentum_q15);
+  for (uint32_t window = 0u; window < stats._M_windows; ++window) {
+    bool saturated = false;
+    const int32_t mean_next = running_stats_lerp_q15 (stats._M_mean[window], batch_mean[window], momentum, saturated);
+    if (saturated)
+      ++stats._M_saturated;
+    const int32_t unbiased = running_stats_unbiased_q15 (batch_var[window], elements);
+    const int32_t var_next = running_stats_lerp_q15 (stats._M_var[window], unbiased, momentum, saturated);
+    if (saturated)
+      ++stats._M_saturated;
+    stats._M_mean[window] = static_cast<int16_t> (mean_next);
+    stats._M_var[window] = static_cast<int16_t> (var_next);
+  }
+  ++stats._M_step;
+  return Status::OK;
 }
 
 /**
@@ -246,35 +245,35 @@ running_stats_update (RunningStats &stats, const int16_t *const batch_mean, cons
  */
 [[nodiscard]] inline Status
 running_stats_snapshot (const RunningStats &stats, uint8_t *const scratch) noexcept {
-        if (scratch == nullptr || !running_stats_active (stats))
-                return Status::BAD_LAYOUT;
-        if (!simd_aligned (scratch))
-                return Status::BAD_LAYOUT;
-        int16_t *mean = reinterpret_cast<int16_t *> (scratch);
-        int16_t *var = mean + stats._M_windows;
-        for (uint32_t window = 0u; window < stats._M_windows; ++window) {
-                mean[window] = stats._M_mean[window];
-                var[window] = stats._M_var[window];
-        }
-        int32_t *step = reinterpret_cast<int32_t *> (scratch + 4u * stats._M_windows);
-        *step = static_cast<int32_t> (stats._M_step);
-        return Status::OK;
+  if (scratch == nullptr || !running_stats_active (stats))
+    return Status::BAD_LAYOUT;
+  if (!simd_aligned (scratch))
+    return Status::BAD_LAYOUT;
+  int16_t *mean = reinterpret_cast<int16_t *> (scratch);
+  int16_t *var = mean + stats._M_windows;
+  for (uint32_t window = 0u; window < stats._M_windows; ++window) {
+    mean[window] = stats._M_mean[window];
+    var[window] = stats._M_var[window];
+  }
+  int32_t *step = reinterpret_cast<int32_t *> (scratch + 4u * stats._M_windows);
+  *step = static_cast<int32_t> (stats._M_step);
+  return Status::OK;
 }
 
 /** @brief The inverse of @ref running_stats_snapshot. */
 [[nodiscard]] inline Status
 running_stats_restore (RunningStats &stats, const uint8_t *const scratch) noexcept {
-        if (scratch == nullptr || !running_stats_active (stats))
-                return Status::BAD_LAYOUT;
-        const int16_t *mean = reinterpret_cast<const int16_t *> (scratch);
-        const int16_t *var = mean + stats._M_windows;
-        for (uint32_t window = 0u; window < stats._M_windows; ++window) {
-                stats._M_mean[window] = mean[window];
-                stats._M_var[window] = var[window];
-        }
-        const int32_t *step = reinterpret_cast<const int32_t *> (scratch + 4u * stats._M_windows);
-        stats._M_step = static_cast<uint32_t> (*step < 0 ? 0 : *step);
-        return Status::OK;
+  if (scratch == nullptr || !running_stats_active (stats))
+    return Status::BAD_LAYOUT;
+  const int16_t *mean = reinterpret_cast<const int16_t *> (scratch);
+  const int16_t *var = mean + stats._M_windows;
+  for (uint32_t window = 0u; window < stats._M_windows; ++window) {
+    stats._M_mean[window] = mean[window];
+    stats._M_var[window] = var[window];
+  }
+  const int32_t *step = reinterpret_cast<const int32_t *> (scratch + 4u * stats._M_windows);
+  stats._M_step = static_cast<uint32_t> (*step < 0 ? 0 : *step);
+  return Status::OK;
 }
 
 /**
@@ -290,18 +289,18 @@ running_stats_restore (RunningStats &stats, const uint8_t *const scratch) noexce
 [[nodiscard]] inline Status
 running_stats_deploy_form (const RunningStats &stats, const uint32_t window, const uint32_t index, int32_t &mean_code,
                            uint32_t &deviation_code) noexcept {
-        if (stats._M_mean == nullptr || stats._M_var == nullptr)
-                return Status::BAD_LAYOUT;
-        if (index >= stats._M_windows || window == 0u)
-                return Status::OUT_OF_RANGE;
-        const int32_t mean_q15 = stats._M_mean[index];
-        const int32_t var_q15 = stats._M_var[index];
-        mean_code = q15_to_code (mean_q15);
-        /* The variance is a Q15 magnitude whose root wants 15 fraction bits, so it
-           goes through the wide root: sqrt (var) * 2^15 / 2^15 = sqrt (var << 15). */
-        const int32_t deviation_q15 = q15_sqrt_wide (var_q15);
-        deviation_code =
-            static_cast<uint32_t> (_S_round_shift (static_cast<int64_t> (deviation_q15) * 127, _S_grad_frac_bits));
-        return Status::OK;
+  if (stats._M_mean == nullptr || stats._M_var == nullptr)
+    return Status::BAD_LAYOUT;
+  if (index >= stats._M_windows || window == 0u)
+    return Status::OUT_OF_RANGE;
+  const int32_t mean_q15 = stats._M_mean[index];
+  const int32_t var_q15 = stats._M_var[index];
+  mean_code = q15_to_code (mean_q15);
+  /* The variance is a Q15 magnitude whose root wants 15 fraction bits, so it
+     goes through the wide root: sqrt (var) * 2^15 / 2^15 = sqrt (var << 15). */
+  const int32_t deviation_q15 = q15_sqrt_wide (var_q15);
+  deviation_code =
+      static_cast<uint32_t> (_S_round_shift (static_cast<int64_t> (deviation_q15) * 127, _S_grad_frac_bits));
+  return Status::OK;
 }
 } // namespace zzs::mllee::train

@@ -49,15 +49,15 @@ inline constexpr int32_t _S_code_step_q15 = 258;
 /** @brief Sum of lane products with a Q15 result, saturated to int32. */
 [[nodiscard]] inline int32_t
 dot_q15 (const int16_t *const lhs, const int16_t *const rhs, const uint32_t count) noexcept {
-        int64_t total = 0;
-        for (uint32_t i = 0; i < count; ++i)
-                total += static_cast<int64_t> (lhs[i]) * rhs[i];
-        const int64_t shifted = (total + (1LL << 14)) >> 15;
-        if (shifted > 2147483647LL)
-                return 2147483647;
-        if (shifted < -2147483648LL)
-                return -2147483647 - 1;
-        return static_cast<int32_t> (shifted);
+  int64_t total = 0;
+  for (uint32_t i = 0; i < count; ++i)
+    total += static_cast<int64_t> (lhs[i]) * rhs[i];
+  const int64_t shifted = (total + (1LL << 14)) >> 15;
+  if (shifted > 2147483647LL)
+    return 2147483647;
+  if (shifted < -2147483648LL)
+    return -2147483647 - 1;
+  return static_cast<int32_t> (shifted);
 }
 
 /**
@@ -68,38 +68,38 @@ dot_q15 (const int16_t *const lhs, const int16_t *const rhs, const uint32_t coun
  */
 [[nodiscard]] inline uint32_t
 add_grad (int16_t *const destination, const int16_t *const source, const uint32_t count) noexcept {
-        uint32_t saturated = 0u;
-        for (uint32_t i = 0; i < count; ++i) {
-                const int32_t sum = destination[i] + source[i];
-                if (sum > 32767 || sum < -32768) {
-                        destination[i] = sum > 32767 ? 32767 : -32768;
-                        ++saturated;
-                } else
-                        destination[i] = static_cast<int16_t> (sum);
-        }
-        return saturated;
+  uint32_t saturated = 0u;
+  for (uint32_t i = 0; i < count; ++i) {
+    const int32_t sum = destination[i] + source[i];
+    if (sum > 32767 || sum < -32768) {
+      destination[i] = sum > 32767 ? 32767 : -32768;
+      ++saturated;
+    } else
+      destination[i] = static_cast<int16_t> (sum);
+  }
+  return saturated;
 }
 
 /** @brief destination += scalar_q15 * source, rounded and saturating. */
 inline void
 axpy_q15 (int16_t *const destination, const int16_t *const source, const int32_t scalar_q15,
           const uint32_t count) noexcept {
-        for (uint32_t i = 0; i < count; ++i) {
-                const int64_t product = static_cast<int64_t> (source[i]) * scalar_q15;
-                const int32_t term = static_cast<int32_t> ((product + (1LL << 14)) >> 15);
-                const int32_t sum = destination[i] + term;
-                destination[i] = sum > 32767 ? 32767 : (sum < -32768 ? -32768 : static_cast<int16_t> (sum));
-        }
+  for (uint32_t i = 0; i < count; ++i) {
+    const int64_t product = static_cast<int64_t> (source[i]) * scalar_q15;
+    const int32_t term = static_cast<int32_t> ((product + (1LL << 14)) >> 15);
+    const int32_t sum = destination[i] + term;
+    destination[i] = sum > 32767 ? 32767 : (sum < -32768 ? -32768 : static_cast<int16_t> (sum));
+  }
 }
 
 /** @brief values *= scalar_q15 in place, rounded and saturating. */
 inline void
 scale_q15 (int16_t *const values, const int32_t scalar_q15, const uint32_t count) noexcept {
-        for (uint32_t i = 0; i < count; ++i) {
-                const int64_t product = static_cast<int64_t> (values[i]) * scalar_q15;
-                const int64_t shifted = (product + (1LL << 14)) >> 15;
-                values[i] = static_cast<int16_t> (shifted > 32767 ? 32767 : (shifted < -32768 ? -32768 : shifted));
-        }
+  for (uint32_t i = 0; i < count; ++i) {
+    const int64_t product = static_cast<int64_t> (values[i]) * scalar_q15;
+    const int64_t shifted = (product + (1LL << 14)) >> 15;
+    values[i] = static_cast<int16_t> (shifted > 32767 ? 32767 : (shifted < -32768 ? -32768 : shifted));
+  }
 }
 
 /**
@@ -111,58 +111,57 @@ scale_q15 (int16_t *const values, const int32_t scalar_q15, const uint32_t count
  */
 inline void
 sgd_step_i8 (int8_t *const parameters, const int16_t *const grad, const int32_t lr_q15, const uint32_t count) noexcept {
-        for (uint32_t i = 0; i < count; ++i) {
-                const int64_t product = static_cast<int64_t> (grad[i]) * lr_q15;
-                const int64_t code_step = (product + (1LL << 14)) >> 15;
-                const int32_t updated =
-                    static_cast<int32_t> (parameters[i])
-                    + static_cast<int32_t> ((code_step >= 0 ? code_step + 129 : code_step - 129) / 258);
-                parameters[i] = _S_i8_code (updated);
-        }
+  for (uint32_t i = 0; i < count; ++i) {
+    const int64_t product = static_cast<int64_t> (grad[i]) * lr_q15;
+    const int64_t code_step = (product + (1LL << 14)) >> 15;
+    const int32_t updated = static_cast<int32_t> (parameters[i])
+                            + static_cast<int32_t> ((code_step >= 0 ? code_step + 129 : code_step - 129) / 258);
+    parameters[i] = _S_i8_code (updated);
+  }
 }
 
 /** @brief ReLU backward: route the incoming gradient by the forward sign. */
 inline void
 relu_backward (const int16_t *const grad_out, const int8_t *const input, int16_t *const grad_in,
                const uint32_t count) noexcept {
-        for (uint32_t i = 0; i < count; ++i)
-                grad_in[i] = input[i] >= 0 ? grad_out[i] : 0;
+  for (uint32_t i = 0; i < count; ++i)
+    grad_in[i] = input[i] >= 0 ? grad_out[i] : 0;
 }
 
 /** @brief L1 norm of a gradient buffer, saturating to int32. */
 [[nodiscard]] inline int32_t
 sum_abs_q15 (const int16_t *const values, const uint32_t count) noexcept {
-        int64_t total = 0;
-        for (uint32_t i = 0; i < count; ++i)
-                total += values[i] < 0 ? -static_cast<int64_t> (values[i]) : values[i];
-        return total > 2147483647LL ? 2147483647 : static_cast<int32_t> (total);
+  int64_t total = 0;
+  for (uint32_t i = 0; i < count; ++i)
+    total += values[i] < 0 ? -static_cast<int64_t> (values[i]) : values[i];
+  return total > 2147483647LL ? 2147483647 : static_cast<int32_t> (total);
 }
 
 /** @brief Sum of squares of a gradient buffer, saturating to int32. */
 [[nodiscard]] inline int32_t
 sum_sq_q15 (const int16_t *const values, const uint32_t count) noexcept {
-        int64_t total = 0;
-        for (uint32_t i = 0; i < count; ++i) {
-                total += static_cast<int64_t> (values[i]) * values[i];
-                if (total > 2147483647LL)
-                        return 2147483647;
-        }
-        return static_cast<int32_t> (total);
+  int64_t total = 0;
+  for (uint32_t i = 0; i < count; ++i) {
+    total += static_cast<int64_t> (values[i]) * values[i];
+    if (total > 2147483647LL)
+      return 2147483647;
+  }
+  return static_cast<int32_t> (total);
 }
 
 /** @brief Widen int8 codes into Q15 lanes (multiply by the code step). */
 inline void
 codes_to_q15 (const int8_t *const codes, int16_t *const values, const uint32_t count) noexcept {
-        for (uint32_t i = 0; i < count; ++i)
-                values[i] = static_cast<int16_t> (codes[i] * _S_code_step_q15);
+  for (uint32_t i = 0; i < count; ++i)
+    values[i] = static_cast<int16_t> (codes[i] * _S_code_step_q15);
 }
 
 /** @brief Narrow Q15 lanes into int8 codes with rounding and saturation. */
 inline void
 q15_to_codes (const int16_t *const values, int8_t *const codes, const uint32_t count) noexcept {
-        for (uint32_t i = 0; i < count; ++i) {
-                const int32_t value = values[i];
-                codes[i] = _S_i8_code (value >= 0 ? (value * 127 + 16384) >> 15 : -(((-value) * 127 + 16384) >> 15));
-        }
+  for (uint32_t i = 0; i < count; ++i) {
+    const int32_t value = values[i];
+    codes[i] = _S_i8_code (value >= 0 ? (value * 127 + 16384) >> 15 : -(((-value) * 127 + 16384) >> 15));
+  }
 }
 } // namespace zzs::mllee::train_simd

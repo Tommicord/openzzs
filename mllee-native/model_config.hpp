@@ -46,20 +46,20 @@ namespace zzs::mllee_native {
 /** @brief Original flat MLP topology: LINEAR(190->16) + RELU + LINEAR(16->3). */
 template <uint32_t InputDim, uint32_t HiddenDim, uint32_t OutputDim, uint32_t SeqLen, uint32_t FeatureCount>
 struct ModelConfig {
-        static constexpr uint32_t input_dim = InputDim;
-        static constexpr uint32_t hidden_dim = HiddenDim;
-        static constexpr uint32_t output_dim = OutputDim;
-        static constexpr uint32_t seq_len = SeqLen;
-        static constexpr uint32_t feature_count = FeatureCount;
+  static constexpr uint32_t input_dim = InputDim;
+  static constexpr uint32_t hidden_dim = HiddenDim;
+  static constexpr uint32_t output_dim = OutputDim;
+  static constexpr uint32_t seq_len = SeqLen;
+  static constexpr uint32_t feature_count = FeatureCount;
 
-        /** @brief Flattened input size: seq_len * feature_count. */
-        static constexpr uint32_t flat_input = seq_len * feature_count;
+  /** @brief Flattened input size: seq_len * feature_count. */
+  static constexpr uint32_t flat_input = seq_len * feature_count;
 
-        /** @brief Input size of the hidden layer (equals flat_input). */
-        static constexpr uint32_t hidden_input = flat_input;
+  /** @brief Input size of the hidden layer (equals flat_input). */
+  static constexpr uint32_t hidden_input = flat_input;
 
-        /** @brief Output size of the hidden layer (equals hidden_dim). */
-        static constexpr uint32_t hidden_output = hidden_dim;
+  /** @brief Output size of the hidden layer (equals hidden_dim). */
+  static constexpr uint32_t hidden_output = hidden_dim;
 };
 
 /** @brief Conv1D + Attention topology.
@@ -79,32 +79,32 @@ struct ModelConfig {
 template <uint32_t InputDim, uint32_t SeqLen, uint32_t FeatureCount, uint32_t ConvChannels, uint32_t ConvKernel,
           uint32_t AttnHeadDim, uint32_t AttnHeads, uint32_t OutputDim>
 struct ConvAttnConfig {
-        static constexpr uint32_t input_dim = InputDim;
-        static constexpr uint32_t seq_len = SeqLen;
-        static constexpr uint32_t feature_count = FeatureCount;
-        static constexpr uint32_t conv_channels = ConvChannels;
-        static constexpr uint32_t conv_kernel = ConvKernel;
-        static constexpr uint32_t attn_head_dim = AttnHeadDim;
-        static constexpr uint32_t attn_heads = AttnHeads;
-        static constexpr uint32_t output_dim = OutputDim;
+  static constexpr uint32_t input_dim = InputDim;
+  static constexpr uint32_t seq_len = SeqLen;
+  static constexpr uint32_t feature_count = FeatureCount;
+  static constexpr uint32_t conv_channels = ConvChannels;
+  static constexpr uint32_t conv_kernel = ConvKernel;
+  static constexpr uint32_t attn_head_dim = AttnHeadDim;
+  static constexpr uint32_t attn_heads = AttnHeads;
+  static constexpr uint32_t output_dim = OutputDim;
 
-        /** @brief Flattened input size: seq_len * feature_count. */
-        static constexpr uint32_t flat_input = seq_len * feature_count;
+  /** @brief Flattened input size: seq_len * feature_count. */
+  static constexpr uint32_t flat_input = seq_len * feature_count;
 
-        /** @brief Conv1D output codes: seq_len * conv_channels. */
-        static constexpr uint32_t conv_output = seq_len * conv_channels;
+  /** @brief Conv1D output codes: seq_len * conv_channels. */
+  static constexpr uint32_t conv_output = seq_len * conv_channels;
 
-        /** @brief QKV projection output codes: seq_len * attn_heads * attn_head_dim * 3. */
-        static constexpr uint32_t qkv_output = seq_len * attn_heads * attn_head_dim * 3u;
+  /** @brief QKV projection output codes: seq_len * attn_heads * attn_head_dim * 3. */
+  static constexpr uint32_t qkv_output = seq_len * attn_heads * attn_head_dim * 3u;
 
-        /** @brief Attention output codes: seq_len * attn_heads * attn_head_dim. */
-        static constexpr uint32_t attn_output = seq_len * attn_heads * attn_head_dim;
+  /** @brief Attention output codes: seq_len * attn_heads * attn_head_dim. */
+  static constexpr uint32_t attn_output = seq_len * attn_heads * attn_head_dim;
 
-        /** @brief Global average pool output codes: conv_channels. */
-        static constexpr uint32_t pooled = conv_channels;
+  /** @brief Global average pool output codes: conv_channels. */
+  static constexpr uint32_t pooled = conv_channels;
 
-        /** @brief MLP head input size (equals pooled). */
-        static constexpr uint32_t head_input = pooled;
+  /** @brief MLP head input size (equals pooled). */
+  static constexpr uint32_t head_input = pooled;
 };
 
 /** @brief Default model topology: LINEAR(190->3) + SOFTMAX(3->3). */

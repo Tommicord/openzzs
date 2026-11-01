@@ -333,12 +333,12 @@ inline constexpr uint32_t _S_bank_budget_host_bytes = _S_bank_budget_bytes + 16u
  */
 [[nodiscard]] inline constexpr bool
 _S_is_pow2 (const uint32_t value) noexcept {
-        return value != 0u && (value & (value - 1u)) == 0u;
+  return value != 0u && (value & (value - 1u)) == 0u;
 }
 
 [[nodiscard]] inline constexpr uint32_t
 _S_align_up (const uint32_t value, const uint32_t alignment) noexcept {
-        return (value + alignment - 1u) & ~(alignment - 1u);
+  return (value + alignment - 1u) & ~(alignment - 1u);
 }
 /** @} */
 } // namespace zzs::kernel

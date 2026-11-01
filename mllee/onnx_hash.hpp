@@ -43,67 +43,67 @@ inline constexpr uint32_t _S_djb2_basis = 5381u;
 
 [[nodiscard]] constexpr uint32_t
 fnv1a_update (uint32_t hash, const uint8_t *const data, const uint32_t length) noexcept {
-        for (uint32_t i = 0; i < length; ++i) {
-                hash ^= data[i];
-                hash *= _S_fnv_prime;
-        }
-        return hash;
+  for (uint32_t i = 0; i < length; ++i) {
+    hash ^= data[i];
+    hash *= _S_fnv_prime;
+  }
+  return hash;
 }
 
 [[nodiscard]] constexpr uint32_t
 djb2_update (uint32_t hash, const uint8_t *const data, const uint32_t length) noexcept {
-        for (uint32_t i = 0; i < length; ++i)
-                hash = (hash * 33u) ^ data[i];
-        return hash;
+  for (uint32_t i = 0; i < length; ++i)
+    hash = (hash * 33u) ^ data[i];
+  return hash;
 }
 
 [[nodiscard]] constexpr uint32_t
 fnv1a (const uint8_t *const data, const uint32_t length) noexcept {
-        return fnv1a_update (_S_fnv_offset_basis, data, length);
+  return fnv1a_update (_S_fnv_offset_basis, data, length);
 }
 
 [[nodiscard]] constexpr uint32_t
 djb2 (const uint8_t *const data, const uint32_t length) noexcept {
-        return djb2_update (_S_djb2_basis, data, length);
+  return djb2_update (_S_djb2_basis, data, length);
 }
 
 [[nodiscard]] constexpr uint32_t
 fnv1a (const char *const data, const uint32_t length) noexcept {
-        uint32_t hash = _S_fnv_offset_basis;
-        for (uint32_t i = 0; i < length; ++i) {
-                hash ^= static_cast<uint8_t> (data[i]);
-                hash *= _S_fnv_prime;
-        }
-        return hash;
+  uint32_t hash = _S_fnv_offset_basis;
+  for (uint32_t i = 0; i < length; ++i) {
+    hash ^= static_cast<uint8_t> (data[i]);
+    hash *= _S_fnv_prime;
+  }
+  return hash;
 }
 
 [[nodiscard]] constexpr uint32_t
 djb2 (const char *const data, const uint32_t length) noexcept {
-        uint32_t hash = _S_djb2_basis;
-        for (uint32_t i = 0; i < length; ++i)
-                hash = (hash * 33u) ^ static_cast<uint8_t> (data[i]);
-        return hash;
+  uint32_t hash = _S_djb2_basis;
+  for (uint32_t i = 0; i < length; ++i)
+    hash = (hash * 33u) ^ static_cast<uint8_t> (data[i]);
+  return hash;
 }
 
 template <unsigned int N>
 [[nodiscard]] constexpr uint32_t
 fnv1a_literal (const char (&text)[N]) noexcept {
-        return fnv1a (text, static_cast<uint32_t> (N - 1u));
+  return fnv1a (text, static_cast<uint32_t> (N - 1u));
 }
 
 template <unsigned int N>
 [[nodiscard]] constexpr uint32_t
 djb2_literal (const char (&text)[N]) noexcept {
-        return djb2 (text, static_cast<uint32_t> (N - 1u));
+  return djb2 (text, static_cast<uint32_t> (N - 1u));
 }
 
 [[nodiscard]] inline uint32_t
 fnv1a (const zzs::base::SimpleStringView text) noexcept {
-        return fnv1a (text.data (), static_cast<uint32_t> (text.size ()));
+  return fnv1a (text.data (), static_cast<uint32_t> (text.size ()));
 }
 
 [[nodiscard]] inline uint32_t
 djb2 (const zzs::base::SimpleStringView text) noexcept {
-        return djb2 (text.data (), static_cast<uint32_t> (text.size ()));
+  return djb2 (text.data (), static_cast<uint32_t> (text.size ()));
 }
 } // namespace zzs::mllee::onnx

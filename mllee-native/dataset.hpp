@@ -51,13 +51,13 @@ inline constexpr auto g_dataset = zzs::mllee_native::dataset_gen::generate_datas
 /** @brief Number of samples in the compile-time dataset. */
 [[nodiscard]] constexpr uint32_t
 dataset_count () noexcept {
-        return g_dataset._M_count;
+  return g_dataset._M_count;
 }
 
 /** @brief Read-only access to sample i. */
 [[nodiscard]] constexpr const zzs::mllee_native::dataset::TrainingSample &
 dataset_sample (uint32_t i) noexcept {
-        return g_dataset._M_samples[i];
+  return g_dataset._M_samples[i];
 }
 
 /** @} */

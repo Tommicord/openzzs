@@ -56,9 +56,9 @@ inline constexpr uint32_t _S_poly_max_coeffs = _S_poly_max_branches * _S_poly_ma
 
 /** @brief One polyphase branch: `tap_count` Q15 coefficients. */
 struct _S_PolyBranch {
-        int16_t _M_coeff_q15[_S_poly_max_taps];
-        uint32_t _M_tap_count;
-        int16_t _M_gain_q15; /* per-branch gain applied after the dot product (Q15) */
+  int16_t _M_coeff_q15[_S_poly_max_taps];
+  uint32_t _M_tap_count;
+  int16_t _M_gain_q15; /* per-branch gain applied after the dot product (Q15) */
 };
 
 /** @brief Polyphase FIR state: branches plus a circular delay line.
@@ -70,20 +70,20 @@ struct _S_PolyBranch {
  * are both O(1): no shift-register loop.
  */
 struct _S_PolyphaseFir {
-        _S_PolyBranch _M_branch[_S_poly_max_branches];
-        uint32_t _M_branch_count;
-        int16_t _M_delay[_S_poly_max_taps]; /* circular delay line */
-        uint32_t _M_delay_len;              /* power of two */
-        uint32_t _M_delay_idx;              /* next write index, 0 .. delay_len-1 */
+  _S_PolyBranch _M_branch[_S_poly_max_branches];
+  uint32_t _M_branch_count;
+  int16_t _M_delay[_S_poly_max_taps]; /* circular delay line */
+  uint32_t _M_delay_len;              /* power of two */
+  uint32_t _M_delay_idx;              /* next write index, 0 .. delay_len-1 */
 };
 
 /** @brief Reset the delay line; branches keep their coefficients and gains. */
 inline void
 polyphase_reset (_S_PolyphaseFir &fir) noexcept {
-        zzs::base::log_debug ("polyphase_reset: delay_len={}", fir._M_delay_len);
-        for (uint32_t i = 0; i < fir._M_delay_len; ++i)
-                fir._M_delay[i] = 0;
-        fir._M_delay_idx = 0u;
+  zzs::base::log_debug ("polyphase_reset: delay_len={}", fir._M_delay_len);
+  for (uint32_t i = 0; i < fir._M_delay_len; ++i)
+    fir._M_delay[i] = 0;
+  fir._M_delay_idx = 0u;
 }
 
 /**
@@ -97,12 +97,12 @@ polyphase_reset (_S_PolyphaseFir &fir) noexcept {
  */
 [[nodiscard]] inline zzs::kernel::Status
 polyphase_push (_S_PolyphaseFir &fir, const int16_t sample_q15) noexcept {
-        if (fir._M_delay_len == 0u || fir._M_delay_len > _S_poly_max_taps
-            || (fir._M_delay_len & (fir._M_delay_len - 1u)) != 0u)
-                return zzs::kernel::Status::OUT_OF_RANGE;
-        fir._M_delay[fir._M_delay_idx] = sample_q15;
-        fir._M_delay_idx = (fir._M_delay_idx + 1u) & (fir._M_delay_len - 1u);
-        return zzs::kernel::Status::OK;
+  if (fir._M_delay_len == 0u || fir._M_delay_len > _S_poly_max_taps
+      || (fir._M_delay_len & (fir._M_delay_len - 1u)) != 0u)
+    return zzs::kernel::Status::OUT_OF_RANGE;
+  fir._M_delay[fir._M_delay_idx] = sample_q15;
+  fir._M_delay_idx = (fir._M_delay_idx + 1u) & (fir._M_delay_len - 1u);
+  return zzs::kernel::Status::OK;
 }
 
 /**
@@ -113,20 +113,20 @@ polyphase_push (_S_PolyphaseFir &fir, const int16_t sample_q15) noexcept {
 [[nodiscard]] inline zzs::kernel::Status
 polyphase_load_branch (_S_PolyphaseFir &fir, const uint32_t branch, const int16_t *const ZZS_KERNEL_RESTRICT coeff_q15,
                        const uint32_t tap_count) noexcept {
-        if (branch >= fir._M_branch_count || coeff_q15 == nullptr || tap_count == 0u || tap_count > _S_poly_max_taps) {
-                zzs::base::log_error ("polyphase_load_branch: branch={} taps={} -> {}", branch, tap_count,
-                                      zzs::kernel::status_name (zzs::kernel::Status::OUT_OF_RANGE));
-                return zzs::kernel::Status::OUT_OF_RANGE;
-        }
-        _S_PolyBranch &br = fir._M_branch[branch];
-        br._M_tap_count = tap_count;
-        for (uint32_t t = 0; t < tap_count; ++t)
-                br._M_coeff_q15[t] = coeff_q15[t];
-        for (uint32_t t = tap_count; t < _S_poly_max_taps; ++t)
-                br._M_coeff_q15[t] = 0;
-        br._M_gain_q15 = static_cast<int16_t> (zzs::kernel::_S_q15_one);
-        zzs::base::log_debug ("polyphase_load_branch: ok branch={} taps={}", branch, tap_count);
-        return zzs::kernel::Status::OK;
+  if (branch >= fir._M_branch_count || coeff_q15 == nullptr || tap_count == 0u || tap_count > _S_poly_max_taps) {
+    zzs::base::log_error ("polyphase_load_branch: branch={} taps={} -> {}", branch, tap_count,
+                          zzs::kernel::status_name (zzs::kernel::Status::OUT_OF_RANGE));
+    return zzs::kernel::Status::OUT_OF_RANGE;
+  }
+  _S_PolyBranch &br = fir._M_branch[branch];
+  br._M_tap_count = tap_count;
+  for (uint32_t t = 0; t < tap_count; ++t)
+    br._M_coeff_q15[t] = coeff_q15[t];
+  for (uint32_t t = tap_count; t < _S_poly_max_taps; ++t)
+    br._M_coeff_q15[t] = 0;
+  br._M_gain_q15 = static_cast<int16_t> (zzs::kernel::_S_q15_one);
+  zzs::base::log_debug ("polyphase_load_branch: ok branch={} taps={}", branch, tap_count);
+  return zzs::kernel::Status::OK;
 }
 
 /**
@@ -136,10 +136,10 @@ polyphase_load_branch (_S_PolyphaseFir &fir, const uint32_t branch, const int16_
  */
 [[nodiscard]] inline zzs::kernel::Status
 polyphase_set_branch_gain (_S_PolyphaseFir &fir, const uint32_t branch, const int16_t gain_q15) noexcept {
-        if (branch >= fir._M_branch_count)
-                return zzs::kernel::Status::OUT_OF_RANGE;
-        fir._M_branch[branch]._M_gain_q15 = gain_q15;
-        return zzs::kernel::Status::OK;
+  if (branch >= fir._M_branch_count)
+    return zzs::kernel::Status::OUT_OF_RANGE;
+  fir._M_branch[branch]._M_gain_q15 = gain_q15;
+  return zzs::kernel::Status::OK;
 }
 
 /**
@@ -152,21 +152,21 @@ polyphase_set_branch_gain (_S_PolyphaseFir &fir, const uint32_t branch, const in
  */
 [[nodiscard]] inline int16_t
 polyphase_step_branch (const _S_PolyphaseFir &fir, const uint32_t branch) noexcept {
-        const _S_PolyBranch &br = fir._M_branch[branch];
-        if (br._M_tap_count == 0u || br._M_tap_count > fir._M_delay_len)
-                return 0;
-        /* Gather the tap_count newest samples into logical order (newest first).
-           _S_poly_max_taps is 8, so this fixed-size gather is O(1) and feeds the
-           vectorized dot product a contiguous buffer. */
-        const uint32_t mask = fir._M_delay_len - 1u;
-        const uint32_t newest = (fir._M_delay_idx + mask) & mask; /* (idx - 1) & mask */
-        int16_t linear[_S_poly_max_taps];
-        for (uint32_t t = 0; t < br._M_tap_count; ++t)
-                linear[t] = fir._M_delay[(newest + fir._M_delay_len - t) & mask];
-        const int64_t acc = zzs::kernel::simd::dot_widen_q15 (linear, br._M_coeff_q15, br._M_tap_count);
-        int32_t out = zzs::kernel::fx::clamp_q15 (acc);
-        out = zzs::kernel::fx::q15_mul (out, static_cast<int32_t> (br._M_gain_q15));
-        return static_cast<int16_t> (out);
+  const _S_PolyBranch &br = fir._M_branch[branch];
+  if (br._M_tap_count == 0u || br._M_tap_count > fir._M_delay_len)
+    return 0;
+  /* Gather the tap_count newest samples into logical order (newest first).
+     _S_poly_max_taps is 8, so this fixed-size gather is O(1) and feeds the
+     vectorized dot product a contiguous buffer. */
+  const uint32_t mask = fir._M_delay_len - 1u;
+  const uint32_t newest = (fir._M_delay_idx + mask) & mask; /* (idx - 1) & mask */
+  int16_t linear[_S_poly_max_taps];
+  for (uint32_t t = 0; t < br._M_tap_count; ++t)
+    linear[t] = fir._M_delay[(newest + fir._M_delay_len - t) & mask];
+  const int64_t acc = zzs::kernel::simd::dot_widen_q15 (linear, br._M_coeff_q15, br._M_tap_count);
+  int32_t out = zzs::kernel::fx::clamp_q15 (acc);
+  out = zzs::kernel::fx::q15_mul (out, static_cast<int32_t> (br._M_gain_q15));
+  return static_cast<int16_t> (out);
 }
 
 /** @} */
