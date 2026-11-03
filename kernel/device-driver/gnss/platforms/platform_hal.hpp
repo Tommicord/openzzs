@@ -42,27 +42,27 @@ namespace zzs::kernel::device::driver::gnss::platform {
 /** @brief Virtual function table for a platform GNSS byte-stream bus. */
 struct GnssPlatformHal {
   /** @brief Open the underlying stream device (UART, USB-CDC, etc.). */
-  [[nodiscard]] zzs::kernel::Status (*open) (void) noexcept;
+  zzs::kernel::Status (*open) (void) noexcept;
 
   /** @brief Close the underlying stream device. */
-  [[nodiscard]] zzs::kernel::Status (*close) (void) noexcept;
+  zzs::kernel::Status (*close) (void) noexcept;
 
   /** @brief Read up to `max_bytes` into `buf`; `*filled` is set. Non-blocking.
    *         Returns OK when at least one byte read, STALE when none available,
    *         or a bus error. */
-  [[nodiscard]] zzs::kernel::Status (*read_bytes) (uint8_t *buf, uint16_t max_bytes, uint16_t *filled) noexcept;
+  zzs::kernel::Status (*read_bytes) (uint8_t *buf, uint16_t max_bytes, uint16_t *filled) noexcept;
 
   /** @brief Write `len` bytes from `buf`. Returns OK when all accepted. */
-  [[nodiscard]] zzs::kernel::Status (*write_bytes) (const uint8_t *buf, uint16_t len) noexcept;
+  zzs::kernel::Status (*write_bytes) (const uint8_t *buf, uint16_t len) noexcept;
 
   /** @brief Block for at least `ms` milliseconds. */
   void (*delay_ms) (uint32_t ms) noexcept;
 
   /** @brief Flush any buffered receive data. */
-  [[nodiscard]] zzs::kernel::Status (*flush_rx) (void) noexcept;
+  zzs::kernel::Status (*flush_rx) (void) noexcept;
 
   /** @brief Return true when the stream is open/ready. */
-  [[nodiscard]] bool (*is_open) (void) noexcept;
+  bool (*is_open) (void) noexcept;
 };
 
 /** @brief Return the installed platform HAL vtable, or nullptr when none is

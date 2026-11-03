@@ -13,7 +13,7 @@ Primary stack:
 | Core C++ utilities | `std/` | `openzzs-std` | `Maybe<T, Error>`, logging, formatting, I/O, signal handling |
 | ML inference/training engine | `mllee/` | `openzzs-mllee` (INTERFACE) + `openzzs-mllee-asm` (optional) | Compiled `-fno-exceptions -fno-rtti`; build-time SIMD/asm selection, never run-time CPUID |
 | Sensor-driver HAL / bus | `kernel/sensor-driver/` | `openzzs-sensor-driver` | Mock bus/HAL in tests; host + embedded platforms |
-| Application entry | `bootstrap/main.cpp` | `openzzs` | Currently a stub returning 0 |
+| Application entry | `bootstrap-monitor` | `openzzs` | Currently a stub returning 0 |
 | Benchmark | `tools/mllee_bench.cpp` | `mllee_bench` (host only) | Ops hot-path section |
 | RAM/flash/stack gates | `tools/check_mllee_ram.sh`, `check_mllee_train_ram.sh`, `run_mllee_m4_qemu.sh` | Custom targets | Enforce budgets; safe no-ops when toolchains are absent |
 | Tests | `tests/` | `test_mllee`, `test_sensor_driver` | Catch2 v3 (tag v3.9.1 via find_package/FetchContent); 82 tests pass |
@@ -318,7 +318,7 @@ These exist in the repo today. Do not replicate them in new code; fix them delib
 1. **C++ standard:** Resolved — `README.md` now states C++23, matching `CMakeLists.txt`. **CMake is the source of truth: C++23.**
 2. **License:** Resolved — `LICENSE` (MIT, Copyright(c) 2026 Tommicord) added and `README.md` points to it; file headers and README now agree.
 3. **`android/` directory:** removed in the working tree (staged deletions). Do not reference it as an active platform target.
-4. **`bootstrap/main.cpp`:** currently a stub returning 0. The real `openzzs` executable entry is not yet implemented.
+4. **`bootstrap-monitor`:** currently a stub returning 0. The real `openzzs` executable entry is not yet implemented.
 5. **`mllee/status.hpp`:** deleted in the working tree (moved into `mllee/core_status.hpp`); do not `#include "mllee/status.hpp"`.
 
 ## 8. License note

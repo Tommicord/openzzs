@@ -26,7 +26,6 @@
 #include "kernel/kernel_kernel_stage.hpp"
 #include "kernel/kernel_meta_ids.hpp"
 #include "kernel/kernel_sensor_accel.hpp"
-#include "kernel/kernel_sensor_mag.hpp"
 #include "kernel/kernel_sensor_types.hpp"
 #include "kernel/kernel_status.hpp"
 #include "kernel/kernel_util_fixed.hpp"

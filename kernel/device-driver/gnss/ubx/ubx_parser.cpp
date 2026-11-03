@@ -48,7 +48,12 @@ Parser::feed (uint8_t b) noexcept {
     }
     return zzs::kernel::Status::STALE;
 
-  case UbxParseState::ReadHeader:
+  case UbxParseState::ReadHeader: {
+    if (_M_frame_len >= sizeof (_M_frame)) {
+      _M_state = UbxParseState::WaitSync1;
+      _M_errors += 1u;
+      return zzs::kernel::Status::BAD_LENGTH;
+    }
     _M_frame[_M_frame_len++] = b;
     if (_M_frame_len == 6u) { // sync(2) + class + id + len(2)
       _M_payload_len = ubx_payload_len (_M_frame);
@@ -57,24 +62,50 @@ Parser::feed (uint8_t b) noexcept {
         _M_errors += 1u;
         return zzs::kernel::Status::BAD_LENGTH;
       }
-      _M_state = UbxParseState::ReadPayload;
+      /* Zero-length payload: skip ReadPayload, go straight to checksum. */
+      _M_state = (_M_payload_len == 0u) ? UbxParseState::ReadCkA : UbxParseState::ReadPayload;
     }
     return zzs::kernel::Status::STALE;
+  }
 
-  case UbxParseState::ReadPayload:
+  case UbxParseState::ReadPayload: {
+    /* If all payload bytes are already present (e.g. a zero-length payload
+     * routed here, or a short frame), move to checksum without consuming a
+     * byte, so a zero-length payload never wedges or overflows the frame. */
+    if (_M_frame_len == 6u + _M_payload_len) {
+      _M_state = UbxParseState::ReadCkA;
+      return zzs::kernel::Status::STALE;
+    }
+    if (_M_frame_len >= sizeof (_M_frame)) {
+      _M_state = UbxParseState::WaitSync1;
+      _M_errors += 1u;
+      return zzs::kernel::Status::BAD_LENGTH;
+    }
     _M_frame[_M_frame_len++] = b;
     if (_M_frame_len == 6u + _M_payload_len) {
       _M_state = UbxParseState::ReadCkA;
     }
     return zzs::kernel::Status::STALE;
+  }
 
-  case UbxParseState::ReadCkA:
+  case UbxParseState::ReadCkA: {
+    if (_M_frame_len >= sizeof (_M_frame)) {
+      _M_state = UbxParseState::WaitSync1;
+      _M_errors += 1u;
+      return zzs::kernel::Status::BAD_LENGTH;
+    }
     _M_frame[_M_frame_len++] = b;
     _M_ck_a = b;
     _M_state = UbxParseState::ReadCkB;
     return zzs::kernel::Status::STALE;
+  }
 
   case UbxParseState::ReadCkB: {
+    if (_M_frame_len >= sizeof (_M_frame)) {
+      _M_state = UbxParseState::WaitSync1;
+      _M_errors += 1u;
+      return zzs::kernel::Status::BAD_LENGTH;
+    }
     _M_frame[_M_frame_len++] = b;
     _M_ck_b = b;
     _M_state = UbxParseState::WaitSync1;
@@ -110,7 +141,9 @@ Parser::_M_complete_frame () noexcept {
     _M_last._M_is_nav_dop = true;
   } else if (_M_last._M_class == UbxClass::Ack) {
     _M_last._M_is_ack = true;
-    _M_last._M_ack_ok = (plen >= 2u && payload[1] == 0x01u); // ACK-ACK
+    /* ACK-ACK (msg id 0x01) means success; ACK-NAK (msg id 0x00) means
+     * rejection.  Derive _M_ack_ok from the message id, not payload[1]. */
+    _M_last._M_ack_ok = (plen >= 2u && _M_last._M_id == UbxMsgId::AckAck);
   }
 
   return zzs::kernel::Status::OK;
@@ -137,7 +170,8 @@ Parser::decode_nav_pvt (Fix &out) const noexcept {
   out._M_course_deg_tenths = static_cast<int32_t> (pvt._M_head_mot) / 10000ll; // 1e-5 deg -> tenths of deg
   out._M_num_satellites = pvt._M_num_sv;
   out._M_hdop_tenths = static_cast<int16_t> ((static_cast<int32_t> (pvt._M_p_dop) * 10ll) / 100ll);
-  out._M_vdop_tenths = static_cast<int16_t> ((static_cast<int32_t> (pvt._M_p_dop) * 10ll) / 100ll);
+  /* NAV-PVT carries only pDOP; it has no separate vDOP field.  Leave
+   * _M_vdop_tenths at its default (0) until a NAV-DOP message supplies it. */
 
   /* Fix status from fixType and valid flags. */
   bool valid = (pvt._M_valid & UbxPvtFixValid) != 0u;
@@ -154,12 +188,14 @@ Parser::decode_nav_sat (Satellite *out, uint8_t max_count, uint8_t *filled) cons
 
   const uint8_t *payload = &_M_frame[6];
   uint16_t plen = ubx_payload_len (_M_frame);
-  if (plen < 2u)
+  /* NAV-SAT header: iTOW(4), version(1), numSvs(1), reserved(2) = 8 bytes,
+   * then 12-byte SV entries. */
+  if (plen < 8u)
     return zzs::kernel::Status::BAD_LENGTH;
 
-  /* NAV-SAT payload: numSvs (1 byte), reserved (1 byte), then 12-byte entries. */
-  uint8_t num_svs = payload[0];
-  uint16_t entry_off = 2u;
+  /* NAV-SAT payload: numSvs at payload[5] (iTOW 4 + version 1), entries start at offset 8. */
+  uint8_t num_svs = payload[5];
+  uint16_t entry_off = 8u;
   uint8_t n = 0u;
   for (uint8_t i = 0u; i < num_svs && n < max_count; ++i) {
     if (entry_off + sizeof (UbxNavSatSv) > plen)

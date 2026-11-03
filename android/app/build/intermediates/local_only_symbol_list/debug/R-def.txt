@@ -2,7 +2,9 @@ R_DEF: Internal format may change without notice
 local
 id feature_text
 id inference_text
+id select_state_button
 id status_text
+id stop_collection_button
 layout activity_main
 string app_name
 string status_error

@@ -210,8 +210,8 @@ if (ZZS_BASH AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tools/run_mllee_m4_qemu.sh)
     VERBATIM)
 endif ()
 
-add_executable(openzzs bootstrap/main.cpp)
-target_link_libraries(openzzs PRIVATE openzzs-std)
+add_executable(openzzs bootstrap-monitor/main.cpp)
+target_link_libraries(openzzs PRIVATE openzzs-std openzzs-mllee openzzs-sensor-driver)
 
 if (OPENZZS_RUNTIME_RELEASE_OPTIONS)
   target_compile_options(openzzs-std PRIVATE ${OPENZZS_RUNTIME_RELEASE_OPTIONS})

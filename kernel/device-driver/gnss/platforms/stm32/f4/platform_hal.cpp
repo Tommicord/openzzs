@@ -271,11 +271,6 @@ public:
   }
 };
 
-/** @brief The single STM32F4 GNSS HAL vtable (const, .rodata). */
-static const GnssPlatformHal _S_hal_vtable = {
-    &_S_open, &_S_close, &_S_read_bytes, &_S_write_bytes, &_S_delay_ms, &_S_flush_rx, &_S_is_open,
-};
-
 /** @brief Shared bus instance (function-local static). */
 Stm32f4GnssBus &
 bus_ref () noexcept {
@@ -317,6 +312,11 @@ _S_flush_rx (void) noexcept {
 _S_is_open (void) noexcept {
   return bus_ref ().is_open ();
 }
+
+/** @brief The single STM32F4 GNSS HAL vtable (const, .rodata). */
+static const GnssPlatformHal _S_hal_vtable = {
+    &_S_open, &_S_close, &_S_read_bytes, &_S_write_bytes, &_S_delay_ms, &_S_flush_rx, &_S_is_open,
+};
 
 } // namespace
 

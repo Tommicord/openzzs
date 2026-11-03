@@ -61,8 +61,9 @@ public:
   /** @brief Construct with a stream bus, optional clock, and config. */
   WifiStream (zzs::kernel::device::driver::StreamBusInterface *bus, uint64_t (*clock) (void) = nullptr,
               const WifiStreamConfig &config = WifiStreamConfig{}) noexcept
-      : _M_bus (bus), _M_clock (clock), _M_config (config), _M_ring_depth (config._M_byte_ring_depth),
-        _M_ring_mask (static_cast<uint16_t> (config._M_byte_ring_depth - 1u)) {
+      : _M_bus (bus), _M_clock (clock), _M_config (config) {
+    _M_ring_depth = valid_ring_depth (config._M_byte_ring_depth);
+    _M_ring_mask = static_cast<uint16_t> (_M_ring_depth - 1u);
   }
 
   WifiStream (const WifiStream &) = delete;
@@ -77,6 +78,33 @@ public:
   set_frame_callback (FrameCallback cb, void *context) noexcept {
     _M_cb = cb;
     _M_ctx = context;
+  }
+
+  /** @brief Reconfigure the byte-ring depth and reset the ring.
+   *
+   * The depth must be a power of two in [1, kRingMaxDepth]. Returns
+   * `OUT_OF_RANGE` when the requested depth is invalid and leaves the ring
+   * unchanged; otherwise applies the new depth and returns OK. */
+  [[nodiscard]] zzs::kernel::Status
+  reset (const WifiStreamConfig &config) noexcept {
+    uint16_t depth = valid_ring_depth (config._M_byte_ring_depth);
+    if (depth != config._M_byte_ring_depth)
+      return zzs::kernel::Status::OUT_OF_RANGE;
+    _M_config = config;
+    _M_ring_depth = depth;
+    _M_ring_mask = static_cast<uint16_t> (depth - 1u);
+    _M_ring_head = 0u;
+    _M_ring_tail = 0u;
+    _M_ring_count = 0u;
+    for (uint16_t i = 0u; i < kRingMaxDepth; ++i)
+      _M_ring_buf[i] = 0u;
+    return zzs::kernel::Status::OK;
+  }
+
+  /** @brief Return the configured byte-ring depth (always a valid power of two). */
+  [[nodiscard]] uint16_t
+  ring_depth () const noexcept {
+    return _M_ring_depth;
   }
 
   /** @brief Drain the stream bus into the byte ring and reassemble/parse
@@ -117,6 +145,21 @@ private:
   [[nodiscard]] zzs::kernel::Status
   _M_reassemble_frames () noexcept;
 
+  /** @brief Clamp a requested ring depth to a valid power of two in [1, kRingMaxDepth].
+   *         Used by the constructor (which cannot fail) so an invalid config
+   *         degrades gracefully to the maximum valid depth instead of
+   *         corrupting ring indices. */
+  [[nodiscard]] static constexpr uint16_t
+  valid_ring_depth (uint16_t depth) noexcept {
+    if (depth == 0u || depth > kRingMaxDepth)
+      return kRingMaxDepth;
+    /* Round down to the largest power of two <= depth. */
+    uint16_t p2 = 1u;
+    while (p2 * 2u <= depth)
+      p2 = static_cast<uint16_t> (p2 * 2u);
+    return p2;
+  }
+
   // -- fixed-size byte ring (drop-oldest, power-of-two mask) --
   static constexpr uint16_t kRingMaxDepth = 256u;
 
@@ -133,6 +176,7 @@ private:
   uint8_t _M_len_hi = 0u;
   uint16_t _M_frame_len = 0u;
   uint16_t _M_frame_received = 0u;
+  uint16_t _M_frame_skip = 0u; /**< Payload bytes left to discard for an oversized frame. */
   uint8_t _M_frame_buf[WifiMaxFrameBytes] = {};
 
   zzs::kernel::device::driver::StreamBusInterface *_M_bus = nullptr;

@@ -34,6 +34,32 @@ if (OPENZZS_DEVICE_DRIVER_GNSS)
     gnss_ublox.cpp
     platforms/platform_hal.cpp)
 
+  # Platform HAL: select exactly one translation unit by platform.
+  set(_zzs_gnss_platform_def "")
+  if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    list(APPEND _zzs_device_driver_gnss_sources
+      platforms/linux/platform_hal.cpp)
+    set(_zzs_gnss_platform_def ZZS_DEVICE_DRIVER_GNSS_PLATFORM_LINUX)
+  elseif (CMAKE_SYSTEM_NAME STREQUAL "Generic" AND
+          CMAKE_SYSTEM_PROCESSOR STREQUAL "arm")
+    list(APPEND _zzs_device_driver_gnss_sources
+      platforms/stm32/f4/platform_hal.cpp)
+    set(_zzs_gnss_platform_def ZZS_DEVICE_DRIVER_GNSS_PLATFORM_STM32F4)
+  elseif (CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    list(APPEND _zzs_device_driver_gnss_sources
+      platforms/windows/platform_hal.cpp)
+    set(_zzs_gnss_platform_def ZZS_DEVICE_DRIVER_GNSS_PLATFORM_WINDOWS)
+  elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    list(APPEND _zzs_device_driver_gnss_sources
+      platforms/macos/platform_hal.cpp)
+    set(_zzs_gnss_platform_def ZZS_DEVICE_DRIVER_GNSS_PLATFORM_MACOS)
+  else ()
+    # Default to Linux for any other host target.
+    list(APPEND _zzs_device_driver_gnss_sources
+      platforms/linux/platform_hal.cpp)
+    set(_zzs_gnss_platform_def ZZS_DEVICE_DRIVER_GNSS_PLATFORM_LINUX)
+  endif ()
+
   add_library(openzzs-device-driver-gnss STATIC ${_zzs_device_driver_gnss_sources})
   target_include_directories(openzzs-device-driver-gnss PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -41,34 +67,8 @@ if (OPENZZS_DEVICE_DRIVER_GNSS)
   target_link_libraries(openzzs-device-driver-gnss PRIVATE openzzs-std)
   set_target_properties(openzzs-device-driver-gnss PROPERTIES LINKER_LANGUAGE CXX)
 
-  # Platform HAL: select exactly one translation unit by platform.
-  if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    list(APPEND _zzs_device_driver_gnss_sources
-      platforms/linux/platform_hal.cpp)
-    target_compile_definitions(openzzs-device-driver-gnss PRIVATE
-      ZZS_DEVICE_DRIVER_GNSS_PLATFORM_LINUX=1)
-  elseif (CMAKE_SYSTEM_NAME STREQUAL "Generic" AND
-          CMAKE_SYSTEM_PROCESSOR STREQUAL "arm")
-    list(APPEND _zzs_device_driver_gnss_sources
-      platforms/stm32/f4/platform_hal.cpp)
-    target_compile_definitions(openzzs-device-driver-gnss PRIVATE
-      ZZS_DEVICE_DRIVER_GNSS_PLATFORM_STM32F4=1)
-  elseif (CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    list(APPEND _zzs_device_driver_gnss_sources
-      platforms/windows/platform_hal.cpp)
-    target_compile_definitions(openzzs-device-driver-gnss PRIVATE
-      ZZS_DEVICE_DRIVER_GNSS_PLATFORM_WINDOWS=1)
-  elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    list(APPEND _zzs_device_driver_gnss_sources
-      platforms/macos/platform_hal.cpp)
-    target_compile_definitions(openzzs-device-driver-gnss PRIVATE
-      ZZS_DEVICE_DRIVER_GNSS_PLATFORM_MACOS=1)
-  else ()
-    # Default to Linux for any other host target.
-    list(APPEND _zzs_device_driver_gnss_sources
-      platforms/linux/platform_hal.cpp)
-    target_compile_definitions(openzzs-device-driver-gnss PRIVATE
-      ZZS_DEVICE_DRIVER_GNSS_PLATFORM_LINUX=1)
+  if (_zzs_gnss_platform_def)
+    target_compile_definitions(openzzs-device-driver-gnss PRIVATE ${_zzs_gnss_platform_def}=1)
   endif ()
 
 endif ()

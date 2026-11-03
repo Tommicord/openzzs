@@ -68,6 +68,10 @@ struct _S_BankConfig {
 struct _S_PreprocessingBank {
   _S_BankConfig *_M_config;
   bool _M_initialized;
+  /** @brief Persistent feature slots: retain values from stages that produced
+   *         in earlier calls, so a row contains the latest features from every
+   *         stage even when stages complete at different rates. */
+  int32_t _M_slots[_S_feature_count] = {};
 };
 
 /** @brief Static RAM-share check: the bank object plus pointer overhead must
@@ -80,6 +84,8 @@ static_assert (sizeof (_S_PreprocessingBank) <= _S_bank_budget_bytes,
 bank_init (_S_PreprocessingBank &bank, _S_BankConfig &config) noexcept {
   bank._M_config = &config;
   bank._M_initialized = true;
+  for (uint32_t i = 0; i < _S_feature_count; ++i)
+    bank._M_slots[i] = 0;
   for (uint32_t i = 0; i < config._M_stage_count; ++i) {
     const Status st = config._M_stages[i]._M_vtable->_M_configure (config._M_stages[i]._M_state);
     if (st != Status::OK) {
@@ -133,7 +139,8 @@ bank_feed_sample (_S_PreprocessingBank &bank, const sensor::Sample &sample) noex
   (void) clock::grid_tracker_advance (bank._M_config->_M_grid, sample._M_timestamp_ns);
 
   const int16_t sample_q15 = sample._M_sample_q15;
-  return stage_feed_all (bank._M_config->_M_stages, bank._M_config->_M_stage_count, sample._M_channel, sample_q15);
+  (void) stage_feed_all (bank._M_config->_M_stages, bank._M_config->_M_stage_count, sample._M_channel, sample_q15);
+  return Status::OK;
 }
 
 /** @brief Produce features from every stage into a packed int8 feature row.
@@ -147,19 +154,18 @@ bank_produce_row (_S_PreprocessingBank &bank, int8_t *const row) noexcept {
     return Status::OUT_OF_RANGE;
   if (row == nullptr)
     return Status::OUT_OF_RANGE;
-  feat::feat_row_clear (row);
-  int32_t slots[_S_feature_count];
-  for (uint32_t i = 0; i < _S_feature_count; ++i)
-    slots[i] = 0;
+  /* Slots persist across calls: stages that have not completed since the last
+     row retain their previous feature values.  Only stages that complete now
+     overwrite their slots. */
   const Status st =
-      stage_produce_all (bank._M_config->_M_stages, bank._M_config->_M_stage_count, slots, _S_feature_count);
+      stage_produce_all (bank._M_config->_M_stages, bank._M_config->_M_stage_count, bank._M_slots, _S_feature_count);
   if (st == Status::NOT_READY)
     return Status::NOT_READY;
   if (st != Status::OK)
     zzs::base::log_error ("stage produce failed ({})", status_name (st));
   else
     zzs::base::log_debug ("feature row produced");
-  feat::feat_pack_row (row, slots, _S_feature_count);
+  feat::feat_pack_row (row, bank._M_slots, _S_feature_count);
   return Status::OK;
 }
 

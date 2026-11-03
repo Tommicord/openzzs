@@ -172,15 +172,16 @@ wifi_rsn_ie_parse (const uint8_t *ie, uint16_t ie_len, WifiRsnCipher &cipher, Wi
   body += 2u;
   body_len -= 2u;
 
-  /* Select the first recognised pairwise cipher. */
+  /* Select the first recognised pairwise cipher.  Advance the cursor in every
+   * path (including on match) so the AKM count is read from the correct
+   * offset, not from inside a pairwise suite. */
   bool found_pairwise = false;
   for (uint16_t i = 0u; i < pairwise_count; ++i) {
     if (body_len < 4u)
       return zzs::kernel::Status::BAD_LENGTH;
-    if (body[0] == WifiRsnOui[0] && body[1] == WifiRsnOui[1] && body[2] == WifiRsnOui[2]) {
+    if (!found_pairwise && body[0] == WifiRsnOui[0] && body[1] == WifiRsnOui[1] && body[2] == WifiRsnOui[2]) {
       cipher = static_cast<WifiRsnCipher> (body[3]);
       found_pairwise = true;
-      break;
     }
     body += 4u;
     body_len -= 4u;
@@ -296,6 +297,8 @@ wifi_crypto_derive_ptk (const Pmk &pmk, const Nonce &anonce, const Nonce &snonce
   (void) sup_addr;
   if (!pmk._M_valid || !anonce._M_valid || !snonce._M_valid)
     return zzs::kernel::Status::INTERNAL;
+  if (pmk._M_len == 0u || anonce._M_len == 0u || snonce._M_len == 0u)
+    return zzs::kernel::Status::INTERNAL;
 
   ptk = Ptk{};
   ptk._M_len = WifiPtkLen;
@@ -325,6 +328,8 @@ wifi_crypto_derive_ptk (const Pmk &pmk, const Nonce &anonce, const Nonce &snonce
 wifi_crypto_mic_compute (const Ptk &ptk, const uint8_t *data, uint16_t data_len, uint8_t *mic,
                          uint8_t &mic_len) noexcept {
   if (!ptk._M_valid || data == nullptr || mic == nullptr)
+    return zzs::kernel::Status::INTERNAL;
+  if (ptk._M_len == 0u)
     return zzs::kernel::Status::INTERNAL;
   mic_len = WifiMicLen;
   for (uint8_t i = 0u; i < WifiMicLen; ++i)

@@ -64,7 +64,11 @@
 #undef ZZS_USE_NEON
 #undef ZZS_USE_NEON_OR_SSE2
 #define ZZS_USE_NEON 0
+#if ZZS_USE_SSE2 || ZZS_USE_NEON
+#define ZZS_USE_NEON_OR_SSE2 1
+#else
 #define ZZS_USE_NEON_OR_SSE2 0
+#endif
 #endif
 
 #ifndef ZZS_USE_SSE3

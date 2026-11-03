@@ -91,7 +91,7 @@ WifiStream::is_open () const noexcept {
 
 [[nodiscard]] zzs::kernel::Status
 WifiStream::ring_push (uint8_t byte) noexcept {
-  if (_M_ring_depth == 0u || _M_ring_mask == 0u)
+  if (_M_ring_depth == 0u)
     return zzs::kernel::Status::INTERNAL;
   _M_ring_buf[_M_ring_head] = byte;
   _M_ring_head = static_cast<uint16_t> ((_M_ring_head + 1u) & _M_ring_mask);
@@ -119,9 +119,23 @@ WifiStream::_M_reassemble_frames () noexcept {
   /* Length-prefixed frame protocol: [len_lo][len_hi][payload...].
    * Drain bytes from the ring, accumulate into _M_frame_buf until the
    * declared length is reached, then parse and deliver via callback.
-   */
+   * Oversized frames (> WifiMaxFrameBytes) are discarded byte-for-byte so the
+   * ring stays byte-aligned and the next frame's length prefix is read
+   * correctly. */
   bool any_parsed = false;
   for (;;) {
+    /* Discarding an oversized frame's payload: pop bytes without storing them. */
+    if (_M_frame_skip > 0u) {
+      uint8_t byte = 0u;
+      zzs::kernel::Status st = ring_pop (byte);
+      if (st == zzs::kernel::Status::STALE)
+        break; /* Wait for more bytes to discard. */
+      if (!zzs::kernel::status_ok (st))
+        return st;
+      _M_frame_skip -= 1u;
+      continue;
+    }
+
     if (_M_in_length) {
       /* Need two length bytes. */
       if (_M_frame_received == 0u) {
@@ -142,11 +156,15 @@ WifiStream::_M_reassemble_frames () noexcept {
         _M_frame_received = 2u;
         /* Validate the declared length. */
         if (_M_frame_len == 0u || _M_frame_len > WifiMaxFrameBytes) {
-          /* Nonsensical length: resync by dropping the length bytes already
-           * consumed and stay in length mode. */
+          /* Oversized/nonsensical length: discard exactly _M_frame_len payload
+           * bytes from the ring so the stream stays byte-aligned, then resync
+           * in length mode.  Zero length needs no discard. */
+          _M_frame_skip = _M_frame_len;
           _M_in_length = true;
           _M_frame_received = 0u;
           _M_frame_len = 0u;
+          _M_len_lo = 0u;
+          _M_len_hi = 0u;
           continue;
         }
         _M_in_length = false;
@@ -187,8 +205,12 @@ WifiStream::_M_reassemble_frames () noexcept {
     }
 
     /* Also attempt 802.11 parsing for the stream's own parse-error tracking;
-     * failures here are expected for protocol frames and are ignored. */
-    (void) wifi_parse_frame (f._M_buf, f._M_len, f);
+     * failures here are expected for protocol frames and are ignored.  Use a
+     * distinct scratch frame so the source buffer is never aliased with the
+     * output (wifi_parse_frame zeroes its output before copying, which would
+     * otherwise always "succeed" on a zeroed buffer). */
+    Frame scratch = frame_make_empty ();
+    (void) wifi_parse_frame (f._M_buf, f._M_len, scratch);
 
     /* Clear the frame buffer before resetting the length so the clear loop
      * actually runs (the buffer is overwritten next frame, but clearing avoids

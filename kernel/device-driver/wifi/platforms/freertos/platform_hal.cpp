@@ -39,7 +39,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace zzs::kernel::device::driver::wifi::platform::freertos {
+namespace zzs::kernel::device::driver::wifi::platform {
 
 namespace {
 
@@ -51,34 +51,32 @@ namespace {
 /** @brief Radio-control hook: reset (portable functional stub). */
 [[nodiscard]] zzs::kernel::Status
 _S_reset () noexcept {
-  return zzs::kernel::Status::OK;
+  return zzs::kernel::Status::UNSUPPORTED;
 }
 
 /** @brief Radio-control hook: set channel (validated). */
 [[nodiscard]] zzs::kernel::Status
 _S_set_channel (uint8_t channel) noexcept {
-  if (channel < 1u || channel > 165u)
-    return zzs::kernel::Status::OUT_OF_RANGE;
-  return zzs::kernel::Status::OK;
+  (void) channel;
+
+  return zzs::kernel::Status::UNSUPPORTED;
 }
 
 /** @brief Radio-control hook: set country (validated). */
 [[nodiscard]] zzs::kernel::Status
 _S_set_country (const char cc[2]) noexcept {
-  if (cc == nullptr)
-    return zzs::kernel::Status::OUT_OF_RANGE;
-  return zzs::kernel::Status::OK;
+  (void) cc;
+
+  return zzs::kernel::Status::UNSUPPORTED;
 }
 
 /** @brief Radio-control hook: MAC address (returns all-zeros; the real HAL
  *         reads the factory-programmed MAC from the MCU unique ID). */
 [[nodiscard]] zzs::kernel::Status
 _S_mac_addr (uint8_t mac[6]) noexcept {
-  if (mac == nullptr)
-    return zzs::kernel::Status::OUT_OF_RANGE;
-  for (uint8_t i = 0u; i < 6u; ++i)
-    mac[i] = 0x00u;
-  return zzs::kernel::Status::OK;
+  (void) mac;
+
+  return zzs::kernel::Status::UNSUPPORTED;
 }
 
 /** @brief Radio-control hook: delay (portable stub; replaced by
@@ -111,4 +109,4 @@ create_freertos_wifi_hal (WifiHal &hal_out) noexcept {
 
 /** @} */
 
-} // namespace zzs::kernel::device::driver::wifi::platform::freertos
+} // namespace zzs::kernel::device::driver::wifi::platform

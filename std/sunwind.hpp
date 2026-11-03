@@ -384,7 +384,7 @@ unwind_capture_arch (UnwindRegs &regs) noexcept {
 }
 #endif
 
-__attribute__ ((noinline)) bool
+inline __attribute__ ((noinline)) bool
 unwind_capture_current (UnwindState &state) noexcept {
   state = UnwindState{};
   if (!unwind_capture_arch (state._M_regs))
@@ -2569,7 +2569,7 @@ unwind_windows_step (UnwindState &state) noexcept {
 }
 #endif
 
-bool
+inline bool
 unwind_step_platform (UnwindState &state) noexcept {
 #if defined(ZZS_UNWIND_ELF)
   return unwind_elf_step (state);
@@ -2633,8 +2633,8 @@ unwind_module_base (uintptr_t ip) noexcept {
   return base;
 }
 
-SimpleStringView
-unwind_module_name (uintptr_t base) noexcept {
+inline SimpleStringView
+unwind_module_name (const uintptr_t base) noexcept {
   unwind_init_modules ();
   const size_t count = unwind_module_count.load (std::memory_order_acquire);
   for (size_t i = 0; i < count; ++i) {
@@ -2693,7 +2693,7 @@ unwind_trace (Callback &&cb) noexcept {
   unwind_walk_impl (_S_unwind_max_frames, static_cast<Callback &&> (cb));
 }
 
-size_t
+inline size_t
 unwind_capture_frames (UnwindFrame *out, size_t cap) noexcept {
   if (out == nullptr)
     return 0;

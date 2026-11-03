@@ -29,10 +29,14 @@
 /**
  * @brief Fixed-depth receive queue for decoded packets.
  *
- * Power-of-two capacity (_S_packet_queue_capacity = 8) so the wrap mask is free.
- * The decoder pushes fully-decoded packets here; the consumer pops them in order.
- * QUEUE_FULL is reported when the consumer falls behind. The caller owns the
- * packet storage buffer.
+ * Power-of-two capacity so the wrap mask is free.  The decoder pushes fully
+ * decoded packets here; the consumer pops them in order.  QUEUE_FULL is
+ * reported when the consumer falls behind.
+ *
+ * The queue owns its packet storage as a fixed member array (RAII): nothing is
+ * allocated and nothing is copied.  Capacity is a compile-time configuration
+ * expressed as a template argument.  Copy/move are deleted because the head /
+ * tail position is meaningful state that must not be duplicated.
  * @{
  */
 namespace zzs::kernel::pkt {
@@ -46,69 +50,73 @@ struct _S_QueuedPacket {
   bool _M_valid;
 };
 
-/** @brief Queue state; caller owns the packet storage array. */
-struct _S_PacketQueue {
-  _S_QueuedPacket *_M_buf; /* caller-owned array of _M_capacity packets */
-  uint32_t _M_capacity;    /* power of two */
-  uint32_t _M_head;        /* push index */
-  uint32_t _M_tail;        /* pop index */
-  uint32_t _M_count;       /* entries in queue */
+/** @brief Fixed-capacity receive queue owning `_M_buf[Capacity]` packets. */
+template <uint32_t Capacity> class PacketQueue {
+  static_assert (Capacity != 0u && (Capacity & (Capacity - 1u)) == 0u,
+                 "PacketQueue capacity must be a non-zero power of two");
+
+  _S_QueuedPacket _M_buf[Capacity]; /* owned packet storage */
+  uint32_t _M_head = 0u;            /* push index */
+  uint32_t _M_tail = 0u;            /* pop index */
+  uint32_t _M_count = 0u;           /* entries in queue */
+
+public:
+  PacketQueue () = default;
+  PacketQueue (const PacketQueue &) = delete;
+  PacketQueue &
+  operator= (const PacketQueue &) = delete;
+  PacketQueue (PacketQueue &&) = delete;
+  PacketQueue &
+  operator= (PacketQueue &&) = delete;
+
+  /** @brief Capacity of the queue (packets). */
+  [[nodiscard]] inline uint32_t
+  capacity () const noexcept {
+    return Capacity;
+  }
+
+  /** @brief Entries currently in the queue. */
+  [[nodiscard]] inline uint32_t
+  count () const noexcept {
+    return _M_count;
+  }
+
+  /** @brief True when the queue is empty. */
+  [[nodiscard]] inline bool
+  empty () const noexcept {
+    return _M_count == 0u;
+  }
+
+  /** @brief True when the queue is full. */
+  [[nodiscard]] inline bool
+  full () const noexcept {
+    return _M_count >= Capacity;
+  }
+
+  /** @brief Push a decoded packet into the queue. Returns QUEUE_FULL if full. */
+  [[nodiscard]] inline zzs::kernel::Status
+  push (const _S_QueuedPacket &packet) noexcept {
+    if (ZZS_UNLIKELY (_M_count >= Capacity))
+      return zzs::kernel::Status::QUEUE_FULL;
+    _M_buf[_M_head] = packet;
+    _M_buf[_M_head]._M_valid = true;
+    _M_head = (_M_head + 1u) & (Capacity - 1u);
+    ++_M_count;
+    return zzs::kernel::Status::OK;
+  }
+
+  /** @brief Pop the oldest packet. Returns NOT_READY when empty. */
+  [[nodiscard]] inline zzs::kernel::Status
+  pop (_S_QueuedPacket &out) noexcept {
+    if (ZZS_UNLIKELY (_M_count == 0u))
+      return zzs::kernel::Status::NOT_READY;
+    out = _M_buf[_M_tail];
+    _M_buf[_M_tail]._M_valid = false;
+    _M_tail = (_M_tail + 1u) & (Capacity - 1u);
+    --_M_count;
+    return zzs::kernel::Status::OK;
+  }
 };
-
-/** @brief Initialize over caller-owned storage. Capacity must be pow2. */
-[[nodiscard]] inline zzs::kernel::Status
-queue_init (_S_PacketQueue &queue, _S_QueuedPacket *const buf, const uint32_t capacity) noexcept {
-  if (buf == nullptr || capacity == 0u || (capacity & (capacity - 1u)) != 0u)
-    return zzs::kernel::Status::OUT_OF_RANGE;
-  queue._M_buf = buf;
-  queue._M_capacity = capacity;
-  queue._M_head = 0;
-  queue._M_tail = 0;
-  queue._M_count = 0;
-  return zzs::kernel::Status::OK;
-}
-
-/** @brief Push a decoded packet into the queue. Returns QUEUE_FULL if full. */
-[[nodiscard]] inline zzs::kernel::Status
-queue_push (_S_PacketQueue &queue, const _S_QueuedPacket &packet) noexcept {
-  if (queue._M_count >= queue._M_capacity)
-    return zzs::kernel::Status::QUEUE_FULL;
-  queue._M_buf[queue._M_head] = packet;
-  queue._M_buf[queue._M_head]._M_valid = true;
-  queue._M_head = (queue._M_head + 1u) & (queue._M_capacity - 1u);
-  ++queue._M_count;
-  return zzs::kernel::Status::OK;
-}
-
-/** @brief Pop the oldest packet. Returns QUEUE_FULL/... actually EMPTY via NOT_READY. */
-[[nodiscard]] inline zzs::kernel::Status
-queue_pop (_S_PacketQueue &queue, _S_QueuedPacket &out) noexcept {
-  if (queue._M_count == 0u)
-    return zzs::kernel::Status::NOT_READY;
-  out = queue._M_buf[queue._M_tail];
-  queue._M_buf[queue._M_tail]._M_valid = false;
-  queue._M_tail = (queue._M_tail + 1u) & (queue._M_capacity - 1u);
-  --queue._M_count;
-  return zzs::kernel::Status::OK;
-}
-
-/** @brief Entries currently in the queue. */
-[[nodiscard]] inline uint32_t
-queue_count (const _S_PacketQueue &queue) noexcept {
-  return queue._M_count;
-}
-
-/** @brief True when the queue is empty. */
-[[nodiscard]] inline bool
-queue_empty (const _S_PacketQueue &queue) noexcept {
-  return queue._M_count == 0u;
-}
-
-/** @brief True when the queue is full. */
-[[nodiscard]] inline bool
-queue_full (const _S_PacketQueue &queue) noexcept {
-  return queue._M_count >= queue._M_capacity;
-}
 
 /** @} */
 } // namespace zzs::kernel::pkt

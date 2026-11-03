@@ -38,5 +38,10 @@ namespace zzs::kernel::device::driver::gnss::platform::linux {
 [[nodiscard]] const GnssPlatformHal *
 create_linux_gnss_hal () noexcept;
 
+/** @brief Configure the device path and baud rate before first open.
+ *         Call once before `create_linux_gnss_hal()`/`open()`. */
+[[nodiscard]] zzs::kernel::Status
+linux_gnss_hal_set_config (const char *device, uint32_t baud_rate) noexcept;
+
 /** @} */
 } // namespace zzs::kernel::device::driver::gnss::platform::linux

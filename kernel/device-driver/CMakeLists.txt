@@ -44,8 +44,15 @@ if (OPENZZS_DEVICE_DRIVER_GNSS)
     gnss/nmea/nmea_parser.cpp
     gnss/nmea/nmea_checksum.cpp
     gnss/ubx/ubx_parser.cpp
-    gnss/ubx/ubx_crc.cpp
-    gnss/stream/gnss_stream.cpp)
+    gnss/stream/gnss_stream.cpp
+    gnss/gnss_ublox.cpp)
+
+  # Host platform HAL (only on Linux hosts) - must be appended BEFORE
+  # add_library so the source is actually compiled into the target.
+  if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    list(APPEND _zzs_device_driver_gnss_sources
+      gnss/platforms/linux/platform_hal.cpp)
+  endif ()
 
   add_library(openzzs-device-driver-gnss STATIC ${_zzs_device_driver_gnss_sources})
   target_include_directories(openzzs-device-driver-gnss PUBLIC
@@ -53,12 +60,6 @@ if (OPENZZS_DEVICE_DRIVER_GNSS)
     ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
   target_link_libraries(openzzs-device-driver-gnss PRIVATE openzzs-std)
   set_target_properties(openzzs-device-driver-gnss PROPERTIES LINKER_LANGUAGE CXX)
-
-  # Host platform HAL (only on Linux hosts).
-  if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    list(APPEND _zzs_device_driver_gnss_sources
-      gnss/platforms/linux/platform_hal.cpp)
-  endif ()
 endif ()
 
 # ---------------------------------------------------------------------------

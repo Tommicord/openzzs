@@ -240,11 +240,14 @@ public:
         return OnnxError (OnnxCode::INTERNAL, offset + copied);
       const Chunk chunk = this->_M_fetch (this->_M_context, offset + copied);
       if (chunk._M_data == nullptr || chunk._M_size == 0u)
-        return OnnxError (OnnxCode::TRUNCATED, offset + copied);
+        {
+          return OnnxError (OnnxCode::TRUNCATED, offset + copied);
+        }
       uint32_t run = chunk._M_size;
-      const uint32_t room = this->_M_size - (offset + copied);
-      if (run > room)
-        run = room;
+      if (const uint32_t room = this->_M_size - (offset + copied); run > room)
+        {
+          run = room;
+        }
       if (run > capacity - copied)
         run = capacity - copied;
       if (run == 0u)

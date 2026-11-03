@@ -1,4 +1,0 @@
-/home/tommicord/CLionProjects/openzzs/android/app/.cxx/Debug/6o3g5y5l/armeabi-v7a/CMakeFiles/gen_model_blob_target.dir
-/home/tommicord/CLionProjects/openzzs/android/app/.cxx/Debug/6o3g5y5l/armeabi-v7a/CMakeFiles/openzzs-android.dir
-/home/tommicord/CLionProjects/openzzs/android/app/.cxx/Debug/6o3g5y5l/armeabi-v7a/CMakeFiles/edit_cache.dir
-/home/tommicord/CLionProjects/openzzs/android/app/.cxx/Debug/6o3g5y5l/armeabi-v7a/CMakeFiles/rebuild_cache.dir

@@ -20,7 +20,7 @@
 
 #include "platform_hal.hpp"
 
-#include "detail/portable_uart.hpp"
+#include "kernel/device-driver/gnss/platforms/detail/portable_uart.hpp"
 
 #include <cstdint>
 
@@ -49,11 +49,7 @@ public:
     _M_open = true;
     return zzs::kernel::Status::OK;
 #else
-    /* Portable fallback: simulate a UART over fixed rings. */
-    _M_open = true;
-    _M_rx.clear ();
-    _M_tx.clear ();
-    return zzs::kernel::Status::OK;
+    return zzs::kernel::Status::UNSUPPORTED;
 #endif
   }
 
@@ -65,10 +61,7 @@ public:
     _M_open = false;
     return zzs::kernel::Status::OK;
 #else
-    _M_open = false;
-    _M_rx.clear ();
-    _M_tx.clear ();
-    return zzs::kernel::Status::OK;
+    return zzs::kernel::Status::UNSUPPORTED;
 #endif
   }
 
@@ -86,8 +79,7 @@ public:
 #else
     if (!_M_open)
       return zzs::kernel::Status::INTERNAL;
-    *filled = _M_rx.pop (buf, max_bytes);
-    return *filled > 0u ? zzs::kernel::Status::OK : zzs::kernel::Status::STALE;
+    return zzs::kernel::Status::UNSUPPORTED;
 #endif
   }
 
@@ -102,10 +94,7 @@ public:
     (void) len;
     return zzs::kernel::Status::OK;
 #else
-    if (!_M_open)
-      return zzs::kernel::Status::INTERNAL;
-    (void) _M_tx.push (buf, len);
-    return zzs::kernel::Status::OK;
+    return zzs::kernel::Status::UNSUPPORTED;
 #endif
   }
 
@@ -125,8 +114,7 @@ public:
       return zzs::kernel::Status::INTERNAL;
     return zzs::kernel::Status::OK;
 #else
-    _M_rx.clear ();
-    return zzs::kernel::Status::OK;
+    return zzs::kernel::Status::UNSUPPORTED;
 #endif
   }
 

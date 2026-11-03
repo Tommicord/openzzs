@@ -160,6 +160,10 @@ GenericWifiDriver::connect (const char *ssid, uint8_t ssid_len, const uint8_t *p
     return zzs::kernel::Status::NOT_READY;
   if (ssid == nullptr || ssid_len == 0u || ssid_len > WifiMaxSsidLen)
     return zzs::kernel::Status::OUT_OF_RANGE;
+  if (psk_len > WifiMaxPskLen)
+    return zzs::kernel::Status::OUT_OF_RANGE;
+  if (psk_len > 0u && psk == nullptr)
+    return zzs::kernel::Status::OUT_OF_RANGE;
   if (_M_state == WifiConnectionState::Scanning || _M_state == WifiConnectionState::Authenticating
       || _M_state == WifiConnectionState::Associating)
     return zzs::kernel::Status::INTERNAL; /* concurrent scan+connect rejected */
@@ -519,8 +523,39 @@ GenericWifiDriver::_M_frame_cb (const Frame &frame, void *context) noexcept {
   if (self == nullptr)
     return;
 
-  /* If the first byte looks like a module protocol response/event code,
-   * dispatch it as a module event/response rather than a raw 802.11 frame. */
+  if (frame._M_len == 0u) {
+    self->_M_record_error ();
+    return;
+  }
+
+  /* Distinguish a real 802.11 MAC frame from a module protocol/response/event
+   * frame.  A real 802.11 frame has a full MAC header and a Frame Control
+   * version field of 0.  Module protocol frames use raw WifiResp/WifiEvent
+   * code bytes as their first octet (e.g. WifiResp::Ok = 0x80), which collides
+   * with the 802.11 beacon FC byte (0x80).  Requiring both a full header and a
+   * zero FC version keeps real beacons from being mistaken for protocol
+   * responses and silently dropped. */
+  bool is_80211 = false;
+  if (frame._M_len >= WifiMacHeaderLen) {
+    uint16_t fc = static_cast<uint16_t> (frame._M_buf[0]) | (static_cast<uint16_t> (frame._M_buf[1]) << 8);
+    if ((fc & WifiFcVersionMask) == 0u)
+      is_80211 = true;
+  }
+
+  if (is_80211) {
+    /* Real 802.11 frame: parse and cache it. */
+    Frame parsed = frame_make_empty ();
+    zzs::kernel::Status pst = wifi_parse_frame (frame._M_buf, frame._M_len, parsed);
+    if (zzs::kernel::status_ok (pst)) {
+      self->_M_frame = parsed;
+      self->_M_clear_errors ();
+    } else {
+      self->_M_record_error ();
+    }
+    return;
+  }
+
+  /* Module protocol frame: first byte is a WifiResp/WifiEvent code. */
   uint8_t first = frame._M_buf[0];
   bool is_protocol_frame =
       (first == static_cast<uint8_t> (WifiResp::Ok) || first == static_cast<uint8_t> (WifiResp::Fail)
@@ -548,24 +583,8 @@ GenericWifiDriver::_M_frame_cb (const Frame &frame, void *context) noexcept {
       break;
     }
   } else {
-    /* Real 802.11 frame: validate FC version, parse and cache it. */
-    if (frame._M_len < WifiMacHeaderLen) {
-      self->_M_record_error ();
-      return;
-    }
-    uint16_t fc = static_cast<uint16_t> (frame._M_buf[0]) | (static_cast<uint16_t> (frame._M_buf[1]) << 8);
-    if ((fc & 0x0003u) != 0u) {
-      self->_M_record_error ();
-      return;
-    }
-    Frame parsed = frame_make_empty ();
-    zzs::kernel::Status pst = wifi_parse_frame (frame._M_buf, frame._M_len, parsed);
-    if (zzs::kernel::status_ok (pst)) {
-      self->_M_frame = parsed;
-      self->_M_clear_errors ();
-    } else {
-      self->_M_record_error ();
-    }
+    /* Unknown frame: neither valid 802.11 nor recognised protocol code. */
+    self->_M_record_error ();
   }
 }
 

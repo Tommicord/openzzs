@@ -51,7 +51,7 @@ jobs:
                        'tests/*.hpp' 'tests/*.cpp' 'tests/*.hpp.in' 'tests/*.c' \
                        'tests/**/*.hpp' 'tests/**/*.cpp' 'tests/**/*.hpp.in' 'tests/**/*.c' \
                        'tools/*.hpp' 'tools/*.cpp' 'tools/*.hpp.in' 'tools/*.c' \
-                       'bootstrap/*.hpp' 'bootstrap/*.cpp' 'bootstrap/*.hpp.in' 'bootstrap/*.c' \
+                       'bootstrap-monitor/*.hpp' 'bootstrap-monitor/*.cpp' 'bootstrap-monitor/*.hpp.in' 'bootstrap-monitor/*.c' \
                 | grep -v '^$' || true)
           if [ -z "$files" ]; then
             echo "No source files matched the clang-format globs."
@@ -81,7 +81,7 @@ jobs:
             files=$(git ls-files 'std/*.hpp' 'std/*.cpp' 'mllee/*.hpp' 'mllee/*.cpp' \
                          'kernel/**/*.hpp' 'kernel/**/*.cpp' \
                          'tests/*.hpp' 'tests/*.cpp' 'tests/**/*.hpp' 'tests/**/*.cpp' \
-                         'tools/*.hpp' 'tools/*.cpp' 'bootstrap/*.hpp' 'bootstrap/*.cpp' \
+                         'tools/*.hpp' 'tools/*.cpp' 'bootstrap-monitor/*.hpp' 'bootstrap-monitor/*.cpp' \
                  | grep -v '^$' || true)
             if [ -n "$files" ]; then
               compile_db=$(find . -maxdepth 2 -name compile_commands.json | head -n1 || true)

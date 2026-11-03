@@ -39,41 +39,38 @@
 #include <cstdint>
 #include <cstring>
 
-namespace zzs::kernel::device::driver::wifi::platform::beaglebone {
+namespace zzs::kernel::device::driver::wifi::platform {
 
 namespace {
 
 /** @brief Radio-control hook: reset (portable functional stub). */
 [[nodiscard]] zzs::kernel::Status
 _S_reset () noexcept {
-  return zzs::kernel::Status::OK;
+  return zzs::kernel::Status::UNSUPPORTED;
 }
 
 /** @brief Radio-control hook: set channel (validated). */
 [[nodiscard]] zzs::kernel::Status
 _S_set_channel (uint8_t channel) noexcept {
-  if (channel < 1u || channel > 165u)
-    return zzs::kernel::Status::OUT_OF_RANGE;
-  return zzs::kernel::Status::OK;
+  (void) channel;
+
+  return zzs::kernel::Status::UNSUPPORTED;
 }
 
 /** @brief Radio-control hook: set country (validated). */
 [[nodiscard]] zzs::kernel::Status
 _S_set_country (const char cc[2]) noexcept {
-  if (cc == nullptr)
-    return zzs::kernel::Status::OUT_OF_RANGE;
-  return zzs::kernel::Status::OK;
+  (void) cc;
+
+  return zzs::kernel::Status::UNSUPPORTED;
 }
 
 /** @brief Radio-control hook: MAC address (returns all-zeros; the real HAL
  *         reads the factory-programmed MAC from the WiFi module EEPROM). */
 [[nodiscard]] zzs::kernel::Status
 _S_mac_addr (uint8_t mac[6]) noexcept {
-  if (mac == nullptr)
-    return zzs::kernel::Status::OUT_OF_RANGE;
-  for (uint8_t i = 0u; i < 6u; ++i)
-    mac[i] = 0x00u;
-  return zzs::kernel::Status::OK;
+  (void) mac;
+  return zzs::kernel::Status::UNSUPPORTED;
 }
 
 /** @brief Radio-control hook: delay (portable stub; replaced by a timer
@@ -87,24 +84,25 @@ _S_delay_ms (uint32_t ms) noexcept {
 
 [[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *, zzs::kernel::Status>
 create_beaglebone_wifi_hal (WifiHal &hal_out) noexcept {
-#if defined(__linux__)
-  /* Real implementation: open the BeagleBone UART device and export GPIO
-   * chip-select lines via sysfs for a WiFi module. */
-  (void) hal_out;
-  return zzs::kernel::Status::UNSUPPORTED;
-#else
-  /* Portable functional fallback: populate the radio-control vtable with
-   * validated hooks.  No bus is created (the application supplies its own
-   * stream bus over the BeagleBone UART device). */
+  /* Populate the radio-control vtable with validated hooks.  No bus is
+   * created (the application supplies its own stream bus over the
+   * BeagleBone UART device).  On a real device the hooks would drive the
+   * module; on the host they report UNSUPPORTED because no hardware is
+   * present. */
   hal_out._M_reset = &_S_reset;
   hal_out._M_set_channel = &_S_set_channel;
   hal_out._M_set_country = &_S_set_country;
   hal_out._M_mac_addr = &_S_mac_addr;
   hal_out._M_delay_ms = &_S_delay_ms;
-  return zzs::kernel::Status::UNSUPPORTED;
+#if defined(__linux__)
+  /* Real implementation: open the BeagleBone UART device and export GPIO
+   * chip-select lines via sysfs for a WiFi module.  Not available on the
+   * host, so the bus is unsupported. */
+  (void) hal_out;
 #endif
+  return zzs::kernel::Status::UNSUPPORTED;
 }
 
 /** @} */
 
-} // namespace zzs::kernel::device::driver::wifi::platform::beaglebone
+} // namespace zzs::kernel::device::driver::wifi::platform

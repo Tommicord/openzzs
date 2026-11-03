@@ -1,9 +1,9 @@
 -- Merging decision tree log ---
 manifest
-ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:2:1-28:12
-INJECTED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:2:1-28:12
-INJECTED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:2:1-28:12
-INJECTED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:2:1-28:12
+ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:2:1-30:12
+INJECTED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:2:1-30:12
+INJECTED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:2:1-30:12
+INJECTED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:2:1-30:12
 MERGED from [com.google.android.material:material:1.11.0] /home/tommicord/.gradle/caches/transforms-3/6bf27c0a08c7a51da7bc9eb8b01ba35e/transformed/material-1.11.0/AndroidManifest.xml:17:1-24:12
 MERGED from [androidx.constraintlayout:constraintlayout:2.1.4] /home/tommicord/.gradle/caches/transforms-3/3eeddbcd45be047ed2d7b1d8d4679b39/transformed/constraintlayout-2.1.4/AndroidManifest.xml:2:1-11:12
 MERGED from [androidx.appcompat:appcompat-resources:1.6.1] /home/tommicord/.gradle/caches/transforms-3/ff795258b8ac5f66106daf466f77cf20/transformed/appcompat-resources-1.6.1/AndroidManifest.xml:17:1-22:12
@@ -66,9 +66,13 @@ uses-permission#android.permission.HIGH_SAMPLING_RATE_SENSORS
 ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:7:5-85
 	android:name
 		ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:7:22-82
+uses-permission#android.permission.RECORD_AUDIO
+ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:8:5-71
+	android:name
+		ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:8:22-68
 application
-ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:9:5-26:19
-INJECTED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:9:5-26:19
+ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:10:5-28:19
+INJECTED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:10:5-28:19
 MERGED from [com.google.android.material:material:1.11.0] /home/tommicord/.gradle/caches/transforms-3/6bf27c0a08c7a51da7bc9eb8b01ba35e/transformed/material-1.11.0/AndroidManifest.xml:22:5-20
 MERGED from [com.google.android.material:material:1.11.0] /home/tommicord/.gradle/caches/transforms-3/6bf27c0a08c7a51da7bc9eb8b01ba35e/transformed/material-1.11.0/AndroidManifest.xml:22:5-20
 MERGED from [androidx.constraintlayout:constraintlayout:2.1.4] /home/tommicord/.gradle/caches/transforms-3/3eeddbcd45be047ed2d7b1d8d4679b39/transformed/constraintlayout-2.1.4/AndroidManifest.xml:9:5-20
@@ -90,33 +94,35 @@ MERGED from [androidx.startup:startup-runtime:1.1.1] /home/tommicord/.gradle/cac
 	android:appComponentFactory
 		ADDED from [androidx.core:core:1.12.0] /home/tommicord/.gradle/caches/transforms-3/9643920afc401bf92410edb017e2095b/transformed/core-1.12.0/AndroidManifest.xml:28:18-86
 	android:supportsRtl
-		ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:12:9-35
+		ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:14:9-35
 	android:label
-		ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:11:9-41
+		ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:13:9-41
+	android:debuggable
+		ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:12:9-34
 	android:allowBackup
-		ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:10:9-35
+		ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:11:9-35
 	android:theme
-		ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:13:9-67
+		ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:15:9-67
 	android:usesCleartextTraffic
-		ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:14:9-44
+		ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:16:9-44
 activity#com.openzzs.SensrActivity
-ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:16:9-24:20
+ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:18:9-26:20
 	android:screenOrientation
-		ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:19:13-49
+		ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:21:13-49
 	android:exported
-		ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:18:13-36
+		ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:20:13-36
 	android:name
-		ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:17:13-42
+		ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:19:13-42
 intent-filter#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
-ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:20:13-23:29
+ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:22:13-25:29
 action#android.intent.action.MAIN
-ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:21:17-69
+ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:23:17-69
 	android:name
-		ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:21:25-66
+		ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:23:25-66
 category#android.intent.category.LAUNCHER
-ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:22:17-77
+ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:24:17-77
 	android:name
-		ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:22:27-74
+		ADDED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml:24:27-74
 uses-sdk
 INJECTED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from /home/tommicord/CLionProjects/openzzs/android/app/src/main/AndroidManifest.xml

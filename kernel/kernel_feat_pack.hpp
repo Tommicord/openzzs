@@ -50,9 +50,10 @@ q15_to_i8_code (const int32_t value_q15) noexcept {
    * Matches `mllee_native::detail::q15_raw_to_code` used by the training
    * pipeline.  Training data codes fall within [-86, 29]; clamping at 48 keeps
    * saturated device features (e.g. flicker 100Hz hitting 126) from dominating
-   * the model and producing degenerate one-hot [127, 0, 0] outputs, while
-   * preserving the device-relevant features (flicker_100hz max=31,
-   * acoustic_100hz max=42) that the model was trained on. */
+   * the model and producing degenerate one-hot [127, 0, 0] outputs.  Together
+   * with the moderated output-layer weights in trained_weights.hpp, this keeps
+   * the softmax from collapsing to a single class for device-realistic inputs.
+   */
   const int32_t code = value_q15 / 258;
   return static_cast<int8_t> (code < -48 ? -48 : (code > 48 ? 48 : code));
 }

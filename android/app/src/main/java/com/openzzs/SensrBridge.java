@@ -19,6 +19,7 @@ public class SensrBridge {
 
     static {
         System.loadLibrary("openzzs-android");
+        Log.i(TAG, "Loading native library openzzzs-android");
     }
 
     public interface FeaturesListener {
@@ -27,9 +28,16 @@ public class SensrBridge {
         void onError(String message);
     }
 
+    /** Callback for every raw sensor sample fed into the native pipeline. */
+    public interface SampleListener {
+        void onSample(int channel, short sampleQ15, long timestampNs);
+    }
+
     private final FeaturesListener mListener;
     private final SensorManager mSensorManager;
     private final Handler mHandler = new Handler(Looper.getMainLooper());
+
+    private SampleListener mSampleListener;
 
     private boolean mInitialized = false;
     private boolean mRunning = false;
@@ -45,20 +53,24 @@ public class SensrBridge {
     public native String[] getFeaturesNative();
 
     public boolean init() {
+        Log.i(TAG, "init() called");
         int rc = initNative();
+        Log.i(TAG, "initNative returned rc=" + rc + " (0=OK, model loaded from MLEE blob)");
         if (rc != 0) {
             Log.e(TAG, "initNative failed: " + rc);
             return false;
         }
         mInitialized = true;
-        Log.i(TAG, "SensrBridge initialized");
+        Log.i(TAG, "SensrBridge initialized successfully");
         return true;
     }
 
     public void shutdown() {
+        Log.i(TAG, "shutdown() called");
         stop();
         shutdownNative();
         mInitialized = false;
+        Log.i(TAG, "SensrBridge shutdown complete");
     }
 
     public void start() {
@@ -80,30 +92,82 @@ public class SensrBridge {
         Sensor gyro = mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
         Sensor light = mSensorManager.getDefaultSensor(Sensor.TYPE_LIGHT);
 
+        Log.i(TAG, "registerSensors: mag=" + (mag != null ? mag.getName() : "null") +
+                ", accel=" + (accel != null ? accel.getName() : "null") +
+                ", gyro=" + (gyro != null ? gyro.getName() : "null") +
+                ", light=" + (light != null ? light.getName() : "null"));
+
         SensorEventListener listener = new SensorEventListener() {
+            private long _M_lastLogTs = 0;
+            private int _M_sampleCount = 0;
+            private final int[] _M_channelCounts = new int[12];
+
             @Override
             public void onSensorChanged(SensorEvent event) {
                 if (!mRunning) return;
                 long ts = event.timestamp;
+                int channel;
                 switch (event.sensor.getType()) {
                     case Sensor.TYPE_MAGNETIC_FIELD:
-                        feedSampleNative(0, toQ15(event.values[0], 100f), ts); // MAG_X
-                        feedSampleNative(1, toQ15(event.values[1], 100f), ts); // MAG_Y
-                        feedSampleNative(2, toQ15(event.values[2], 100f), ts); // MAG_Z
+                        channel = 0;
+                        feedSampleNative(channel, toQ15(event.values[0], 100f), ts); // MAG_X
+                        feedSampleNative(channel + 1, toQ15(event.values[1], 100f), ts); // MAG_Y
+                        feedSampleNative(channel + 2, toQ15(event.values[2], 100f), ts); // MAG_Z
+                        if (mSampleListener != null) {
+                            mSampleListener.onSample(channel, toQ15(event.values[0], 100f), ts);
+                            mSampleListener.onSample(channel + 1, toQ15(event.values[1], 100f), ts);
+                            mSampleListener.onSample(channel + 2, toQ15(event.values[2], 100f), ts);
+                        }
+                        _M_channelCounts[channel] += 3;
                         break;
                     case Sensor.TYPE_ACCELEROMETER:
-                        feedSampleNative(3, toQ15(event.values[0], 20f), ts);  // ACCEL_X
-                        feedSampleNative(4, toQ15(event.values[1], 20f), ts);  // ACCEL_Y
-                        feedSampleNative(5, toQ15(event.values[2], 20f), ts);  // ACCEL_Z
+                        channel = 3;
+                        feedSampleNative(channel, toQ15(event.values[0], 20f), ts);  // ACCEL_X
+                        feedSampleNative(channel + 1, toQ15(event.values[1], 20f), ts);  // ACCEL_Y
+                        feedSampleNative(channel + 2, toQ15(event.values[2], 20f), ts);  // ACCEL_Z
+                        if (mSampleListener != null) {
+                            mSampleListener.onSample(channel, toQ15(event.values[0], 20f), ts);
+                            mSampleListener.onSample(channel + 1, toQ15(event.values[1], 20f), ts);
+                            mSampleListener.onSample(channel + 2, toQ15(event.values[2], 20f), ts);
+                        }
+                        _M_channelCounts[channel] += 3;
                         break;
                     case Sensor.TYPE_GYROSCOPE:
-                        feedSampleNative(6, toQ15(event.values[0], 20f), ts);  // GYRO_X
-                        feedSampleNative(7, toQ15(event.values[1], 20f), ts);  // GYRO_Y
-                        feedSampleNative(8, toQ15(event.values[2], 20f), ts);  // GYRO_Z
+                        channel = 6;
+                        feedSampleNative(channel, toQ15(event.values[0], 20f), ts);  // GYRO_X
+                        feedSampleNative(channel + 1, toQ15(event.values[1], 20f), ts);  // GYRO_Y
+                        feedSampleNative(channel + 2, toQ15(event.values[2], 20f), ts);  // GYRO_Z
+                        if (mSampleListener != null) {
+                            mSampleListener.onSample(channel, toQ15(event.values[0], 20f), ts);
+                            mSampleListener.onSample(channel + 1, toQ15(event.values[1], 20f), ts);
+                            mSampleListener.onSample(channel + 2, toQ15(event.values[2], 20f), ts);
+                        }
+                        _M_channelCounts[channel] += 3;
                         break;
                     case Sensor.TYPE_LIGHT:
-                        feedSampleNative(9, toQ15(event.values[0], 10000f), ts); // LIGHT
+                        channel = 9;
+                        feedSampleNative(channel, toQ15(event.values[0], 10000f), ts); // LIGHT
+                        if (mSampleListener != null) {
+                            mSampleListener.onSample(channel, toQ15(event.values[0], 10000f), ts);
+                        }
+                        _M_channelCounts[channel]++;
                         break;
+                    default:
+                        break;
+                }
+                // Log a per-channel summary every ~2 seconds (throttled)
+                if (ts - _M_lastLogTs > 2_000_000_000L) {
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("Sensor feed: samples=").append(_M_sampleCount);
+                    for (int i = 0; i < 12; i++) {
+                        if (_M_channelCounts[i] > 0) {
+                            sb.append(" ch=").append(i).append("=").append(_M_channelCounts[i]);
+                        }
+                    }
+                    Log.i(TAG, sb.toString());
+                    _M_lastLogTs = ts;
+                    _M_sampleCount = 0;
+                    java.util.Arrays.fill(_M_channelCounts, 0);
                 }
             }
 
@@ -144,37 +208,13 @@ public class SensrBridge {
         return features;
     }
 
-    /**
-     * Convert Q15 feature codes to probabilities for the 3 classes:
-     * [P_normal, P_outage, P_transition].
-     * The last 3 features (indices 32-34) are the acoustic features which
-     * include sound_level_dB used as a simple proxy.
-     */
-    public static float[] softmaxFromFeatures(String[] features) {
-        // Simple heuristic: use the last 3 feature values as logits
-        float[] logits = new float[3];
-        try {
-            logits[0] = Float.parseFloat(features[features.length - 3].split("=")[1]);
-            logits[1] = Float.parseFloat(features[features.length - 2].split("=")[1]);
-            logits[2] = Float.parseFloat(features[features.length - 1].split("=")[1]);
-        } catch (Exception e) {
-            return new float[]{1.0f, 0.0f, 0.0f};
-        }
-
-        // Softmax
-        float max = logits[0];
-        for (float l : logits) if (l > max) max = l;
-        float sum = 0f;
-        for (int i = 0; i < 3; i++) {
-            logits[i] = (float) Math.exp(logits[i] - max);
-            sum += logits[i];
-        }
-        for (int i = 0; i < 3; i++) logits[i] /= sum;
-        return logits;
-    }
-
     public boolean isRunning() {
         return mRunning;
+    }
+
+    /** Set a listener to receive every raw sensor sample (channel, Q15, timestamp). */
+    public void setSampleListener(SampleListener listener) {
+        this.mSampleListener = listener;
     }
 
     // Callback methods for JNI to invoke — delegates to the registered listener
@@ -183,7 +223,14 @@ public class SensrBridge {
     }
 
     public void onInference (float[] probabilities) {
-        if (mListener != null) mListener.onInference (probabilities);
+        if (mListener != null) {
+            if (probabilities != null && probabilities.length >= 3) {
+                Log.i(TAG, "onInference: P_normal=" + String.format("%.4f", probabilities[0]) +
+                        " P_outage=" + String.format("%.4f", probabilities[1]) +
+                        " P_transition=" + String.format("%.4f", probabilities[2]));
+            }
+            mListener.onInference (probabilities);
+        }
     }
 
     public void onError (String message) {

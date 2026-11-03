@@ -112,8 +112,8 @@ vibration_configure (void *const state) noexcept {
   /* Hum bin at the mains fundamental (50 Hz by default; the bank reports the
      stronger of 50/60 elsewhere, here we use the configured low grid). */
   for (uint32_t a = 0; a < ac::COUNT; ++a) {
-    const zzs::kernel::Status st =
-        zzs::kernel::dsp::goertzel_bin_configure (s->_M_hum_bin[a], zzs::kernel::_S_mains_low_hz, s->_M_sample_rate_hz);
+    const zzs::kernel::Status st = zzs::kernel::dsp::goertzel_bin_configure (
+        s->_M_hum_bin[a], zzs::kernel::_S_mains_freq_hz, s->_M_sample_rate_hz);
     (void) st;
   }
 

@@ -1,0 +1,3 @@
+/home/tommicord/CLionProjects/openzzs/android/app/.cxx/Debug/4323234u/armeabi-v7a/CMakeFiles/gen_model_blob_target
+/home/tommicord/CLionProjects/openzzs/android/app/.cxx/Debug/4323234u/armeabi-v7a/CMakeFiles/gen_model_blob_target.rule
+/home/tommicord/CLionProjects/openzzs/android/app/.cxx/Debug/4323234u/armeabi-v7a/model_blob_generated.cpp.rule

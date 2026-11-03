@@ -22,6 +22,7 @@
 
 #include "kernel/device-driver/gnss/gnss_driver.hpp"
 #include "kernel/device-driver/gnss/stream/gnss_stream.hpp"
+#include "kernel/device-driver/gnss/ubx/ubx_parser.hpp"
 #include "kernel/kernel_status.hpp"
 
 #include <cstdint>
@@ -41,26 +42,27 @@ namespace zzs::kernel::device::driver::gnss {
 
 /** @brief u-blox driver configuration. */
 struct UbloxConfig {
-  uint32_t _M_baud_rate = 9600u;   /**< UART baud rate. */
+  uint32_t _M_baud_rate = 9600u;    /**< UART baud rate. */
   uint16_t _M_nav_rate_ms = 1000u;  /**< Navigation solution rate (ms). */
-  uint8_t _M_protocol_mask = 0x03u;/**< Bit0=NMEA, bit1=UBX. */
+  uint8_t _M_protocol_mask = 0x03u; /**< Bit0=NMEA, bit1=UBX. */
 };
 
 /** @brief Concrete u-blox GNSS driver. */
 class UbloxDriver : public GnssDriver {
 public:
   /** @brief Construct with a stream bus, optional clock, and config. */
-  UbloxDriver (zzs::kernel::device::driver::StreamBusInterface *bus,
-               uint64_t (*clock) (void) = nullptr,
+  UbloxDriver (zzs::kernel::device::driver::StreamBusInterface *bus, uint64_t (*clock) (void) = nullptr,
                const UbloxConfig &config = UbloxConfig{}) noexcept
       : GnssDriver (bus, clock), _M_stream (bus, clock), _M_config (config) {
   }
 
   ~UbloxDriver () override = default;
   UbloxDriver (const UbloxDriver &) = delete;
-  UbloxDriver &operator= (const UbloxDriver &) = delete;
+  UbloxDriver &
+  operator= (const UbloxDriver &) = delete;
   UbloxDriver (UbloxDriver &&) = delete;
-  UbloxDriver &operator= (UbloxDriver &&) = delete;
+  UbloxDriver &
+  operator= (UbloxDriver &&) = delete;
 
   // -- GnssDriver --
   [[nodiscard]] zzs::kernel::Status
@@ -94,8 +96,7 @@ public:
   /** @brief Send a raw UBX command payload (message class/id + payload),
    *         computes and appends the Fletcher-8 checksum. */
   [[nodiscard]] zzs::kernel::Status
-  send_ubx (uint8_t msg_class, uint8_t msg_id, const uint8_t *payload,
-            uint16_t payload_len) noexcept;
+  send_ubx (uint8_t msg_class, uint8_t msg_id, const uint8_t *payload, uint16_t payload_len) noexcept;
 
   /** @brief Access the underlying stream (read-only). */
   [[nodiscard]] const stream::GnssStream &
@@ -106,6 +107,11 @@ public:
 private:
   [[nodiscard]] zzs::kernel::Status
   _M_configure_receiver () noexcept;
+
+  /** @brief Block until an UBX ACK-ACK/ACK-NAK for the last config command is
+   *         observed on the bus, or a timeout elapses. */
+  [[nodiscard]] zzs::kernel::Status
+  _M_wait_for_ack () noexcept;
 
   stream::GnssStream _M_stream;
   UbloxConfig _M_config;

@@ -35,7 +35,7 @@
  * @{
  */
 #undef linux
-namespace zzs::kernel::device::driver::wifi::platform::linux {
+namespace zzs::kernel::device::driver::wifi::platform {
 
 /** @brief Build the Linux WiFi HAL vtable.  The stream bus is supplied by the
  *         caller (e.g. a stack-allocated `LinuxStreamBus` or a mock bus); the
@@ -106,4 +106,4 @@ private:
 
 /** @} */
 
-} // namespace zzs::kernel::device::driver::wifi::platform::linux
+} // namespace zzs::kernel::device::driver::wifi::platform

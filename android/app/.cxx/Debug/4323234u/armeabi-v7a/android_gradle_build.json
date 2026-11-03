@@ -1,0 +1,43 @@
+{
+  "buildFiles": [
+    "/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/home/tommicord/Android/Sdk/cmake/3.22.1/bin/ninja",
+      "-C",
+      "/home/tommicord/CLionProjects/openzzs/android/app/.cxx/Debug/4323234u/armeabi-v7a",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/home/tommicord/Android/Sdk/cmake/3.22.1/bin/ninja",
+    "-C",
+    "/home/tommicord/CLionProjects/openzzs/android/app/.cxx/Debug/4323234u/armeabi-v7a",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "gen_model_blob_target::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "armeabi-v7a",
+      "artifactName": "gen_model_blob_target"
+    },
+    "openzzs-android::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "armeabi-v7a",
+      "artifactName": "openzzs-android",
+      "output": "/home/tommicord/CLionProjects/openzzs/android/app/build/intermediates/cxx/Debug/4323234u/obj/armeabi-v7a/libopenzzs-android.so",
+      "runtimeFiles": []
+    }
+  },
+  "toolchains": {
+    "toolchain": {
+      "cCompilerExecutable": "/home/tommicord/Android/Sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/clang.lld",
+      "cppCompilerExecutable": "/home/tommicord/Android/Sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++.lld"
+    }
+  },
+  "cFileExtensions": [],
+  "cppFileExtensions": [
+    "cpp"
+  ]
+}

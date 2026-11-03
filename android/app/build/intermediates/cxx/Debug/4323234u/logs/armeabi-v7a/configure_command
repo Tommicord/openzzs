@@ -1,0 +1,19 @@
+/home/tommicord/Android/Sdk/cmake/3.22.1/bin/cmake \
+  -H/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp \
+  -DCMAKE_SYSTEM_NAME=Android \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+  -DCMAKE_SYSTEM_VERSION=27 \
+  -DANDROID_PLATFORM=android-27 \
+  -DANDROID_ABI=armeabi-v7a \
+  -DCMAKE_ANDROID_ARCH_ABI=armeabi-v7a \
+  -DANDROID_NDK=/home/tommicord/Android/Sdk/ndk/30.0.16248370 \
+  -DCMAKE_ANDROID_NDK=/home/tommicord/Android/Sdk/ndk/30.0.16248370 \
+  -DCMAKE_TOOLCHAIN_FILE=/home/tommicord/Android/Sdk/ndk/30.0.16248370/build/cmake/android.toolchain.cmake \
+  -DCMAKE_MAKE_PROGRAM=/home/tommicord/Android/Sdk/cmake/3.22.1/bin/ninja \
+  "-DCMAKE_CXX_FLAGS=-std=gnu++2b -fexceptions -frtti -O2 -DZZS_MLLEE_HOST" \
+  -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=/home/tommicord/CLionProjects/openzzs/android/app/build/intermediates/cxx/Debug/4323234u/obj/armeabi-v7a \
+  -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=/home/tommicord/CLionProjects/openzzs/android/app/build/intermediates/cxx/Debug/4323234u/obj/armeabi-v7a \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -B/home/tommicord/CLionProjects/openzzs/android/app/.cxx/Debug/4323234u/armeabi-v7a \
+  -GNinja \
+  -DANDROID_STL=c++_shared

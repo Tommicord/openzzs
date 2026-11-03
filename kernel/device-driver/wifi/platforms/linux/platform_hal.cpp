@@ -54,114 +54,96 @@
 #include <cstring>
 
 #undef linux
-namespace zzs::kernel::device::driver::wifi::platform::linux {
-
-namespace {
+namespace zzs::kernel::device::driver::wifi::platform {
 
 #if defined(__linux__)
 
-/** @brief Real unix-domain socket-pair stream bus for the Linux host.
- *
- * Wraps one end of an `AF_UNIX` `SOCK_STREAM` socketpair.  `read_bytes()` is
- * non-blocking (`MSG_DONTWAIT`): returns `OK` when data is available,
- * `STALE` when the socket would block.  `write_bytes()` sends all bytes.
- * Intended for stack or member allocation; no heap, no statics.
- */
-class LinuxStreamBus : public zzs::kernel::device::driver::StreamBusInterface {
-public:
-  /** @brief Wrap an existing socket file descriptor. */
-  explicit LinuxStreamBus (int fd) noexcept : _M_fd (fd) {
+LinuxStreamBus::LinuxStreamBus (int fd) noexcept : _M_fd (fd) {
+}
+
+LinuxStreamBus::~LinuxStreamBus () noexcept {
+  if (_M_fd >= 0)
+    ::close (_M_fd);
+}
+
+[[nodiscard]] zzs::kernel::Status
+LinuxStreamBus::read_bytes (uint8_t *buf, uint16_t max_bytes, uint16_t *filled) noexcept {
+  if (buf == nullptr || filled == nullptr)
+    return zzs::kernel::Status::OUT_OF_RANGE;
+  *filled = 0u;
+  if (_M_fd < 0)
+    return zzs::kernel::Status::INTERNAL;
+  ssize_t n = ::recv (_M_fd, buf, static_cast<size_t> (max_bytes), MSG_DONTWAIT);
+  if (n < 0) {
+    if (errno == EAGAIN || errno == EWOULDBLOCK)
+      return zzs::kernel::Status::STALE;
+    return zzs::kernel::Status::INTERNAL;
   }
+  if (n == 0)
+    return zzs::kernel::Status::STALE;
+  *filled = static_cast<uint16_t> (n);
+  return zzs::kernel::Status::OK;
+}
 
-  ~LinuxStreamBus () override {
-    if (_M_fd >= 0)
-      ::close (_M_fd);
-  }
-
-  LinuxStreamBus (const LinuxStreamBus &) = delete;
-  LinuxStreamBus &
-  operator= (const LinuxStreamBus &) = delete;
-  LinuxStreamBus (LinuxStreamBus &&) = delete;
-  LinuxStreamBus &
-  operator= (LinuxStreamBus &&) = delete;
-
-  [[nodiscard]] zzs::kernel::Status
-  read_bytes (uint8_t *buf, uint16_t max_bytes, uint16_t *filled) noexcept {
-    *filled = 0u;
-    if (buf == nullptr || filled == nullptr)
-      return zzs::kernel::Status::OUT_OF_RANGE;
-    if (_M_fd < 0)
-      return zzs::kernel::Status::INTERNAL;
-    ssize_t n = ::recv (_M_fd, buf, static_cast<size_t> (max_bytes), MSG_DONTWAIT);
+[[nodiscard]] zzs::kernel::Status
+LinuxStreamBus::write_bytes (const uint8_t *buf, uint16_t len) noexcept {
+  if (buf == nullptr && len > 0u)
+    return zzs::kernel::Status::OUT_OF_RANGE;
+  if (_M_fd < 0)
+    return zzs::kernel::Status::INTERNAL;
+  uint16_t total = 0u;
+  while (total < len) {
+    ssize_t n = ::send (_M_fd, buf + total, static_cast<size_t> (len - total), 0);
     if (n < 0) {
       if (errno == EAGAIN || errno == EWOULDBLOCK)
         return zzs::kernel::Status::STALE;
       return zzs::kernel::Status::INTERNAL;
     }
     if (n == 0)
-      return zzs::kernel::Status::STALE;
-    *filled = static_cast<uint16_t> (n);
-    return zzs::kernel::Status::OK;
-  }
-
-  [[nodiscard]] zzs::kernel::Status
-  write_bytes (const uint8_t *buf, uint16_t len) noexcept {
-    if (buf == nullptr && len > 0u)
-      return zzs::kernel::Status::OUT_OF_RANGE;
-    if (_M_fd < 0)
       return zzs::kernel::Status::INTERNAL;
-    ssize_t n = ::send (_M_fd, buf, static_cast<size_t> (len), 0);
-    if (n < 0)
-      return zzs::kernel::Status::INTERNAL;
-    return zzs::kernel::Status::OK;
+    total = static_cast<uint16_t> (total + static_cast<uint16_t> (n));
   }
+  return zzs::kernel::Status::OK;
+}
 
-  void
-  delay_ms (uint32_t ms) noexcept override {
+void
+LinuxStreamBus::delay_ms (uint32_t ms) noexcept {
 #if defined(__linux__)
-    struct timespec ts = {.tv_sec = ms / 1000, .tv_nsec = (ms % 1000) * 1000000ull};
-    ::nanosleep (&ts, nullptr);
+  struct timespec ts = {.tv_sec = ms / 1000, .tv_nsec = static_cast<long> ((ms % 1000u) * 1000000ull)};
+  ::nanosleep (&ts, nullptr);
 #else
-    (void) ms;
+  (void) ms;
 #endif
-  }
+}
 
-  [[nodiscard]] zzs::kernel::Status
-  flush_rx () noexcept override {
-    if (_M_fd < 0)
-      return zzs::kernel::Status::INTERNAL;
-    uint8_t dummy[64];
-    uint16_t filled = 0u;
-    for (;;) {
-      zzs::kernel::Status st = read_bytes (dummy, sizeof (dummy), &filled);
-      if (st == zzs::kernel::Status::STALE)
-        break;
-      if (!zzs::kernel::status_ok (st))
-        return st;
-    }
-    return zzs::kernel::Status::OK;
+[[nodiscard]] zzs::kernel::Status
+LinuxStreamBus::flush_rx () noexcept {
+  if (_M_fd < 0)
+    return zzs::kernel::Status::INTERNAL;
+  uint8_t dummy[64];
+  uint16_t filled = 0u;
+  for (;;) {
+    zzs::kernel::Status st = read_bytes (dummy, sizeof (dummy), &filled);
+    if (st == zzs::kernel::Status::STALE)
+      break;
+    if (!zzs::kernel::status_ok (st))
+      return st;
   }
+  return zzs::kernel::Status::OK;
+}
 
-  [[nodiscard]] bool
-  is_open () const noexcept override {
-    return _M_fd >= 0;
-  }
-
-  /** @brief Return the underlying socket file descriptor. */
-  [[nodiscard]] int
-  fd () const noexcept {
-    return _M_fd;
-  }
-
-private:
-  int _M_fd;
-};
+[[nodiscard]] bool
+LinuxStreamBus::is_open () const noexcept {
+  return _M_fd >= 0;
+}
 
 /** @brief Create a connected unix-domain socketpair.  Returns both fds; the
  *         caller wraps one end in a `LinuxStreamBus` (stack-allocated) and
  *         uses the other for a module emulator.  No heap, no statics. */
 [[nodiscard]] zzs::kernel::Status
-_S_create_socketpair (int fds[2]) noexcept {
+LinuxStreamBus::create_socketpair (int fds[2]) noexcept {
+  if (fds == nullptr)
+    return zzs::kernel::Status::INTERNAL;
 #if defined(__linux__)
   fds[0] = -1;
   fds[1] = -1;
@@ -221,7 +203,7 @@ _S_mac_addr (uint8_t mac[6]) noexcept {
 void
 _S_delay_ms (uint32_t ms) noexcept {
 #if defined(__linux__)
-  struct timespec ts = {.tv_sec = ms / 1000, .tv_nsec = (ms % 1000) * 1000000ull};
+  struct timespec ts = {.tv_sec = ms / 1000, .tv_nsec = static_cast<long> ((ms % 1000u) * 1000000ull)};
   ::nanosleep (&ts, nullptr);
 #else
   (void) ms;
@@ -229,8 +211,6 @@ _S_delay_ms (uint32_t ms) noexcept {
 }
 
 #endif /* defined(__linux__) */
-
-} // namespace
 
 [[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *, zzs::kernel::Status>
 create_linux_wifi_hal (WifiHal &hal_out) noexcept {
@@ -255,4 +235,4 @@ create_linux_wifi_hal (WifiHal &hal_out) noexcept {
 
 /** @} */
 
-} // namespace zzs::kernel::device::driver::wifi::platform::linux
+} // namespace zzs::kernel::device::driver::wifi::platform

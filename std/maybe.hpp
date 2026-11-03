@@ -845,6 +845,63 @@ public:
   }
 };
 
+// ---------------------------------------------------------------------------
+// Maybe<void, Ev>: error-only result (no value on success).  Used by
+// kernel_status.hpp::result_error.  The primary template requires Tv to be an
+// object type, which void is not, so this specialization handles the void case.
+// ---------------------------------------------------------------------------
+template <typename Ev>
+class Maybe<void, Ev> {
+public:
+  using value_type = void;
+  using error_type = Ev;
+  using pointer = void *;
+  using const_pointer = const void *;
+  using size_type = size_t;
+  using difference_type = ptrdiff_t;
+
+  constexpr Maybe () noexcept
+      : _M_err_engaged (false) {
+  }
+  constexpr Maybe (std::nullptr_t) noexcept
+      : _M_err_engaged (false) {
+  }
+
+  template <typename ValErr = std::remove_cv_t<Ev>>
+    requires (!std::is_same_v<Maybe, std::remove_cvref_t<ValErr>>)
+             && (!std::is_same_v<std::in_place_t, std::remove_cvref_t<ValErr>>)
+             && std::is_constructible_v<Ev, ValErr>
+  constexpr explicit (!std::is_convertible_v<ValErr, Ev>)
+      Maybe (ValErr &&err) noexcept (std::is_nothrow_constructible_v<Ev, ValErr>)
+      : _M_err (std::forward<ValErr> (err)), _M_err_engaged (true) {
+  }
+
+  Maybe (const Maybe &) = default;
+  Maybe (Maybe &&) = default;
+  Maybe &operator= (const Maybe &) = default;
+  Maybe &operator= (Maybe &&) = default;
+  ~Maybe () noexcept = default;
+
+  [[nodiscard]] constexpr bool
+  is_ok () const noexcept {
+    return !_M_err_engaged;
+  }
+
+  [[nodiscard]] constexpr explicit
+  operator bool () const noexcept {
+    return is_ok ();
+  }
+
+  [[nodiscard]] constexpr const Ev &
+  error () const noexcept {
+    return _M_err;
+  }
+
+private:
+  Ev _M_err{};
+  bool _M_err_engaged;
+};
+
 template <typename Tv> class MaybeErrorStorage {
   using value_type = Tv;
   using reference = value_type &;

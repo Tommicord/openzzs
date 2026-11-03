@@ -29,15 +29,25 @@
  * Type-safe inline-function counterparts live in `zzs::kernel::builtins`; the
  * macros are the zero-overhead forms the hot paths use directly.
  *
+ * Some compiler builtins require compile-time-constant arguments.  Where this
+ * is the case it is noted in the macro documentation; prefer the macro form
+ * (which inlines the builtin directly) over the inline-function counterpart in
+ * hot paths, since the inline functions pass runtime values that are not valid
+ * arguments to those builtins.
+ *
  * No heap, no float, no exceptions, no RTTI, no writable statics.
  *
  * @section fallback Fallback behaviour by macro
  *
- * - `ZZS_ASSUME_ALIGNED`: `__builtin_assume_aligned` on GCC/Clang; otherwise a
- *   no-op that returns the pointer unchanged.  Use `ZZS_ASSUME_ALIGNED_CHECK`
- *   when a compile-time alignment assertion is desired.
- * - `ZZS_PREFETCH`: `__builtin_prefetch` on GCC/Clang; `_mm_prefetch` on MSVC;
- *   otherwise a no-op that evaluates the address once.
+ * - `ZZS_ASSUME_ALIGNED`: `__builtin_assume_aligned (ptr, alignment)` on
+ *   GCC/Clang, inlined directly by the macro; `alignment` must be a
+ *   compile-time constant integer.  Otherwise a no-op that returns the pointer
+ *   unchanged.  Use `ZZS_ASSUME_ALIGNED_CHECK` when a compile-time alignment
+ *   assertion is desired.
+ * - `ZZS_PREFETCH`: `__builtin_prefetch (addr, rw, locality)` on GCC/Clang,
+ *   inlined directly by the macro; `rw` and `locality` must be compile-time
+ *   constant integers.  `_mm_prefetch` on MSVC; otherwise a no-op that
+ *   evaluates the address once.
  * - `ZZS_LIKELY` / `ZZS_UNLIKELY`: `__builtin_expect(..,1)` / `__builtin_expect(..,0)`
  *   on GCC/Clang; otherwise the expression itself.
  * - `ZZS_MUL_OVERFLOW` / `ZZS_ADD_OVERFLOW` / `ZZS_SUB_OVERFLOW`:
@@ -54,33 +64,30 @@
 #include <limits>
 #include <type_traits>
 
+#if defined(_MSC_VER)
+#include <xmmintrin.h>
+#endif
+
+/* The portable overflow fallbacks below are used by compilers without the
+ * `__builtin_*_overflow` family (notably MSVC).  Define
+ * `ZZS_BUILTINS_FORCE_PORTABLE` before including this header to exercise the
+ * fallbacks on GCC/Clang as well (used by the host test-suite). */
+#if !defined(ZZS_BUILTINS_FORCE_PORTABLE) && (defined(__GNUC__) || defined(__clang__))
+#define ZZS_BUILTINS_HAS_OVERFLOW_BUILTINS 1
+#endif
+
 namespace zzs::kernel::builtins {
 
-/** @brief Assume `ptr` points to memory aligned to `alignment` bytes.
- *
- *  Returns `ptr`.  On GCC/Clang this is `__builtin_assume_aligned`, which lets
- *  the optimizer emit aligned loads/stores.  On other compilers the pointer is
- *  returned unchanged; the caller must still guarantee the alignment.
- */
-template <typename T>
-[[nodiscard]] inline T *
-assume_aligned (T *const ptr, const uintptr_t alignment) noexcept {
-#if defined(__GNUC__) || defined(__clang__)
-  return static_cast<T *> (__builtin_assume_aligned (ptr, alignment));
-#else
-  (void) alignment;
-  return ptr;
-#endif
-}
-
 /** @brief Prefetch a cache line at `addr`.  `rw` is 0 for read, 1 for write;
- *         `locality` is 0..3 (temporal locality).  Evaluates `addr` once. */
+ *         `locality` is 0..3 (temporal locality).  Evaluates `addr` once.
+ *
+ *  On GCC/Clang this is a no-op here; the real work is done by the
+ *  `ZZS_PREFETCH` macro, which inlines `__builtin_prefetch` directly because
+ *  `rw` and `locality` must be compile-time constants.  On MSVC this maps to
+ *  `_mm_prefetch`. */
 inline void
 prefetch (const void *const addr, const int rw, const int locality) noexcept {
-#if defined(__GNUC__) || defined(__clang__)
-  __builtin_prefetch (addr, rw, locality);
-#elif defined(_MSC_VER)
-#include <xmmintrin.h>
+#if defined(_MSC_VER)
   /* Map locality to an MSVC _MM_HINT. */
   static const int _S_hint[4] = {_MM_HINT_T0, _MM_HINT_T1, _MM_HINT_T2, _MM_HINT_NTA};
   const int hint = locality < 0 ? _MM_HINT_T0 : (locality > 3 ? _MM_HINT_NTA : _S_hint[locality]);
@@ -114,68 +121,86 @@ unlikely (const T &expr) noexcept {
 #endif
 }
 
-/** @brief Saturating multiplication overflow test.  Returns true and stores
- *         the wrapped product in `res` on overflow; `res` is only meaningful
- *         when the return is false.  Portable fallback for compilers without
- *         `__builtin_mul_overflow`. */
+/** @brief Multiplication overflow test.  Returns true on overflow and stores
+ *         the two's-complement wrapped product in `res` (matching
+ *         `__builtin_mul_overflow`).  Portable fallback for compilers without
+ *         the builtin. */
 template <typename T>
 [[nodiscard]] inline bool
 mul_overflow (const T a, const T b, T &res) noexcept {
-#if defined(__GNUC__) || defined(__clang__)
+#if defined(ZZS_BUILTINS_HAS_OVERFLOW_BUILTINS)
   return __builtin_mul_overflow (a, b, &res);
 #else
   using U = typename std::make_unsigned<T>::type;
-  constexpr U k_sign_bit = U (1) << (sizeof (T) * 8u - 1u);
-  constexpr U k_pos_max = ~k_sign_bit;
-  const bool neg = (a < T (0)) != (b < T (0));
-  const U ma = (a < T (0)) ? U (0) - static_cast<U> (a) : static_cast<U> (a);
-  const U mb = (b < T (0)) ? U (0) - static_cast<U> (b) : static_cast<U> (b);
-  const U limit = neg ? k_sign_bit : k_pos_max;
-  const bool overflow = (ma != U (0) && mb != U (0) && ma > limit / mb);
-  U prod = ma * mb;
-  if (neg)
-    prod = U (0) - prod; /* two's-complement negation mod 2^N */
+  const U ua = static_cast<U> (a);
+  const U ub = static_cast<U> (b);
+  const U prod = static_cast<U> (ua * ub);
   res = static_cast<T> (prod);
-  return overflow;
+
+  if constexpr (std::is_signed_v<T>) {
+    constexpr U k_sign_bit = U (1) << (sizeof (T) * 8u - 1u);
+    constexpr U k_pos_max = static_cast<U> (~k_sign_bit);
+    const bool neg = (a < T (0)) != (b < T (0));
+    const U ma = (a < T (0)) ? static_cast<U> (U (0) - ua) : ua;
+    const U mb = (b < T (0)) ? static_cast<U> (U (0) - ub) : ub;
+    const U limit = neg ? k_sign_bit : k_pos_max;
+    return ma != U (0) && mb != U (0) && ma > static_cast<U> (limit / mb);
+  } else {
+    const T max = static_cast<T> (~T (0));
+    return b != T (0) && a > static_cast<T> (max / b);
+  }
 #endif
 }
 
-/** @brief Saturating addition overflow test.  See `mul_overflow`. */
+/** @brief Addition overflow test.  See `mul_overflow`. */
 template <typename T>
 [[nodiscard]] inline bool
 add_overflow (const T a, const T b, T &res) noexcept {
-#if defined(__GNUC__) || defined(__clang__)
+#if defined(ZZS_BUILTINS_HAS_OVERFLOW_BUILTINS)
   return __builtin_add_overflow (a, b, &res);
 #else
   using U = typename std::make_unsigned<T>::type;
-  constexpr U k_sign_bit = U (1) << (sizeof (T) * 8u - 1u);
-  constexpr T k_min = static_cast<T> (k_sign_bit);
-  constexpr T k_max = static_cast<T> (~k_sign_bit);
-  bool overflow = false;
-  if (b > T (0) && a > k_max - b)
-    overflow = true;
-  else if (b < T (0) && a < k_min - b)
-    overflow = true;
-  res = static_cast<T> (static_cast<U> (a) + static_cast<U> (b));
-  return overflow;
+  const U sum = static_cast<U> (static_cast<U> (a) + static_cast<U> (b));
+  res = static_cast<T> (sum);
+
+  if constexpr (std::is_signed_v<T>) {
+    constexpr U k_sign_bit = U (1) << (sizeof (T) * 8u - 1u);
+    constexpr T k_min = static_cast<T> (k_sign_bit);
+    constexpr T k_max = static_cast<T> (~k_sign_bit);
+    if (b > T (0))
+      return a > static_cast<T> (k_max - b);
+    if (b < T (0))
+      return a < static_cast<T> (k_min - b);
+    return false;
+  } else {
+    return sum < static_cast<U> (a);
+  }
 #endif
 }
 
-/** @brief Saturating subtraction overflow test.  See `mul_overflow`. */
+/** @brief Subtraction overflow test.  See `mul_overflow`. */
 template <typename T>
 [[nodiscard]] inline bool
 sub_overflow (const T a, const T b, T &res) noexcept {
-#if defined(__GNUC__) || defined(__clang__)
+#if defined(ZZS_BUILTINS_HAS_OVERFLOW_BUILTINS)
   return __builtin_sub_overflow (a, b, &res);
 #else
-  /* a - b == a + (-b); negating b is safe unless b == T::min, handled below. */
-  if (b == std::numeric_limits<T>::min ()) {
-    /* -b would overflow; the result a - min can only overflow when a == max. */
-    const bool overflow = (a == std::numeric_limits<T>::max ());
-    res = a; /* wrapped result; caller checks the flag first */
-    return overflow;
+  using U = typename std::make_unsigned<T>::type;
+  const U diff = static_cast<U> (static_cast<U> (a) - static_cast<U> (b));
+  res = static_cast<T> (diff);
+
+  if constexpr (std::is_signed_v<T>) {
+    constexpr U k_sign_bit = U (1) << (sizeof (T) * 8u - 1u);
+    constexpr T k_min = static_cast<T> (k_sign_bit);
+    constexpr T k_max = static_cast<T> (~k_sign_bit);
+    if (b > T (0))
+      return a < static_cast<T> (k_min + b);
+    if (b < T (0))
+      return a > static_cast<T> (k_max + b);
+    return false;
+  } else {
+    return a < b;
   }
-  return add_overflow (a, static_cast<T> (-b), res);
 #endif
 }
 
@@ -217,35 +242,26 @@ builtin_memset (void *const dst, const int c, const size_t n) noexcept {
 #endif
 }
 
-/** @brief Compile-time alignment assertion helper.  Asserts that the type of
- *  `ptr` is aligned to at least `alignment` bytes:
- *
- *      alignas(64) int x;
- *      ZZS_ASSUME_ALIGNED_CHECK(&x, 64);
- *
- *  Expands to nothing on compilers without `__builtin_assume_aligned`. */
-template <typename T>
-[[nodiscard]] inline constexpr bool
-alignment_check (const uintptr_t alignment) noexcept {
-  return alignof (T) >= alignment;
-}
-
 } // namespace zzs::kernel::builtins
 
-/* =========================================================================
- * Zero-overhead macros (the forms the hot paths use).
- * ========================================================================= */
-
-/** @brief Assume `ptr` is `alignment`-byte aligned. */
+/** @brief Assume `ptr` is `alignment`-byte aligned.
+ *
+ *  Inlines `__builtin_assume_aligned (ptr, alignment)` directly on GCC/Clang.
+ *  `alignment` must be a compile-time constant integer (a requirement of the
+ *  builtin).  Otherwise returns `ptr` unchanged. */
 #ifndef ZZS_ASSUME_ALIGNED
 #if defined(__GNUC__) || defined(__clang__)
-#define ZZS_ASSUME_ALIGNED(ptr, alignment) (::zzs::kernel::builtins::assume_aligned ((ptr), (alignment)))
+#define ZZS_ASSUME_ALIGNED(ptr, alignment) __builtin_assume_aligned ((ptr), (alignment))
 #else
-#define ZZS_ASSUME_ALIGNED(ptr, alignment) (::zzs::kernel::builtins::assume_aligned ((ptr), (alignment)))
+#define ZZS_ASSUME_ALIGNED(ptr, alignment) (ptr)
 #endif
 #endif
 
-/** @brief Prefetch a cache line at `addr` (rw: 0=read/1=write, locality: 0-3). */
+/** @brief Prefetch a cache line at `addr` (rw: 0=read/1=write, locality: 0-3).
+ *
+ *  Inlines `__builtin_prefetch (addr, rw, locality)` directly on GCC/Clang.
+ *  `rw` and `locality` must be compile-time constant integers (a requirement of
+ *  the builtin). */
 #ifndef ZZS_PREFETCH
 #if defined(__GNUC__) || defined(__clang__)
 #define ZZS_PREFETCH(addr, rw, locality) __builtin_prefetch ((addr), (rw), (locality))
@@ -302,14 +318,17 @@ alignment_check (const uintptr_t alignment) noexcept {
 /** @brief Compile-time alignment check for a typed pointer.  Used as a
  *  standalone statement; does nothing on compilers without the builtin.
  *
- *      alignas(64) int x;
- *      ZZS_ASSUME_ALIGNED_CHECK(&x, 64);
+ *      int64_t *p = ...;
+ *      ZZS_ASSUME_ALIGNED_CHECK(p, 8);
+ *
+ *  The check is on the pointee type's natural alignment; over-aligned storage
+ *  needs a distinct over-aligned type (or a runtime address check).
  */
 #ifndef ZZS_ASSUME_ALIGNED_CHECK
 #if defined(__GNUC__) || defined(__clang__)
 #define ZZS_ASSUME_ALIGNED_CHECK(ptr, alignment)                                              \
   static_assert (alignof (typename std::remove_pointer<decltype (ptr)>::type) >= (alignment), \
-                 "ZZS_ASSUME_ALIGNED_CHECK: pointee type not aligned")
+                 "pointee type not aligned")
 #else
 #define ZZS_ASSUME_ALIGNED_CHECK(ptr, alignment) (void) 0
 #endif

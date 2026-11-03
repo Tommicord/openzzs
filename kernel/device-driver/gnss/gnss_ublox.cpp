@@ -175,6 +175,8 @@ UbloxDriver::self_test () noexcept {
 UbloxDriver::send_ubx (uint8_t msg_class, uint8_t msg_id, const uint8_t *payload, uint16_t payload_len) noexcept {
   if (payload == nullptr && payload_len > 0u)
     return zzs::kernel::Status::OUT_OF_RANGE;
+  if (payload_len > ubx::UbxMaxPayloadBytes)
+    return zzs::kernel::Status::BAD_LENGTH;
   if (_M_bus == nullptr)
     return zzs::kernel::Status::INTERNAL;
 
@@ -197,26 +199,64 @@ UbloxDriver::send_ubx (uint8_t msg_class, uint8_t msg_id, const uint8_t *payload
 }
 
 [[nodiscard]] zzs::kernel::Status
+UbloxDriver::_M_wait_for_ack () noexcept {
+  /* Bounded wait for the UBX ACK-ACK/ACK-NAK response to the last config
+   * command.  Reads bytes from the bus one at a time (so multiple queued
+   * responses are consumed one-per-config-call rather than drained in one
+   * gulp), feeds them into a local UBX parser, and inspects the decoded ACK
+   * message.  No infinite loop: bail after kMaxAttempts with a delay between
+   * idle attempts. */
+  constexpr uint32_t kMaxAttempts = 200u;
+  constexpr uint32_t kDelayMs = 10u;
+  ubx::Parser ack_parser;
+
+  for (uint32_t attempt = 0u; attempt < kMaxAttempts; ++attempt) {
+    uint8_t b = 0u;
+    uint16_t filled = 0u;
+    zzs::kernel::Status st = bus_read (&b, 1u, &filled);
+    if (zzs::kernel::status_ok (st) && filled == 1u) {
+      if (ack_parser.feed (b) == zzs::kernel::Status::OK) {
+        const auto &msg = ack_parser.last_message ();
+        if (msg._M_is_ack) {
+          return msg._M_ack_ok ? zzs::kernel::Status::OK : zzs::kernel::Status::INTERNAL;
+        }
+      }
+    } else {
+      /* No byte available right now: wait a little before retrying. */
+      delay_ms (kDelayMs);
+    }
+  }
+  return zzs::kernel::Status::INTERNAL; // timeout waiting for ACK
+}
+
+[[nodiscard]] zzs::kernel::Status
 UbloxDriver::_M_configure_receiver () noexcept {
-  /* CFG-PRT: set UART1 to 9600 baud, NMEA + UBX in/out. */
+  /* CFG-PRT: set UART1 to configured baud, NMEA + UBX in/out.
+   * Real UBX-CFG-PRT payload (20 bytes):
+   *   portID(1) | reserved0(1) | txReady(2) | mode(4) | baudRate(4) |
+   *   inProtoMask(2) | outProtoMask(2) | flags(2) | reserved1(2)
+   * baudRate is at offset 8 (little-endian). */
   {
-    uint8_t cfg_prt[] = {
-        0x00,       // portID (UART1)
-        0x00,       // reserved0
-        0x00, 0x00, // reserved1
-        0x00, 0x00, // txReady
-        0x00, 0x00, // mode (8N1)
-        0x00, 0x00, // baudRate (filled below)
-        0x03, 0x00, // inProtoMask: NMEA+UBX
-        0x03, 0x00, // outProtoMask: NMEA+UBX
-        0x00, 0x00, // reserved2
+    uint8_t cfg_prt[20] = {
+        0x00,                   // portID (UART1)
+        0x00,                   // reserved0
+        0x00, 0x00,             // txReady
+        0x00, 0x80, 0x00, 0x00, // mode: 8N1, no parity (0x00008000 LE)
+        0x00, 0x00, 0x00, 0x00, // baudRate (filled below, little-endian)
+        0x03, 0x00,             // inProtoMask: NMEA + UBX
+        0x03, 0x00,             // outProtoMask: NMEA + UBX
+        0x00, 0x00,             // flags
+        0x00, 0x00,             // reserved1
     };
-    /* Fill baud rate (little-endian). */
-    cfg_prt[7] = static_cast<uint8_t> (_M_config._M_baud_rate & 0xffu);
-    cfg_prt[8] = static_cast<uint8_t> ((_M_config._M_baud_rate >> 8) & 0xffu);
-    cfg_prt[9] = static_cast<uint8_t> ((_M_config._M_baud_rate >> 16) & 0xffu);
-    cfg_prt[10] = static_cast<uint8_t> ((_M_config._M_baud_rate >> 24) & 0xffu);
+    /* Fill baud rate (little-endian) at offset 8. */
+    cfg_prt[8] = static_cast<uint8_t> (_M_config._M_baud_rate & 0xffu);
+    cfg_prt[9] = static_cast<uint8_t> ((_M_config._M_baud_rate >> 8) & 0xffu);
+    cfg_prt[10] = static_cast<uint8_t> ((_M_config._M_baud_rate >> 16) & 0xffu);
+    cfg_prt[11] = static_cast<uint8_t> ((_M_config._M_baud_rate >> 24) & 0xffu);
     zzs::kernel::Status st = send_ubx (0x06u, 0x00u, cfg_prt, sizeof (cfg_prt));
+    if (!zzs::kernel::status_ok (st))
+      return st;
+    st = _M_wait_for_ack ();
     if (!zzs::kernel::status_ok (st))
       return st;
     delay_ms (10u);
@@ -234,6 +274,9 @@ UbloxDriver::_M_configure_receiver () noexcept {
     zzs::kernel::Status st = send_ubx (0x06u, 0x08u, cfg_rate, sizeof (cfg_rate));
     if (!zzs::kernel::status_ok (st))
       return st;
+    st = _M_wait_for_ack ();
+    if (!zzs::kernel::status_ok (st))
+      return st;
     delay_ms (10u);
   }
 
@@ -241,6 +284,9 @@ UbloxDriver::_M_configure_receiver () noexcept {
   {
     uint8_t cfg_msg[] = {0x01u, 0x07u, 0x01u}; // class, id, rate(UART1)=1
     zzs::kernel::Status st = send_ubx (0x06u, 0x01u, cfg_msg, sizeof (cfg_msg));
+    if (!zzs::kernel::status_ok (st))
+      return st;
+    st = _M_wait_for_ack ();
     if (!zzs::kernel::status_ok (st))
       return st;
     delay_ms (10u);
