@@ -398,7 +398,7 @@ _feed_grid_sample (zzs::kernel::sensor::Channel channel, int16_t sample_q15, uin
 
   // Deliver to Java on the UI thread
   JNIEnv *env;
-  if (_S_vm->GetEnv (reinterpret_cast<void **> (&env), JNI_VERSION_1_6) != JNI_OK)
+  if (_S_vm == nullptr || _S_vm->GetEnv (reinterpret_cast<void **> (&env), JNI_VERSION_1_6) != JNI_OK)
     return;
   if (_S_listener == nullptr || _M_on_inference == nullptr)
     return;

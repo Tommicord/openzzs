@@ -225,8 +225,9 @@ plhr_produce (void *const state, int32_t *const slots, const uint32_t slot_count
   _S_PlhrState *const s = static_cast<_S_PlhrState *> (state);
   if (s == nullptr || !s->_M_configured || slots == nullptr)
     return zzs::kernel::Status::NOT_READY;
-  if (slot_count < meta::_S_feat_plhr_count) {
-    zzs::base::log_error ("plhr_produce: budget_exceeded slots={} need={}", slot_count, meta::_S_feat_plhr_count);
+  if (slot_count < meta::_S_feat_reserved_start + meta::_S_feat_reserved_count) {
+    zzs::base::log_error ("plhr_produce: budget_exceeded slots={} need={}", slot_count,
+                          meta::_S_feat_reserved_start + meta::_S_feat_reserved_count);
     return zzs::kernel::Status::BUDGET_EXCEEDED;
   }
 
@@ -289,8 +290,12 @@ plhr_produce (void *const state, int32_t *const slots, const uint32_t slot_count
         /* O(1) read of the incrementally-stepped resonator. */
         const uint32_t power_q14 = zzs::kernel::dsp::goertzel_bank_power_q14 (s->_M_bank[a], bin_index);
         const int32_t level_q8 = zzs::kernel::fx::db_q8 (power_q14, ref);
-        /* Q8 dB -> Q15 feature: scale by 2^7. */
-        const int32_t feature_q15 = level_q8 << 7u;
+        /* Q8 dB -> Q15 feature: scale by 2^7.  Use int64_t to avoid signed
+         * left-shift overflow when level_q8 = INT32_MIN (-32768). */
+        const int64_t feature_q15_raw = static_cast<int64_t> (level_q8) * 128;
+        const int32_t feature_q15 = feature_q15_raw > 32767
+                                        ? 32767
+                                        : (feature_q15_raw < -32768 ? -32768 : static_cast<int32_t> (feature_q15_raw));
         const uint32_t slot = meta::feat_plhr_index (a, g, h);
         slots[slot] = feature_q15;
       }
@@ -378,12 +383,11 @@ plhr_produce (void *const state, int32_t *const slots, const uint32_t slot_count
     if (s->_M_prev_freq_valid) {
       const int32_t drift_hz =
           static_cast<int32_t> (s->_M_mains_freq_hz) - static_cast<int32_t> (s->_M_prev_mains_freq_hz);
-      /* Q15: drift_hz * 32768 (1 Hz = 32768 Q15) */
-      drift_q15 = drift_hz * 32768;
-      if (drift_q15 > 32767)
-        drift_q15 = 32767;
-      else if (drift_q15 < -32768)
-        drift_q15 = -32768;
+      /* Q15: drift_hz * 32768 (1 Hz = 32768 Q15).  Use int64_t to avoid
+       * overflow when |drift_hz| > 1024. */
+      const int64_t drift_q15_raw = static_cast<int64_t> (drift_hz) * 32768;
+      drift_q15 =
+          drift_q15_raw > 32767 ? 32767 : (drift_q15_raw < -32768 ? -32768 : static_cast<int32_t> (drift_q15_raw));
     }
     slots[meta::_S_feat_reserved_start + meta::spectral::freq_drift] = drift_q15;
 
@@ -526,14 +530,15 @@ detect_mains_freq_fine (const int16_t *const samples, const uint32_t count, cons
       const int32_t p_c = static_cast<int32_t> (peak_power);
       const int32_t p_hi = static_cast<int32_t> (dsp::goertzel_bin_power_q14 (bin_hi));
 
-      /* Parabolic vertex offset: delta = 0.5 * (p_lo - p_hi) / (p_lo - 2*p_c + p_hi) */
-      const int32_t denom = p_lo - 2 * p_c + p_hi;
+      /* Parabolic vertex offset: delta = 0.5 * (p_lo - p_hi) / (p_lo - 2*p_c + p_hi)
+       * Use int64_t throughout to avoid signed integer overflow on
+       * (p_lo - p_hi) << 16 and 2 * p_c. */
+      const int64_t denom = static_cast<int64_t> (p_lo) - 2 * static_cast<int64_t> (p_c) + static_cast<int64_t> (p_hi);
       if (denom != 0) {
-        /* Q16 fixed-point: delta_q16 = (p_lo - p_hi) << 16 / (2 * denom) */
-        const int32_t num = (p_lo - p_hi) << 16;
-        const int32_t delta_q16 = num / (2 * denom);
+        const int64_t num = static_cast<int64_t> (p_lo - p_hi) << 16;
+        const int64_t delta_q16 = num / (2 * denom);
         /* Clamp delta to [-1, +1] Hz in Q16 */
-        const int32_t delta_clamped = delta_q16 > 65536 ? 65536 : (delta_q16 < -65536 ? -65536 : delta_q16);
+        const int64_t delta_clamped = delta_q16 > 65536 ? 65536 : (delta_q16 < -65536 ? -65536 : delta_q16);
         best_freq_mhz = static_cast<int32_t> (peak_hz) * 1000 + (static_cast<int64_t> (delta_clamped) * 1000 / 65536);
       }
     }
