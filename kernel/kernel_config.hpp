@@ -242,31 +242,12 @@ inline constexpr uint32_t _S_resonator_max_samples = 256u;
  *
  * The deployment region is not known at build time, so the mains frequency is
  * detected at run time from the sensor data (Goertzel scan at 50/60 Hz in the
- * PLHR stage) and stored in `_S_mains_freq_hz`.  All stages read this variable
- * instead of a compile-time constant.  The default is 60 Hz until a detection
- * window has been processed.
+ * PLHR stage).  The detected frequency is stored in PLHR stage state
+ * (_M_mains_freq_hz), not as a module-level static, to avoid writable static
+ * storage (AGENTS.md §4.1).
  * @{
  */
-
-/** @brief Detected mains grid frequency in hertz (runtime, default 60). */
-inline uint32_t _S_mains_freq_hz = 60u;
 inline constexpr uint32_t _S_harmonics = 4u;
-
-/**
- * @brief Detect the mains grid frequency from a window of samples.
- *
- * Runs a Goertzel scan at 50 Hz and 60 Hz and returns the frequency with the
- * stronger squared-magnitude bin.  Integer-only: resonator coefficients come
- * from the fixed-point trigonometry table; no float, no heap, no exceptions.
- * The caller is responsible for storing the result in `_S_mains_freq_hz`.
- *
- * @param samples          window of Q15 int16 samples
- * @param count            number of samples
- * @param sample_rate_hz   sample rate of the samples
- * @returns 50 or 60 (the stronger bin), or `_S_mains_freq_hz` on invalid input
- */
-[[nodiscard]] inline uint32_t
-detect_mains_freq_hz (const int16_t *const samples, const uint32_t count, const uint32_t sample_rate_hz) noexcept;
 
 /**
  * @brief Detect the mains grid frequency with fine resolution.
@@ -372,12 +353,12 @@ inline constexpr uint32_t _S_bank_budget_host_bytes = _S_bank_budget_bytes + 16u
  */
 [[nodiscard]] inline constexpr bool
 _S_is_pow2 (const uint32_t value) noexcept {
-  return value != 0u && (value & (value - 1u)) == 0u;
+    return value != 0u && (value & (value - 1u)) == 0u;
 }
 
 [[nodiscard]] inline constexpr uint32_t
 _S_align_up (const uint32_t value, const uint32_t alignment) noexcept {
-  return (value + alignment - 1u) & ~(alignment - 1u);
+    return (value + alignment - 1u) & ~(alignment - 1u);
 }
 /** @} */
 } // namespace zzs::kernel
