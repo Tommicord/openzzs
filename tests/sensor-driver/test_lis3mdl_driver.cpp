@@ -19,25 +19,21 @@
  * @brief Unit tests for the LIS3MDL magnetometer driver (mock bus).
  */
 
-#include <catch2/catch_test_macros.hpp>
-
-#include <cstdint>
-
 #include "kernel/sensor-driver/sensors/lis3mdl/lis3mdl.hpp"
 #include "kernel/sensor-driver/sensors/lis3mdl/lis3mdl_reg.h"
-
 #include "test_mock_bus.hpp"
 
-namespace
-{
+#include <catch2/catch_test_macros.hpp>
+#include <cstdint>
+
+namespace {
 using namespace zzs::kernel;
 using namespace zzs::kernel::sensor::driver::sensors;
 using namespace zzs::kernel::sensor::driver::sensors::lis3mdl;
 using namespace zzs::kernel::sensor::driver::fixed;
 } // namespace
 
-TEST_CASE ("Device ID verification (WHO_AM_I = 0x3D)", "[sensor-driver][lis3mdl]")
-{
+TEST_CASE ("Device ID verification (WHO_AM_I = 0x3D)", "[sensor-driver][lis3mdl]") {
     test::MockBus bus;
     bus.set_initialized (true);
     bus.set_reg (RegWhoAmI, WhoAmIValue);
@@ -47,8 +43,7 @@ TEST_CASE ("Device ID verification (WHO_AM_I = 0x3D)", "[sensor-driver][lis3mdl]
     REQUIRE (mag.device_id () == WhoAmIValue);
 }
 
-TEST_CASE ("Full-scale configuration (4/8/12/16 gauss)", "[sensor-driver][lis3mdl][fs]")
-{
+TEST_CASE ("Full-scale configuration (4/8/12/16 gauss)", "[sensor-driver][lis3mdl][fs]") {
     test::MockBus bus;
     bus.set_initialized (true);
     bus.set_reg (RegWhoAmI, WhoAmIValue);
@@ -60,8 +55,7 @@ TEST_CASE ("Full-scale configuration (4/8/12/16 gauss)", "[sensor-driver][lis3md
     REQUIRE (bus.get_reg (RegCtrlReg2) == CtrlReg2Fs4Gauss);
 }
 
-TEST_CASE ("Data rate configuration", "[sensor-driver][lis3mdl][odr]")
-{
+TEST_CASE ("Data rate configuration", "[sensor-driver][lis3mdl][odr]") {
     test::MockBus bus;
     bus.set_initialized (true);
     bus.set_reg (RegWhoAmI, WhoAmIValue);
@@ -71,8 +65,7 @@ TEST_CASE ("Data rate configuration", "[sensor-driver][lis3mdl][odr]")
     REQUIRE (mag.channel_rate_hz (sensor::Channel::MAG_X) == 20u);
 }
 
-TEST_CASE ("Operating mode (continuous/single/power-down)", "[sensor-driver][lis3mdl][mode]")
-{
+TEST_CASE ("Operating mode (continuous/single/power-down)", "[sensor-driver][lis3mdl][mode]") {
     test::MockBus bus;
     bus.set_initialized (true);
     bus.set_reg (RegWhoAmI, WhoAmIValue);
@@ -84,22 +77,17 @@ TEST_CASE ("Operating mode (continuous/single/power-down)", "[sensor-driver][lis
     REQUIRE (bus.get_reg (RegCtrlReg3) == CtrlReg3MdCont);
 }
 
-TEST_CASE ("Magnetic data read (6 bytes → 3 axes Q15)", "[sensor-driver][lis3mdl][read]")
-{
+TEST_CASE ("Magnetic data read (6 bytes → 3 axes Q15)", "[sensor-driver][lis3mdl][read]") {
     test::MockBus bus;
     bus.set_initialized (true);
     bus.set_reg (RegWhoAmI, WhoAmIValue);
 
     /* All axes ready; full 6-byte data block (X=700, Y=800, Z=900). */
-    bus.set_reg (RegStatusReg,
-                 static_cast<uint8_t> (StatusXda | StatusYda | StatusZda));
+    bus.set_reg (RegStatusReg, static_cast<uint8_t> (StatusXda | StatusYda | StatusZda));
     uint8_t data[6] = {
-        static_cast<uint8_t> (700 & 0xFF),
-        static_cast<uint8_t> ((700 >> 8) & 0xFF),
-        static_cast<uint8_t> (800 & 0xFF),
-        static_cast<uint8_t> ((800 >> 8) & 0xFF),
-        static_cast<uint8_t> (900 & 0xFF),
-        static_cast<uint8_t> ((900 >> 8) & 0xFF),
+        static_cast<uint8_t> (700 & 0xFF), static_cast<uint8_t> ((700 >> 8) & 0xFF),
+        static_cast<uint8_t> (800 & 0xFF), static_cast<uint8_t> ((800 >> 8) & 0xFF),
+        static_cast<uint8_t> (900 & 0xFF), static_cast<uint8_t> ((900 >> 8) & 0xFF),
     };
     bus.set_block (RegOutXL, data, 6u);
 
@@ -108,27 +96,23 @@ TEST_CASE ("Magnetic data read (6 bytes → 3 axes Q15)", "[sensor-driver][lis3m
 
     /* Read all three axes (round-robin order depends on the static axis, so
      * collect by channel index). */
-    int16_t values[3] = { 0, 0, 0 };
-    bool seen[3] = { false, false, false };
-    for (int i = 0; i < 3; ++i)
-        {
+    int16_t values[3] = {0, 0, 0};
+    bool seen[3] = {false, false, false};
+    for (int i = 0; i < 3; ++i) {
         sensor::Sample sample;
         REQUIRE (mag.read_sample (sample) == zzs::kernel::Status::OK);
-        const uint8_t idx = static_cast<uint8_t> (sample._M_channel)
-                            - static_cast<uint8_t> (sensor::Channel::MAG_X);
+        const uint8_t idx = static_cast<uint8_t> (sample._M_channel) - static_cast<uint8_t> (sensor::Channel::MAG_X);
         REQUIRE (idx < 3u);
         values[idx] = sample._M_sample_q15;
         seen[idx] = true;
-        }
+    }
     REQUIRE ((seen[0] && seen[1] && seen[2]));
-    const int32_t raw_vals[3] = { 700, 800, 900 };
+    const int32_t raw_vals[3] = {700, 800, 900};
     for (uint32_t i = 0; i < 3; ++i)
-        REQUIRE (values[i] == q15_to_raw (q15_mul (q15_from_raw (raw_vals[i]),
-                                                   MagSensQ15MilligaussPerLsb)));
+        REQUIRE (values[i] == q15_to_raw (q15_mul (q15_from_raw (raw_vals[i]), MagSensQ15MilligaussPerLsb)));
 }
 
-TEST_CASE ("Data ready flag", "[sensor-driver][lis3mdl][data-ready]")
-{
+TEST_CASE ("Data ready flag", "[sensor-driver][lis3mdl][data-ready]") {
     test::MockBus bus;
     bus.set_initialized (true);
     bus.set_reg (RegWhoAmI, WhoAmIValue);
@@ -142,20 +126,18 @@ TEST_CASE ("Data ready flag", "[sensor-driver][lis3mdl][data-ready]")
     REQUIRE (mag.read_sample (sample) == zzs::kernel::Status::STALE);
 
     /* All axes ready -> OK. */
-    bus.set_reg (RegStatusReg,
-                 static_cast<uint8_t> (StatusXda | StatusYda | StatusZda));
-    uint8_t data[6] = { 5, 0, 6, 0, 7, 0 };
+    bus.set_reg (RegStatusReg, static_cast<uint8_t> (StatusXda | StatusYda | StatusZda));
+    uint8_t data[6] = {5, 0, 6, 0, 7, 0};
     bus.set_block (RegOutXL, data, 6u);
     REQUIRE (mag.read_sample (sample) == zzs::kernel::Status::OK);
 }
 
-TEST_CASE ("Self-test verification", "[sensor-driver][lis3mdl][self-test]")
-{
+TEST_CASE ("Self-test verification", "[sensor-driver][lis3mdl][self-test]") {
     test::MockBus bus;
     bus.set_initialized (true);
     bus.set_reg (RegWhoAmI, WhoAmIValue);
     bus.set_reg (RegStatusReg, StatusXda);
-    uint8_t data[6] = { 50, 0, 0, 0, 0, 0 };
+    uint8_t data[6] = {50, 0, 0, 0, 0, 0};
     bus.set_block (RegOutXL, data, 6u);
 
     Lis3mdlMagDriver mag (&bus);
@@ -165,8 +147,7 @@ TEST_CASE ("Self-test verification", "[sensor-driver][lis3mdl][self-test]")
     REQUIRE (mag.self_test () == false);
 }
 
-TEST_CASE ("Edge cases: invalid device ID, NULL bus", "[sensor-driver][lis3mdl][edge]")
-{
+TEST_CASE ("Edge cases: invalid device ID, NULL bus", "[sensor-driver][lis3mdl][edge]") {
     /* Invalid device ID -> BAD_TYPE. */
     {
         test::MockBus bus;

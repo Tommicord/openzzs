@@ -46,51 +46,51 @@ namespace zzs::kernel::feat {
  */
 [[nodiscard]] inline int8_t
 q15_to_i8_code (const int32_t value_q15) noexcept {
-  /* Divide by the code step (258), round toward zero, clamp to [-48, 48].
-   * Matches `mllee_native::detail::q15_raw_to_code` used by the training
-   * pipeline.  Training data codes fall within [-86, 29]; clamping at 48 keeps
-   * saturated device features (e.g. flicker 100Hz hitting 126) from dominating
-   * the model and producing degenerate one-hot [127, 0, 0] outputs.  Together
-   * with the moderated output-layer weights in trained_weights.hpp, this keeps
-   * the softmax from collapsing to a single class for device-realistic inputs.
-   */
-  const int32_t code = value_q15 / 258;
-  return static_cast<int8_t> (code < -48 ? -48 : (code > 48 ? 48 : code));
+    /* Divide by the code step (258), round toward zero, clamp to [-48, 48].
+     * Matches `mllee_native::detail::q15_raw_to_code` used by the training
+     * pipeline.  Training data codes fall within [-86, 29]; clamping at 48 keeps
+     * saturated device features (e.g. flicker 100Hz hitting 126) from dominating
+     * the model and producing degenerate one-hot [127, 0, 0] outputs.  Together
+     * with the moderated output-layer weights in trained_weights.hpp, this keeps
+     * the softmax from collapsing to a single class for device-realistic inputs.
+     */
+    const int32_t code = value_q15 / 258;
+    return static_cast<int8_t> (code < -48 ? -48 : (code > 48 ? 48 : code));
 }
 
 /** @brief Pack one Q15 feature value into row slot `index` as an int8 code. */
 inline void
 feat_pack_slot (int8_t *const row, const uint32_t index, const int32_t value_q15) noexcept {
-  if (row == nullptr || index >= zzs::kernel::_S_feature_count)
-    return;
-  row[index] = q15_to_i8_code (value_q15);
+    if (row == nullptr || index >= zzs::kernel::_S_feature_count)
+        return;
+    row[index] = q15_to_i8_code (value_q15);
 }
 
 /** @brief Pack a full feature row: write `value_q15` at every slot given. */
 inline void
 feat_pack_row (int8_t *const row, const int32_t *const values_q15, const uint32_t count) noexcept {
-  if (row == nullptr || values_q15 == nullptr)
-    return;
-  const uint32_t n = count < zzs::kernel::_S_feature_count ? count : zzs::kernel::_S_feature_count;
-  for (uint32_t i = 0; i < n; ++i)
-    row[i] = q15_to_i8_code (values_q15[i]);
-  zzs::base::log_debug ("feat_pack_row: emitted row count={}", n);
+    if (row == nullptr || values_q15 == nullptr)
+        return;
+    const uint32_t n = count < zzs::kernel::_S_feature_count ? count : zzs::kernel::_S_feature_count;
+    for (uint32_t i = 0; i < n; ++i)
+        row[i] = q15_to_i8_code (values_q15[i]);
+    zzs::base::log_debug ("feat_pack_row: emitted row count={}", n);
 }
 
 /** @brief Zero a feature row. */
 inline void
 feat_row_clear (int8_t *const row) noexcept {
-  if (row == nullptr)
-    return;
-  for (uint32_t i = 0; i < zzs::kernel::_S_feature_count; ++i)
-    row[i] = 0;
-  zzs::base::log_debug ("feat_row_clear: row cleared");
+    if (row == nullptr)
+        return;
+    for (uint32_t i = 0; i < zzs::kernel::_S_feature_count; ++i)
+        row[i] = 0;
+    zzs::base::log_debug ("feat_row_clear: row cleared");
 }
 
 /** @brief Number of bytes in one packed feature row. */
 [[nodiscard]] inline constexpr uint32_t
 feat_row_bytes (void) noexcept {
-  return zzs::kernel::_S_feature_row_bytes;
+    return zzs::kernel::_S_feature_row_bytes;
 }
 
 /** @} */

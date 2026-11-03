@@ -54,40 +54,37 @@
  */
 
 /* Exactly-one-macro rule: sum of defined platform macros must equal 1. */
-#if defined(ZZS_KERNEL_PLATFORM_LINUX) + defined(ZZS_KERNEL_PLATFORM_WINDOWS) \
-    + defined(ZZS_KERNEL_PLATFORM_STM32F4) + defined(ZZS_KERNEL_PLATFORM_STM32F7) \
-    + defined(ZZS_KERNEL_PLATFORM_STM32H7) + defined(ZZS_KERNEL_PLATFORM_STM32L4) \
-    + defined(ZZS_KERNEL_PLATFORM_ESP32) + defined(ZZS_KERNEL_PLATFORM_FREERTOS) \
-    + defined(ZZS_KERNEL_PLATFORM_ANDROID) + defined(ZZS_KERNEL_PLATFORM_IOS) \
-    + defined(ZZS_KERNEL_PLATFORM_ZEPHYR) + defined(ZZS_KERNEL_PLATFORM_RP2040) \
-    + defined(ZZS_KERNEL_PLATFORM_NRF52) + defined(ZZS_KERNEL_PLATFORM_SAMD21) \
-    + defined(ZZS_KERNEL_PLATFORM_BEAGLEBONE) + defined(ZZS_KERNEL_PLATFORM_MACOS) \
-    + defined(ZZS_KERNEL_PLATFORM_QNX) + defined(ZZS_KERNEL_PLATFORM_VXWORKS) \
+#if defined(ZZS_KERNEL_PLATFORM_LINUX) + defined(ZZS_KERNEL_PLATFORM_WINDOWS) + defined(ZZS_KERNEL_PLATFORM_STM32F4)  \
+    + defined(ZZS_KERNEL_PLATFORM_STM32F7) + defined(ZZS_KERNEL_PLATFORM_STM32H7)                                     \
+    + defined(ZZS_KERNEL_PLATFORM_STM32L4) + defined(ZZS_KERNEL_PLATFORM_ESP32)                                       \
+    + defined(ZZS_KERNEL_PLATFORM_FREERTOS) + defined(ZZS_KERNEL_PLATFORM_ANDROID) + defined(ZZS_KERNEL_PLATFORM_IOS) \
+    + defined(ZZS_KERNEL_PLATFORM_ZEPHYR) + defined(ZZS_KERNEL_PLATFORM_RP2040) + defined(ZZS_KERNEL_PLATFORM_NRF52)  \
+    + defined(ZZS_KERNEL_PLATFORM_SAMD21) + defined(ZZS_KERNEL_PLATFORM_BEAGLEBONE)                                   \
+    + defined(ZZS_KERNEL_PLATFORM_MACOS) + defined(ZZS_KERNEL_PLATFORM_QNX) + defined(ZZS_KERNEL_PLATFORM_VXWORKS)    \
     + defined(ZZS_KERNEL_PLATFORM_RTLINUX)
-#if (defined(ZZS_KERNEL_PLATFORM_LINUX) + defined(ZZS_KERNEL_PLATFORM_WINDOWS) \
-     + defined(ZZS_KERNEL_PLATFORM_STM32F4) + defined(ZZS_KERNEL_PLATFORM_STM32F7) \
-     + defined(ZZS_KERNEL_PLATFORM_STM32H7) + defined(ZZS_KERNEL_PLATFORM_STM32L4) \
-     + defined(ZZS_KERNEL_PLATFORM_ESP32) + defined(ZZS_KERNEL_PLATFORM_FREERTOS) \
-     + defined(ZZS_KERNEL_PLATFORM_ANDROID) + defined(ZZS_KERNEL_PLATFORM_IOS) \
-     + defined(ZZS_KERNEL_PLATFORM_ZEPHYR) + defined(ZZS_KERNEL_PLATFORM_RP2040) \
-     + defined(ZZS_KERNEL_PLATFORM_NRF52) + defined(ZZS_KERNEL_PLATFORM_SAMD21) \
-     + defined(ZZS_KERNEL_PLATFORM_BEAGLEBONE) + defined(ZZS_KERNEL_PLATFORM_MACOS) \
-     + defined(ZZS_KERNEL_PLATFORM_QNX) + defined(ZZS_KERNEL_PLATFORM_VXWORKS) \
-     + defined(ZZS_KERNEL_PLATFORM_RTLINUX)) != 1
+#if (defined(ZZS_KERNEL_PLATFORM_LINUX) + defined(ZZS_KERNEL_PLATFORM_WINDOWS) + defined(ZZS_KERNEL_PLATFORM_STM32F4)  \
+     + defined(ZZS_KERNEL_PLATFORM_STM32F7) + defined(ZZS_KERNEL_PLATFORM_STM32H7)                                     \
+     + defined(ZZS_KERNEL_PLATFORM_STM32L4) + defined(ZZS_KERNEL_PLATFORM_ESP32)                                       \
+     + defined(ZZS_KERNEL_PLATFORM_FREERTOS) + defined(ZZS_KERNEL_PLATFORM_ANDROID) + defined(ZZS_KERNEL_PLATFORM_IOS) \
+     + defined(ZZS_KERNEL_PLATFORM_ZEPHYR) + defined(ZZS_KERNEL_PLATFORM_RP2040) + defined(ZZS_KERNEL_PLATFORM_NRF52)  \
+     + defined(ZZS_KERNEL_PLATFORM_SAMD21) + defined(ZZS_KERNEL_PLATFORM_BEAGLEBONE)                                   \
+     + defined(ZZS_KERNEL_PLATFORM_MACOS) + defined(ZZS_KERNEL_PLATFORM_QNX) + defined(ZZS_KERNEL_PLATFORM_VXWORKS)    \
+     + defined(ZZS_KERNEL_PLATFORM_RTLINUX))                                                                           \
+    != 1
 #error "Exactly one ZZS_KERNEL_PLATFORM_* macro must be defined"
 #endif
 #endif
 
 /* Default to Linux on __linux__ hosts when nothing is selected. */
-#if !defined(ZZS_KERNEL_PLATFORM_LINUX) && !defined(ZZS_KERNEL_PLATFORM_WINDOWS) \
-    && !defined(ZZS_KERNEL_PLATFORM_STM32F4) && !defined(ZZS_KERNEL_PLATFORM_STM32F7) \
-    && !defined(ZZS_KERNEL_PLATFORM_STM32H7) && !defined(ZZS_KERNEL_PLATFORM_STM32L4) \
-    && !defined(ZZS_KERNEL_PLATFORM_ESP32) && !defined(ZZS_KERNEL_PLATFORM_FREERTOS) \
-    && !defined(ZZS_KERNEL_PLATFORM_ANDROID) && !defined(ZZS_KERNEL_PLATFORM_IOS) \
-    && !defined(ZZS_KERNEL_PLATFORM_ZEPHYR) && !defined(ZZS_KERNEL_PLATFORM_RP2040) \
-    && !defined(ZZS_KERNEL_PLATFORM_NRF52) && !defined(ZZS_KERNEL_PLATFORM_SAMD21) \
+#if !defined(ZZS_KERNEL_PLATFORM_LINUX) && !defined(ZZS_KERNEL_PLATFORM_WINDOWS)       \
+    && !defined(ZZS_KERNEL_PLATFORM_STM32F4) && !defined(ZZS_KERNEL_PLATFORM_STM32F7)  \
+    && !defined(ZZS_KERNEL_PLATFORM_STM32H7) && !defined(ZZS_KERNEL_PLATFORM_STM32L4)  \
+    && !defined(ZZS_KERNEL_PLATFORM_ESP32) && !defined(ZZS_KERNEL_PLATFORM_FREERTOS)   \
+    && !defined(ZZS_KERNEL_PLATFORM_ANDROID) && !defined(ZZS_KERNEL_PLATFORM_IOS)      \
+    && !defined(ZZS_KERNEL_PLATFORM_ZEPHYR) && !defined(ZZS_KERNEL_PLATFORM_RP2040)    \
+    && !defined(ZZS_KERNEL_PLATFORM_NRF52) && !defined(ZZS_KERNEL_PLATFORM_SAMD21)     \
     && !defined(ZZS_KERNEL_PLATFORM_BEAGLEBONE) && !defined(ZZS_KERNEL_PLATFORM_MACOS) \
-    && !defined(ZZS_KERNEL_PLATFORM_QNX) && !defined(ZZS_KERNEL_PLATFORM_VXWORKS) \
+    && !defined(ZZS_KERNEL_PLATFORM_QNX) && !defined(ZZS_KERNEL_PLATFORM_VXWORKS)      \
     && !defined(ZZS_KERNEL_PLATFORM_RTLINUX)
 #ifdef __linux__
 #define ZZS_KERNEL_PLATFORM_LINUX 1

@@ -30,8 +30,7 @@
  * sub-devices.  Integer-only; no float.
  * @{
  */
-namespace zzs::kernel::sensor::driver::sensors::lsm303
-{
+namespace zzs::kernel::sensor::driver::sensors::lsm303 {
 
 /** @brief Accelerometer sub-device WHO_AM_I register address. */
 inline constexpr uint8_t RegWhoAmI = 0x0F;
@@ -55,7 +54,7 @@ inline constexpr uint8_t CtrlReg1AODR100Hz = 0x50; /* 100 Hz normal mode */
 /** @brief Accel CTRL_REG4_A: full-scale, BDU. */
 inline constexpr uint8_t RegCtrlReg4A = 0x23;
 /* CTRL_REG4_A bit fields. */
-inline constexpr uint8_t CtrlReg4ABdu = 0x40;   /* bit 6 block data update */
+inline constexpr uint8_t CtrlReg4ABdu = 0x40;    /* bit 6 block data update */
 inline constexpr uint8_t CtrlReg4AFsMask = 0x30; /* bits [5:4] full-scale */
 inline constexpr uint8_t CtrlReg4AFs2g = 0x00;   /* ±2 g */
 
@@ -82,7 +81,7 @@ inline constexpr uint8_t RegCtrlReg1M = 0x20;
 
 /** @brief Mag CTRL_REG2_M: full-scale. */
 inline constexpr uint8_t RegCtrlReg2M = 0x21;
-inline constexpr uint8_t CtrlReg2MFsMask = 0x60;   /* bits [6:5] full-scale */
+inline constexpr uint8_t CtrlReg2MFsMask = 0x60;    /* bits [6:5] full-scale */
 inline constexpr uint8_t CtrlReg2MFsDefault = 0x00; /* ±1.3 gauss (default) */
 
 /** @brief Mag CTRL_REG3_M: operating mode. */

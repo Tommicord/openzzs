@@ -35,8 +35,7 @@
  *
  * Compiled with -fstack-usage and never linked: only the .su rows are read.
  */
-namespace
-{
+namespace {
 using namespace zzs::mllee;
 using namespace zzs::mllee::train;
 
@@ -51,9 +50,7 @@ constexpr uint16_t _S_deep_conv_length = 4u;
 constexpr uint16_t _S_deep_pool_kernel = 2u;
 constexpr uint16_t _S_deep_pool_length = 2u;
 
-constexpr uint32_t _S_deep_pooled
-    = static_cast<uint32_t> (_S_deep_batch) * _S_deep_out_channels
-      * _S_deep_pool_length;
+constexpr uint32_t _S_deep_pooled = static_cast<uint32_t> (_S_deep_batch) * _S_deep_out_channels * _S_deep_pool_length;
 
 /**
  * @brief The deep forward hook: one conv, one pool, one dropout, one MSE.
@@ -63,8 +60,7 @@ constexpr uint32_t _S_deep_pooled
  * device run reaches -- including the arena traffic of the max-pool scratch.
  */
 Status
-deep_forward (StepContext &context)
-{
+deep_forward (StepContext &context) {
     Pool &pool = *context._M_pool;
     Tape &tape = *context._M_tape;
     const Trainable &weight = context._M_params[0];
@@ -91,9 +87,8 @@ deep_forward (StepContext &context)
     pooled._M_kind = PoolKind::MAX;
 
     DropoutConfig dropped;
-    const Status init = dropout_config_init (
-        dropped, DropoutKind::Elementwise, true, _S_q15_one / 5u,
-        0x9E3779B97F4A7C15ull, _S_deep_pooled, 1u, _S_deep_pooled, 0);
+    const Status init = dropout_config_init (dropped, DropoutKind::Elementwise, true, _S_q15_one / 5u,
+                                             0x9E3779B97F4A7C15ull, _S_deep_pooled, 1u, _S_deep_pooled, 0);
     if (!status_ok (init))
         return init;
 
@@ -115,21 +110,13 @@ deep_forward (StepContext &context)
         || !status_ok (pool.carve_typed (_S_deep_pooled, target_codes)))
         return Status::ARENA_OVERFLOW;
 
-    const Trainable input = Trainable::make (input_codes, nullptr,
-                                             conv.input_shape (), Flag::Frozen);
-    Trainable hidden = Trainable::make (hidden_codes, hidden_grad,
-                                        conv.output_shape (), Flag::RequiresGrad);
-    Trainable downsampled = Trainable::make (pooled_codes, pooled_grad,
-                                             pooled.output_shape (),
-                                             Flag::RequiresGrad);
+    const Trainable input = Trainable::make (input_codes, nullptr, conv.input_shape (), Flag::Frozen);
+    Trainable hidden = Trainable::make (hidden_codes, hidden_grad, conv.output_shape (), Flag::RequiresGrad);
+    Trainable downsampled = Trainable::make (pooled_codes, pooled_grad, pooled.output_shape (), Flag::RequiresGrad);
     Trainable noisy = Trainable::make (dropped_codes, dropped_grad,
-                                       Shape::vector (static_cast<uint16_t> (
-                                           _S_deep_pooled)),
-                                       Flag::RequiresGrad);
-    const Trainable target = Trainable::make (target_codes, nullptr,
-                                              Shape::vector (static_cast<uint16_t> (
-                                                  _S_deep_pooled)),
-                                              Flag::Frozen);
+                                       Shape::vector (static_cast<uint16_t> (_S_deep_pooled)), Flag::RequiresGrad);
+    const Trainable target =
+        Trainable::make (target_codes, nullptr, Shape::vector (static_cast<uint16_t> (_S_deep_pooled)), Flag::Frozen);
 
     const Status run_conv = conv_run (tape, conv, input, weight, bias, hidden);
     if (!status_ok (run_conv))
@@ -151,22 +138,17 @@ deep_forward (StepContext &context)
 }
 
 Status
-deep_update (StepContext &context)
-{
-    for (uint32_t p = 0u; p < context._M_param_count; ++p)
-        {
-            const Trainable &param = context._M_params[p];
-            for (uint32_t i = 0u; i < param._M_count; ++i)
-                param.set_code (i, param.code_at (i)
-                                      - q15_to_code (q15_mul (context._M_lr_q15,
-                                                              param.grad_at (i))));
-        }
+deep_update (StepContext &context) {
+    for (uint32_t p = 0u; p < context._M_param_count; ++p) {
+        const Trainable &param = context._M_params[p];
+        for (uint32_t i = 0u; i < param._M_count; ++i)
+            param.set_code (i, param.code_at (i) - q15_to_code (q15_mul (context._M_lr_q15, param.grad_at (i))));
+    }
     return Status::OK;
 }
 
 int32_t
-deep_schedule (const uint32_t)
-{
+deep_schedule (const uint32_t) {
     return _S_q15_one / 16;
 }
 
@@ -181,10 +163,8 @@ constexpr uint32_t _S_deep_batch_rows = 2u;
  *                parameter storage.
  */
 extern "C" int
-mllee_train_worst_deep_step (Trainer &trainer, StepStats &out,
-                             const Trainable *params, const uint32_t param_count)
-{
-    const StepHooks hooks{ deep_forward, deep_schedule, nullptr, deep_update };
+mllee_train_worst_deep_step (Trainer &trainer, StepStats &out, const Trainable *params, const uint32_t param_count) {
+    const StepHooks hooks{deep_forward, deep_schedule, nullptr, deep_update};
     Trainer local (trainer.context (), hooks);
     if (!status_ok (local.configure (params, param_count, _S_deep_batch_rows)))
         return 0;

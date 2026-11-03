@@ -39,132 +39,134 @@ namespace test {
 
 /** @brief In-memory byte stream implementing StreamBusInterface. */
 class MockStreamBus : public zzs::kernel::device::driver::StreamBusInterface {
-public:
-  MockStreamBus () noexcept = default;
+  public:
+    MockStreamBus () noexcept = default;
 
-  ~MockStreamBus () override = default;
-  MockStreamBus (const MockStreamBus &) = delete;
-  MockStreamBus &operator= (const MockStreamBus &) = delete;
-  MockStreamBus (MockStreamBus &&) = delete;
-  MockStreamBus &operator= (MockStreamBus &&) = delete;
+    ~MockStreamBus () override = default;
+    MockStreamBus (const MockStreamBus &) = delete;
+    MockStreamBus &
+    operator= (const MockStreamBus &) = delete;
+    MockStreamBus (MockStreamBus &&) = delete;
+    MockStreamBus &
+    operator= (MockStreamBus &&) = delete;
 
-  // -- StreamBusInterface --
+    // -- StreamBusInterface --
 
-  [[nodiscard]] zzs::kernel::Status
-  read_bytes (uint8_t *buf, uint16_t max_bytes, uint16_t *filled) noexcept override {
-    if (buf == nullptr || filled == nullptr)
-      return zzs::kernel::Status::OUT_OF_RANGE;
-    if (!_M_open)
-      return zzs::kernel::Status::INTERNAL;
-    if (_M_rx_index >= _M_rx.size ()) {
-      *filled = 0u;
-      return zzs::kernel::Status::STALE;
+    [[nodiscard]] zzs::kernel::Status
+    read_bytes (uint8_t *buf, uint16_t max_bytes, uint16_t *filled) noexcept override {
+        if (buf == nullptr || filled == nullptr)
+            return zzs::kernel::Status::OUT_OF_RANGE;
+        if (!_M_open)
+            return zzs::kernel::Status::INTERNAL;
+        if (_M_rx_index >= _M_rx.size ()) {
+            *filled = 0u;
+            return zzs::kernel::Status::STALE;
+        }
+        uint16_t n = 0u;
+        while (n < max_bytes && _M_rx_index < _M_rx.size ()) {
+            buf[n++] = _M_rx[_M_rx_index++];
+        }
+        *filled = n;
+        return n > 0u ? zzs::kernel::Status::OK : zzs::kernel::Status::STALE;
     }
-    uint16_t n = 0u;
-    while (n < max_bytes && _M_rx_index < _M_rx.size ()) {
-      buf[n++] = _M_rx[_M_rx_index++];
+
+    [[nodiscard]] zzs::kernel::Status
+    write_bytes (const uint8_t *buf, uint16_t len) noexcept override {
+        if (buf == nullptr && len > 0u)
+            return zzs::kernel::Status::OUT_OF_RANGE;
+        if (!_M_open)
+            return zzs::kernel::Status::INTERNAL;
+        for (uint16_t i = 0u; i < len; ++i)
+            _M_tx.push_back (buf[i]);
+        return zzs::kernel::Status::OK;
     }
-    *filled = n;
-    return n > 0u ? zzs::kernel::Status::OK : zzs::kernel::Status::STALE;
-  }
 
-  [[nodiscard]] zzs::kernel::Status
-  write_bytes (const uint8_t *buf, uint16_t len) noexcept override {
-    if (buf == nullptr && len > 0u)
-      return zzs::kernel::Status::OUT_OF_RANGE;
-    if (!_M_open)
-      return zzs::kernel::Status::INTERNAL;
-    for (uint16_t i = 0u; i < len; ++i)
-      _M_tx.push_back (buf[i]);
-    return zzs::kernel::Status::OK;
-  }
+    void
+    delay_ms (uint32_t ms) noexcept override {
+        _M_delay_calls += 1u;
+        _M_delay_total_ms += ms;
+    }
 
-  void
-  delay_ms (uint32_t ms) noexcept override {
-    _M_delay_calls += 1u;
-    _M_delay_total_ms += ms;
-  }
+    [[nodiscard]] zzs::kernel::Status
+    flush_rx () noexcept override {
+        _M_rx.clear ();
+        _M_rx_index = 0u;
+        return zzs::kernel::Status::OK;
+    }
 
-  [[nodiscard]] zzs::kernel::Status
-  flush_rx () noexcept override {
-    _M_rx.clear ();
-    _M_rx_index = 0u;
-    return zzs::kernel::Status::OK;
-  }
+    [[nodiscard]] bool
+    is_open () const noexcept override {
+        return _M_open;
+    }
 
-  [[nodiscard]] bool
-  is_open () const noexcept override {
-    return _M_open;
-  }
+    // -- Test helpers --
 
-  // -- Test helpers --
+    void
+    set_open (bool open) noexcept {
+        _M_open = open;
+    }
 
-  void
-  set_open (bool open) noexcept {
-    _M_open = open;
-  }
+    /** @brief Inject received bytes (as if arriving from the GNSS receiver). */
+    void
+    inject (const uint8_t *data, uint16_t len) noexcept {
+        if (data == nullptr || len == 0u)
+            return;
+        for (uint16_t i = 0u; i < len; ++i)
+            _M_rx.push_back (data[i]);
+    }
 
-  /** @brief Inject received bytes (as if arriving from the GNSS receiver). */
-  void
-  inject (const uint8_t *data, uint16_t len) noexcept {
-    if (data == nullptr || len == 0u)
-      return;
-    for (uint16_t i = 0u; i < len; ++i)
-      _M_rx.push_back (data[i]);
-  }
+    /** @brief Inject a null-terminated string as received bytes. */
+    void
+    inject_str (const char *str) noexcept {
+        if (str == nullptr)
+            return;
+        uint16_t len = 0u;
+        while (str[len] != '\0')
+            ++len;
+        inject (reinterpret_cast<const uint8_t *> (str), len);
+    }
 
-  /** @brief Inject a null-terminated string as received bytes. */
-  void
-  inject_str (const char *str) noexcept {
-    if (str == nullptr)
-      return;
-    uint16_t len = 0u;
-    while (str[len] != '\0')
-      ++len;
-    inject (reinterpret_cast<const uint8_t *> (str), len);
-  }
+    void
+    clear () noexcept {
+        _M_rx.clear ();
+        _M_rx_index = 0u;
+        _M_tx.clear ();
+        _M_delay_calls = 0u;
+        _M_delay_total_ms = 0u;
+    }
 
-  void
-  clear () noexcept {
-    _M_rx.clear ();
-    _M_rx_index = 0u;
-    _M_tx.clear ();
-    _M_delay_calls = 0u;
-    _M_delay_total_ms = 0u;
-  }
+    [[nodiscard]] uint32_t
+    delay_calls () const noexcept {
+        return _M_delay_calls;
+    }
 
-  [[nodiscard]] uint32_t
-  delay_calls () const noexcept {
-    return _M_delay_calls;
-  }
+    [[nodiscard]] uint32_t
+    delay_total_ms () const noexcept {
+        return _M_delay_total_ms;
+    }
 
-  [[nodiscard]] uint32_t
-  delay_total_ms () const noexcept {
-    return _M_delay_total_ms;
-  }
+    [[nodiscard]] const std::vector<uint8_t> &
+    tx_bytes () const noexcept {
+        return _M_tx;
+    }
 
-  [[nodiscard]] const std::vector<uint8_t> &
-  tx_bytes () const noexcept {
-    return _M_tx;
-  }
+    [[nodiscard]] uint32_t
+    tx_count () const noexcept {
+        return static_cast<uint32_t> (_M_tx.size ());
+    }
 
-  [[nodiscard]] uint32_t
-  tx_count () const noexcept {
-    return static_cast<uint32_t> (_M_tx.size ());
-  }
+    [[nodiscard]] uint32_t
+    rx_remaining () const noexcept {
+        return static_cast<uint32_t> (_M_rx.size () - _M_rx_index);
+    }
 
-  [[nodiscard]] uint32_t
-  rx_remaining () const noexcept {
-    return static_cast<uint32_t> (_M_rx.size () - _M_rx_index);
-  }
-
-private:
-  bool _M_open = false;
-  std::vector<uint8_t> _M_rx;
-  uint32_t _M_rx_index = 0u;
-  std::vector<uint8_t> _M_tx;
-  uint32_t _M_delay_calls = 0u;
-  uint32_t _M_delay_total_ms = 0u;
+  private:
+    bool _M_open = false;
+    std::vector<uint8_t> _M_rx;
+    uint32_t _M_rx_index = 0u;
+    std::vector<uint8_t> _M_tx;
+    uint32_t _M_delay_calls = 0u;
+    uint32_t _M_delay_total_ms = 0u;
 };
 
 } // namespace test

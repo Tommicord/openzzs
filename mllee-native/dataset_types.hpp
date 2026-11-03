@@ -57,35 +57,35 @@ static_assert (kClassCount == zzs::mllee_native::DefaultConfig::output_dim,
 
 /** @brief Label encoding. */
 enum class Label : uint8_t {
-  Normal = 0u,
-  Outage = 1u,
-  Transition = 2u,
+    Normal = 0u,
+    Outage = 1u,
+    Transition = 2u,
 };
 
 /** @brief One feature window: 38 Q15 values. */
 struct FeatureWindow {
-  int16_t _M_features[kFeatureCount];
+    int16_t _M_features[kFeatureCount];
 };
 
 /** @brief One training sample: 5 windows + label. */
 struct TrainingSample {
-  FeatureWindow _M_windows[kSeqLen];
-  uint8_t _M_label;
+    FeatureWindow _M_windows[kSeqLen];
+    uint8_t _M_label;
 };
 
 /** @brief Dataset generation parameters. */
-struct GenerationParams {
-  uint16_t _M_seed;
-  uint32_t _M_num_samples;
-  uint32_t _M_normal_ratio;     /* per-mille (0-1000) */
-  uint32_t _M_outage_ratio;     /* per-mille (0-1000) */
-  uint32_t _M_transition_ratio; /* per-mille (0-1000) */
+struct GenParam {
+    uint16_t _M_seed;
+    uint32_t _M_num_samples;
+    uint32_t _M_normal_ratio;     /* per-mille (0-1000) */
+    uint32_t _M_outage_ratio;     /* per-mille (0-1000) */
+    uint32_t _M_transition_ratio; /* per-mille (0-1000) */
 };
 
 /** @brief Full compile-time dataset (stored in .rodata). */
 template <uint32_t N> struct Dataset {
-  TrainingSample _M_samples[N];
-  uint32_t _M_count;
+    TrainingSample _M_samples[N];
+    uint32_t _M_count;
 };
 
 /** @} */

@@ -35,8 +35,7 @@
 namespace zzs::kernel::device::driver::wifi::platform::nrf52 {
 
 /** @brief Build the nRF52 WiFi HAL vtable. */
-[[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *,
-                              zzs::kernel::Status>
+[[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *, zzs::kernel::Status>
 create_nrf52_wifi_hal (WifiHal &hal_out) noexcept;
 
 /** @} */

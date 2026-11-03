@@ -103,22 +103,22 @@ post_grad_hook (StepContext &context, uint32_t saturated) noexcept;
 /** @brief One-hot encode a label as int8 codes (127 for true class). */
 constexpr void
 one_hot_target (const uint8_t label, int8_t *const target) noexcept {
-  for (uint32_t i = 0; i < DefaultConfig::output_dim; ++i)
-    target[i] = (static_cast<uint32_t> (i) == static_cast<uint32_t> (label)) ? 127 : -127;
+    for (uint32_t i = 0; i < DefaultConfig::output_dim; ++i)
+        target[i] = (static_cast<uint32_t> (i) == static_cast<uint32_t> (label)) ? 127 : -127;
 }
 
 /** @brief Trainable parameter block for the hidden linear layer. */
 struct HiddenParams {
-  Trainable _M_weight; /* [hidden_dim, hidden_input], requires grad */
-  Trainable _M_bias;   /* [hidden_dim],   requires grad */
+    Trainable _M_weight; /* [hidden_dim, hidden_input], requires grad */
+    Trainable _M_bias;   /* [hidden_dim],   requires grad */
 };
 
 /** @brief Trainable parameter block for the output linear layer. */
 struct OutputParams {
-  Trainable _M_weight; /* [output_dim, hidden_dim], requires grad */
-  Trainable _M_bias;   /* [output_dim],   requires grad */
-  Trainable _M_output; /* [output_dim],   forward-only (no grad) */
-  Trainable _M_loss;   /* scalar, forward-only */
+    Trainable _M_weight; /* [output_dim, hidden_dim], requires grad */
+    Trainable _M_bias;   /* [output_dim],   requires grad */
+    Trainable _M_output; /* [output_dim],   forward-only (no grad) */
+    Trainable _M_loss;   /* scalar, forward-only */
 };
 
 /**
@@ -128,42 +128,42 @@ struct OutputParams {
  * and fixed weight/grad buffers.  All dimensions come from Config.
  */
 template <typename Config = DefaultConfig> struct TrainingStorage {
-  /* Arena: 16 KiB bump-allocated pool for tape + saved tensors. */
-  alignas (4) uint8_t _M_arena[16384];
-  Pool _M_pool;
+    /* Arena: 16 KiB bump-allocated pool for tape + saved tensors. */
+    alignas (4) uint8_t _M_arena[16384];
+    Pool _M_pool;
 
-  /* Tape nodes: 256 nodes is plenty for a two-layer MLP. */
-  alignas (8) zzs::mllee::train::Node _M_nodes[256];
-  Tape _M_tape;
+    /* Tape nodes: 256 nodes is plenty for a two-layer MLP. */
+    alignas (8) zzs::mllee::train::Node _M_nodes[256];
+    Tape _M_tape;
 
-  /* Hidden layer weight/bias code + grad buffers, sized by Config. */
-  alignas (4) int8_t _M_hidden_w_code[Config::hidden_input * Config::hidden_dim];
-  alignas (8) int16_t _M_hidden_w_grad[Config::hidden_input * Config::hidden_dim];
-  alignas (4) int8_t _M_hidden_b_code[Config::hidden_dim];
-  alignas (8) int16_t _M_hidden_b_grad[Config::hidden_dim];
+    /* Hidden layer weight/bias code + grad buffers, sized by Config. */
+    alignas (4) int8_t _M_hidden_w_code[Config::hidden_input * Config::hidden_dim];
+    alignas (8) int16_t _M_hidden_w_grad[Config::hidden_input * Config::hidden_dim];
+    alignas (4) int8_t _M_hidden_b_code[Config::hidden_dim];
+    alignas (8) int16_t _M_hidden_b_grad[Config::hidden_dim];
 
-  /* Output layer weight/bias code + grad buffers, sized by Config. */
-  alignas (4) int8_t _M_w_code[Config::hidden_dim * Config::output_dim];
-  alignas (8) int16_t _M_w_grad[Config::hidden_dim * Config::output_dim];
-  alignas (4) int8_t _M_b_code[Config::output_dim];
-  alignas (8) int16_t _M_b_grad[Config::output_dim];
+    /* Output layer weight/bias code + grad buffers, sized by Config. */
+    alignas (4) int8_t _M_w_code[Config::hidden_dim * Config::output_dim];
+    alignas (8) int16_t _M_w_grad[Config::hidden_dim * Config::output_dim];
+    alignas (4) int8_t _M_b_code[Config::output_dim];
+    alignas (8) int16_t _M_b_grad[Config::output_dim];
 
-  /* Output + loss buffers. */
-  alignas (4) int8_t _M_out_code[Config::output_dim];
-  alignas (8) int16_t _M_out_grad[Config::output_dim];
-  alignas (4) int8_t _M_loss_code[1];
-  alignas (8) int16_t _M_loss_grad[1];
+    /* Output + loss buffers. */
+    alignas (4) int8_t _M_out_code[Config::output_dim];
+    alignas (8) int16_t _M_out_grad[Config::output_dim];
+    alignas (4) int8_t _M_loss_code[1];
+    alignas (8) int16_t _M_loss_grad[1];
 
-  /* Input + target views (set per step). */
-  alignas (4) int8_t _M_input_code[Config::flat_input];
-  alignas (4) int8_t _M_target_code[Config::output_dim];
+    /* Input + target views (set per step). */
+    alignas (4) int8_t _M_input_code[Config::flat_input];
+    alignas (4) int8_t _M_target_code[Config::output_dim];
 
-  HiddenParams _M_hidden_params;
-  OutputParams _M_output_params;
+    HiddenParams _M_hidden_params;
+    OutputParams _M_output_params;
 
-  TrainingStorage () noexcept;
-  void
-  reset () noexcept;
+    TrainingStorage () noexcept;
+    void
+    reset () noexcept;
 };
 
 /** @brief Non-template alias for default-config storage (backward compatibility). */
@@ -176,33 +176,33 @@ using TrainingStorageDefault = TrainingStorage<DefaultConfig>;
  * and hooks into one object.  All state is inside the object; no globals.
  */
 template <typename Config = DefaultConfig> class TrainingPipeline {
-public:
-  TrainingPipeline () noexcept = default;
-  TrainingPipeline (const TrainingPipeline &) = delete;
-  TrainingPipeline &
-  operator= (const TrainingPipeline &) = delete;
+  public:
+    TrainingPipeline () noexcept = default;
+    TrainingPipeline (const TrainingPipeline &) = delete;
+    TrainingPipeline &
+    operator= (const TrainingPipeline &) = delete;
 
-  /** @brief Run training for @p steps on the compile-time dataset. */
-  [[nodiscard]] Status
-  run_training (uint32_t steps, zzs::base::Stdout &out) noexcept;
+    /** @brief Run training for @p steps on the compile-time dataset. */
+    [[nodiscard]] Status
+    run_training (uint32_t steps, zzs::base::Stdout &out) noexcept;
 
-  /** @brief Evaluate the model on the full dataset, report accuracy. */
-  [[nodiscard]] Status
-  evaluate_model (zzs::base::Stdout &out) noexcept;
+    /** @brief Evaluate the model on the full dataset, report accuracy. */
+    [[nodiscard]] Status
+    evaluate_model (zzs::base::Stdout &out) noexcept;
 
-  /** @brief Access the underlying storage. */
-  [[nodiscard]] TrainingStorage<Config> &
-  storage () noexcept {
-    return this->_M_storage;
-  }
+    /** @brief Access the underlying storage. */
+    [[nodiscard]] TrainingStorage<Config> &
+    storage () noexcept {
+        return this->_M_storage;
+    }
 
-  [[nodiscard]] const TrainingStorage<Config> &
-  storage () const noexcept {
-    return this->_M_storage;
-  }
+    [[nodiscard]] const TrainingStorage<Config> &
+    storage () const noexcept {
+        return this->_M_storage;
+    }
 
-private:
-  TrainingStorage<Config> _M_storage;
+  private:
+    TrainingStorage<Config> _M_storage;
 };
 
 /** @brief Non-template alias for the default-config pipeline. */
@@ -232,23 +232,23 @@ conv_attn_backward_fn (const Trainable &output, const Trainable &grad_output,
 
 /** @brief Trainable parameter block for the conv-attn pipeline. */
 struct ConvAttnParams {
-  /* Layer weights (require grad). */
-  Trainable _M_conv_w; /* [conv_channels, feature_count * conv_kernel] */
-  Trainable _M_conv_b; /* [conv_channels] */
-  Trainable _M_qkv_w;  /* [qkv_output, conv_output] */
-  Trainable _M_qkv_b;  /* [qkv_output] */
-  Trainable _M_out_w;  /* [output_dim, pooled] */
-  Trainable _M_out_b;  /* [output_dim] */
+    /* Layer weights (require grad). */
+    Trainable _M_conv_w; /* [conv_channels, feature_count * conv_kernel] */
+    Trainable _M_conv_b; /* [conv_channels] */
+    Trainable _M_qkv_w;  /* [qkv_output, conv_output] */
+    Trainable _M_qkv_b;  /* [qkv_output] */
+    Trainable _M_out_w;  /* [output_dim, pooled] */
+    Trainable _M_out_b;  /* [output_dim] */
 
-  /* Layer activations (forward output + grad lanes; frozen from updates). */
-  Trainable _M_conv_out;  /* [conv_output]  = 40 */
-  Trainable _M_qkv_out;   /* [qkv_output]   = 120 (Q+K+V concatenated) */
-  Trainable _M_attn_out;  /* [attn_output]  = 40 */
-  Trainable _M_pool_out;  /* [pooled]       = 8 */
-  Trainable _M_model_out; /* [output_dim]   = 3 */
+    /* Layer activations (forward output + grad lanes; frozen from updates). */
+    Trainable _M_conv_out;  /* [conv_output]  = 40 */
+    Trainable _M_qkv_out;   /* [qkv_output]   = 120 (Q+K+V concatenated) */
+    Trainable _M_attn_out;  /* [attn_output]  = 40 */
+    Trainable _M_pool_out;  /* [pooled]       = 8 */
+    Trainable _M_model_out; /* [output_dim]   = 3 */
 
-  /* Loss node. */
-  Trainable _M_loss; /* scalar */
+    /* Loss node. */
+    Trainable _M_loss; /* scalar */
 };
 
 /**
@@ -260,57 +260,57 @@ struct ConvAttnParams {
  * scratch.
  */
 template <typename Config = ConvAttnDefaultConfig> struct ConvAttnStorage {
-  /* Arena: 16 KiB bump-allocated pool for tape + saved tensors. */
-  alignas (4) uint8_t _M_arena[16384];
-  Pool _M_pool;
+    /* Arena: 16 KiB bump-allocated pool for tape + saved tensors. */
+    alignas (4) uint8_t _M_arena[16384];
+    Pool _M_pool;
 
-  /* Tape nodes: enough for 7 layer nodes plus the loss node. */
-  alignas (8) zzs::mllee::train::Node _M_nodes[256];
-  Tape _M_tape;
+    /* Tape nodes: enough for 7 layer nodes plus the loss node. */
+    alignas (8) zzs::mllee::train::Node _M_nodes[256];
+    Tape _M_tape;
 
-  /* Conv1D weights: [conv_channels, feature_count * conv_kernel]. */
-  alignas (4) int8_t _M_conv_w_code[Config::conv_channels * Config::feature_count * Config::conv_kernel];
-  alignas (8) int16_t _M_conv_w_grad[Config::conv_channels * Config::feature_count * Config::conv_kernel];
-  alignas (4) int8_t _M_conv_b_code[Config::conv_channels];
-  alignas (8) int16_t _M_conv_b_grad[Config::conv_channels];
+    /* Conv1D weights: [conv_channels, feature_count * conv_kernel]. */
+    alignas (4) int8_t _M_conv_w_code[Config::conv_channels * Config::feature_count * Config::conv_kernel];
+    alignas (8) int16_t _M_conv_w_grad[Config::conv_channels * Config::feature_count * Config::conv_kernel];
+    alignas (4) int8_t _M_conv_b_code[Config::conv_channels];
+    alignas (8) int16_t _M_conv_b_grad[Config::conv_channels];
 
-  /* QKV LINEAR weights: [qkv_output, conv_output]. */
-  alignas (4) int8_t _M_qkv_w_code[Config::qkv_output * Config::conv_output];
-  alignas (8) int16_t _M_qkv_w_grad[Config::qkv_output * Config::conv_output];
-  alignas (4) int8_t _M_qkv_b_code[Config::qkv_output];
-  alignas (8) int16_t _M_qkv_b_grad[Config::qkv_output];
+    /* QKV LINEAR weights: [qkv_output, conv_output]. */
+    alignas (4) int8_t _M_qkv_w_code[Config::qkv_output * Config::conv_output];
+    alignas (8) int16_t _M_qkv_w_grad[Config::qkv_output * Config::conv_output];
+    alignas (4) int8_t _M_qkv_b_code[Config::qkv_output];
+    alignas (8) int16_t _M_qkv_b_grad[Config::qkv_output];
 
-  /* Output LINEAR weights: [output_dim, pooled]. */
-  alignas (4) int8_t _M_out_w_code[Config::output_dim * Config::pooled];
-  alignas (8) int16_t _M_out_w_grad[Config::output_dim * Config::pooled];
-  alignas (4) int8_t _M_out_b_code[Config::output_dim];
-  alignas (8) int16_t _M_out_b_grad[Config::output_dim];
+    /* Output LINEAR weights: [output_dim, pooled]. */
+    alignas (4) int8_t _M_out_w_code[Config::output_dim * Config::pooled];
+    alignas (8) int16_t _M_out_w_grad[Config::output_dim * Config::pooled];
+    alignas (4) int8_t _M_out_b_code[Config::output_dim];
+    alignas (8) int16_t _M_out_b_grad[Config::output_dim];
 
-  /* Activation code + grad buffers. */
-  alignas (4) int8_t _M_conv_out_code[Config::conv_output];
-  alignas (8) int16_t _M_conv_out_grad[Config::conv_output];
-  alignas (4) int8_t _M_qkv_out_code[Config::qkv_output];
-  alignas (8) int16_t _M_qkv_out_grad[Config::qkv_output];
-  alignas (4) int8_t _M_attn_out_code[Config::attn_output];
-  alignas (8) int16_t _M_attn_out_grad[Config::attn_output];
-  alignas (4) int8_t _M_pool_out_code[Config::pooled];
-  alignas (8) int16_t _M_pool_out_grad[Config::pooled];
-  alignas (4) int8_t _M_model_out_code[Config::output_dim];
-  alignas (8) int16_t _M_model_out_grad[Config::output_dim];
+    /* Activation code + grad buffers. */
+    alignas (4) int8_t _M_conv_out_code[Config::conv_output];
+    alignas (8) int16_t _M_conv_out_grad[Config::conv_output];
+    alignas (4) int8_t _M_qkv_out_code[Config::qkv_output];
+    alignas (8) int16_t _M_qkv_out_grad[Config::qkv_output];
+    alignas (4) int8_t _M_attn_out_code[Config::attn_output];
+    alignas (8) int16_t _M_attn_out_grad[Config::attn_output];
+    alignas (4) int8_t _M_pool_out_code[Config::pooled];
+    alignas (8) int16_t _M_pool_out_grad[Config::pooled];
+    alignas (4) int8_t _M_model_out_code[Config::output_dim];
+    alignas (8) int16_t _M_model_out_grad[Config::output_dim];
 
-  /* Input + target (set per step). */
-  alignas (4) int8_t _M_input_code[Config::flat_input];
-  alignas (4) int8_t _M_target_code[Config::output_dim];
+    /* Input + target (set per step). */
+    alignas (4) int8_t _M_input_code[Config::flat_input];
+    alignas (4) int8_t _M_target_code[Config::output_dim];
 
-  /* Loss. */
-  alignas (4) int8_t _M_loss_code[1];
-  alignas (8) int16_t _M_loss_grad[1];
+    /* Loss. */
+    alignas (4) int8_t _M_loss_code[1];
+    alignas (8) int16_t _M_loss_grad[1];
 
-  ConvAttnParams _M_params;
+    ConvAttnParams _M_params;
 
-  ConvAttnStorage () noexcept;
-  void
-  reset () noexcept;
+    ConvAttnStorage () noexcept;
+    void
+    reset () noexcept;
 };
 
 /** @brief Non-template alias for default-config storage. */
@@ -323,33 +323,33 @@ using ConvAttnStorageDefault = ConvAttnStorage<ConvAttnDefaultConfig>;
  * object; no globals.
  */
 template <typename Config = ConvAttnDefaultConfig> class ConvAttnPipeline {
-public:
-  ConvAttnPipeline () noexcept = default;
-  ConvAttnPipeline (const ConvAttnPipeline &) = delete;
-  ConvAttnPipeline &
-  operator= (const ConvAttnPipeline &) = delete;
+  public:
+    ConvAttnPipeline () noexcept = default;
+    ConvAttnPipeline (const ConvAttnPipeline &) = delete;
+    ConvAttnPipeline &
+    operator= (const ConvAttnPipeline &) = delete;
 
-  /** @brief Run training for @p steps on the compile-time dataset. */
-  [[nodiscard]] Status
-  run_training (uint32_t steps, zzs::base::Stdout &out) noexcept;
+    /** @brief Run training for @p steps on the compile-time dataset. */
+    [[nodiscard]] Status
+    run_training (uint32_t steps, zzs::base::Stdout &out) noexcept;
 
-  /** @brief Evaluate the model on the full dataset, report accuracy. */
-  [[nodiscard]] Status
-  evaluate_model (zzs::base::Stdout &out) noexcept;
+    /** @brief Evaluate the model on the full dataset, report accuracy. */
+    [[nodiscard]] Status
+    evaluate_model (zzs::base::Stdout &out) noexcept;
 
-  /** @brief Access the underlying storage. */
-  [[nodiscard]] ConvAttnStorage<Config> &
-  storage () noexcept {
-    return this->_M_storage;
-  }
+    /** @brief Access the underlying storage. */
+    [[nodiscard]] ConvAttnStorage<Config> &
+    storage () noexcept {
+        return this->_M_storage;
+    }
 
-  [[nodiscard]] const ConvAttnStorage<Config> &
-  storage () const noexcept {
-    return this->_M_storage;
-  }
+    [[nodiscard]] const ConvAttnStorage<Config> &
+    storage () const noexcept {
+        return this->_M_storage;
+    }
 
-private:
-  ConvAttnStorage<Config> _M_storage;
+  private:
+    ConvAttnStorage<Config> _M_storage;
 };
 
 /** @brief Non-template alias for the default-config pipeline. */
@@ -382,21 +382,21 @@ distill_forward_hook (StepContext &context, const int8_t *teacher_logits, uint32
 
 /** @brief Trainable parameter block for the multi-task pipeline. */
 struct MultiTaskParams {
-  /* Layer weights (require grad). */
-  Trainable _M_conv_w;  /* [conv_channels, feature_count * conv_kernel] */
-  Trainable _M_conv_b;  /* [conv_channels] */
-  Trainable _M_qkv_w;   /* [qkv_output, conv_output] */
-  Trainable _M_qkv_b;   /* [qkv_output] */
-  Trainable _M_head1_w; /* [head1_out, pooled] */
-  Trainable _M_head1_b; /* [head1_out] */
-  Trainable _M_head2_w; /* [head2_out, pooled] */
-  Trainable _M_head2_b; /* [head2_out] */
-  Trainable _M_head3_w; /* [head3_out, pooled] */
-  Trainable _M_head3_b; /* [head3_out] */
+    /* Layer weights (require grad). */
+    Trainable _M_conv_w;  /* [conv_channels, feature_count * conv_kernel] */
+    Trainable _M_conv_b;  /* [conv_channels] */
+    Trainable _M_qkv_w;   /* [qkv_output, conv_output] */
+    Trainable _M_qkv_b;   /* [qkv_output] */
+    Trainable _M_head1_w; /* [head1_out, pooled] */
+    Trainable _M_head1_b; /* [head1_out] */
+    Trainable _M_head2_w; /* [head2_out, pooled] */
+    Trainable _M_head2_b; /* [head2_out] */
+    Trainable _M_head3_w; /* [head3_out, pooled] */
+    Trainable _M_head3_b; /* [head3_out] */
 
-  /* Layer activations / outputs (forward output + grad lanes). */
-  Trainable _M_output; /* [output_dim] */
-  Trainable _M_loss;   /* scalar */
+    /* Layer activations / outputs (forward output + grad lanes). */
+    Trainable _M_output; /* [output_dim] */
+    Trainable _M_loss;   /* scalar */
 };
 
 /* ======================================================================== */
@@ -415,21 +415,21 @@ distill_forward_hook (StepContext &context, const int8_t *teacher_logits, uint32
  *               8=head3_w 9=head3_b 10=output 11=loss (12 params)
  */
 struct DistillParams {
-  /* Layer weights (require grad). */
-  Trainable _M_conv_w;  /* [conv_channels, feature_count * conv_kernel] */
-  Trainable _M_conv_b;  /* [conv_channels] */
-  Trainable _M_qkv_w;   /* [qkv_output, conv_output] */
-  Trainable _M_qkv_b;   /* [qkv_output] */
-  Trainable _M_head1_w; /* [head1_out, pooled] */
-  Trainable _M_head1_b; /* [head1_out] */
-  Trainable _M_head2_w; /* [head2_out, pooled] */
-  Trainable _M_head2_b; /* [head2_out] */
-  Trainable _M_head3_w; /* [head3_out, pooled] */
-  Trainable _M_head3_b; /* [head3_out] */
+    /* Layer weights (require grad). */
+    Trainable _M_conv_w;  /* [conv_channels, feature_count * conv_kernel] */
+    Trainable _M_conv_b;  /* [conv_channels] */
+    Trainable _M_qkv_w;   /* [qkv_output, conv_output] */
+    Trainable _M_qkv_b;   /* [qkv_output] */
+    Trainable _M_head1_w; /* [head1_out, pooled] */
+    Trainable _M_head1_b; /* [head1_out] */
+    Trainable _M_head2_w; /* [head2_out, pooled] */
+    Trainable _M_head2_b; /* [head2_out] */
+    Trainable _M_head3_w; /* [head3_out, pooled] */
+    Trainable _M_head3_b; /* [head3_out] */
 
-  /* Layer activations / outputs (forward output + grad lanes). */
-  Trainable _M_output; /* [output_dim] */
-  Trainable _M_loss;   /* scalar */
+    /* Layer activations / outputs (forward output + grad lanes). */
+    Trainable _M_output; /* [output_dim] */
+    Trainable _M_loss;   /* scalar */
 };
 
 /**
@@ -440,67 +440,67 @@ struct DistillParams {
  * input/target, loss.
  */
 template <typename Config = ConvAttnDefaultConfig> struct DistillStorage {
-  /* Arena: 16 KiB bump-allocated pool for tape + saved tensors. */
-  alignas (4) uint8_t _M_arena[16384];
-  Pool _M_pool;
+    /* Arena: 16 KiB bump-allocated pool for tape + saved tensors. */
+    alignas (4) uint8_t _M_arena[16384];
+    Pool _M_pool;
 
-  /* Tape nodes: 256 nodes. */
-  alignas (8) zzs::mllee::train::Node _M_nodes[256];
-  Tape _M_tape;
+    /* Tape nodes: 256 nodes. */
+    alignas (8) zzs::mllee::train::Node _M_nodes[256];
+    Tape _M_tape;
 
-  /* Conv1D weights: [conv_channels, feature_count * conv_kernel]. */
-  alignas (4) int8_t _M_conv_w_code[Config::conv_channels * Config::feature_count * Config::conv_kernel];
-  alignas (8) int16_t _M_conv_w_grad[Config::conv_channels * Config::feature_count * Config::conv_kernel];
-  alignas (4) int8_t _M_conv_b_code[Config::conv_channels];
-  alignas (8) int16_t _M_conv_b_grad[Config::conv_channels];
+    /* Conv1D weights: [conv_channels, feature_count * conv_kernel]. */
+    alignas (4) int8_t _M_conv_w_code[Config::conv_channels * Config::feature_count * Config::conv_kernel];
+    alignas (8) int16_t _M_conv_w_grad[Config::conv_channels * Config::feature_count * Config::conv_kernel];
+    alignas (4) int8_t _M_conv_b_code[Config::conv_channels];
+    alignas (8) int16_t _M_conv_b_grad[Config::conv_channels];
 
-  /* QKV LINEAR weights: [qkv_output, conv_output]. */
-  alignas (4) int8_t _M_qkv_w_code[Config::qkv_output * Config::conv_output];
-  alignas (8) int16_t _M_qkv_w_grad[Config::qkv_output * Config::conv_output];
-  alignas (4) int8_t _M_qkv_b_code[Config::qkv_output];
-  alignas (8) int16_t _M_qkv_b_grad[Config::qkv_output];
+    /* QKV LINEAR weights: [qkv_output, conv_output]. */
+    alignas (4) int8_t _M_qkv_w_code[Config::qkv_output * Config::conv_output];
+    alignas (8) int16_t _M_qkv_w_grad[Config::qkv_output * Config::conv_output];
+    alignas (4) int8_t _M_qkv_b_code[Config::qkv_output];
+    alignas (8) int16_t _M_qkv_b_grad[Config::qkv_output];
 
-  /* Output LINEAR weights: [output_dim, pooled]. */
-  alignas (4) int8_t _M_head1_w_code[Config::output_dim * Config::pooled];
-  alignas (8) int16_t _M_head1_w_grad[Config::output_dim * Config::pooled];
-  alignas (4) int8_t _M_head1_b_code[Config::output_dim];
-  alignas (8) int16_t _M_head1_b_grad[Config::output_dim];
+    /* Output LINEAR weights: [output_dim, pooled]. */
+    alignas (4) int8_t _M_head1_w_code[Config::output_dim * Config::pooled];
+    alignas (8) int16_t _M_head1_w_grad[Config::output_dim * Config::pooled];
+    alignas (4) int8_t _M_head1_b_code[Config::output_dim];
+    alignas (8) int16_t _M_head1_b_grad[Config::output_dim];
 
-  alignas (4) int8_t _M_head2_w_code[Config::pooled];
-  alignas (8) int16_t _M_head2_w_grad[Config::pooled];
-  alignas (4) int8_t _M_head2_b_code[1];
-  alignas (8) int16_t _M_head2_b_grad[1];
+    alignas (4) int8_t _M_head2_w_code[Config::pooled];
+    alignas (8) int16_t _M_head2_w_grad[Config::pooled];
+    alignas (4) int8_t _M_head2_b_code[1];
+    alignas (8) int16_t _M_head2_b_grad[1];
 
-  alignas (4) int8_t _M_head3_w_code[Config::pooled];
-  alignas (8) int16_t _M_head3_w_grad[Config::pooled];
-  alignas (4) int8_t _M_head3_b_code[1];
-  alignas (8) int16_t _M_head3_b_grad[1];
+    alignas (4) int8_t _M_head3_w_code[Config::pooled];
+    alignas (8) int16_t _M_head3_w_grad[Config::pooled];
+    alignas (4) int8_t _M_head3_b_code[1];
+    alignas (8) int16_t _M_head3_b_grad[1];
 
-  /* Activation code + grad buffers. */
-  alignas (4) int8_t _M_conv_out_code[Config::conv_output];
-  alignas (8) int16_t _M_conv_out_grad[Config::conv_output];
-  alignas (4) int8_t _M_qkv_out_code[Config::qkv_output];
-  alignas (8) int16_t _M_qkv_out_grad[Config::qkv_output];
-  alignas (4) int8_t _M_attn_out_code[Config::attn_output];
-  alignas (8) int16_t _M_attn_out_grad[Config::attn_output];
-  alignas (4) int8_t _M_pool_out_code[Config::pooled];
-  alignas (8) int16_t _M_pool_out_grad[Config::pooled];
-  alignas (4) int8_t _M_output_code[Config::output_dim];
-  alignas (8) int16_t _M_output_grad[Config::output_dim];
+    /* Activation code + grad buffers. */
+    alignas (4) int8_t _M_conv_out_code[Config::conv_output];
+    alignas (8) int16_t _M_conv_out_grad[Config::conv_output];
+    alignas (4) int8_t _M_qkv_out_code[Config::qkv_output];
+    alignas (8) int16_t _M_qkv_out_grad[Config::qkv_output];
+    alignas (4) int8_t _M_attn_out_code[Config::attn_output];
+    alignas (8) int16_t _M_attn_out_grad[Config::attn_output];
+    alignas (4) int8_t _M_pool_out_code[Config::pooled];
+    alignas (8) int16_t _M_pool_out_grad[Config::pooled];
+    alignas (4) int8_t _M_output_code[Config::output_dim];
+    alignas (8) int16_t _M_output_grad[Config::output_dim];
 
-  /* Input + target (set per step). */
-  alignas (4) int8_t _M_input_code[Config::flat_input];
-  alignas (4) int8_t _M_target_code[Config::output_dim];
+    /* Input + target (set per step). */
+    alignas (4) int8_t _M_input_code[Config::flat_input];
+    alignas (4) int8_t _M_target_code[Config::output_dim];
 
-  /* Loss. */
-  alignas (4) int8_t _M_loss_code[1];
-  alignas (8) int16_t _M_loss_grad[1];
+    /* Loss. */
+    alignas (4) int8_t _M_loss_code[1];
+    alignas (8) int16_t _M_loss_grad[1];
 
-  DistillParams _M_params;
+    DistillParams _M_params;
 
-  DistillStorage () noexcept;
-  void
-  reset () noexcept;
+    DistillStorage () noexcept;
+    void
+    reset () noexcept;
 };
 
 /** @brief Non-template alias for default-config storage. */
@@ -514,33 +514,33 @@ using DistillStorageDefault = DistillStorage<ConvAttnDefaultConfig>;
  * no globals.
  */
 template <typename Config = ConvAttnDefaultConfig> class DistillPipeline {
-public:
-  DistillPipeline () noexcept = default;
-  DistillPipeline (const DistillPipeline &) = delete;
-  DistillPipeline &
-  operator= (const DistillPipeline &) = delete;
+  public:
+    DistillPipeline () noexcept = default;
+    DistillPipeline (const DistillPipeline &) = delete;
+    DistillPipeline &
+    operator= (const DistillPipeline &) = delete;
 
-  /** @brief Run training for @p steps on the compile-time dataset. */
-  [[nodiscard]] Status
-  run_training (uint32_t steps, zzs::base::Stdout &out) noexcept;
+    /** @brief Run training for @p steps on the compile-time dataset. */
+    [[nodiscard]] Status
+    run_training (uint32_t steps, zzs::base::Stdout &out) noexcept;
 
-  /** @brief Evaluate the model on the full dataset, report accuracy. */
-  [[nodiscard]] Status
-  evaluate_model (zzs::base::Stdout &out) noexcept;
+    /** @brief Evaluate the model on the full dataset, report accuracy. */
+    [[nodiscard]] Status
+    evaluate_model (zzs::base::Stdout &out) noexcept;
 
-  /** @brief Access the underlying storage. */
-  [[nodiscard]] DistillStorage<Config> &
-  storage () noexcept {
-    return this->_M_storage;
-  }
+    /** @brief Access the underlying storage. */
+    [[nodiscard]] DistillStorage<Config> &
+    storage () noexcept {
+        return this->_M_storage;
+    }
 
-  [[nodiscard]] const DistillStorage<Config> &
-  storage () const noexcept {
-    return this->_M_storage;
-  }
+    [[nodiscard]] const DistillStorage<Config> &
+    storage () const noexcept {
+        return this->_M_storage;
+    }
 
-private:
-  DistillStorage<Config> _M_storage;
+  private:
+    DistillStorage<Config> _M_storage;
 };
 
 /** @brief Non-template alias for the default-config pipeline. */

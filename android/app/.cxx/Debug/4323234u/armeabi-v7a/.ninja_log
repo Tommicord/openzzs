@@ -1,7 +1,7 @@
 # ninja log v5
-0	779	1793733349533532751	model_blob_generated.cpp	97af8238558ff277
-0	779	1793733349533532751	/home/tommicord/CLionProjects/openzzs/android/app/.cxx/Debug/4323234u/armeabi-v7a/model_blob_generated.cpp	97af8238558ff277
-780	1093	1793733349844579064	CMakeFiles/openzzs-android.dir/model_blob_generated.cpp.o	918ff3ea15e3f8ed
-779	3129	1793733351868564401	CMakeFiles/openzzs-android.dir/home/tommicord/CLionProjects/openzzs/kernel/sensor-driver/platforms/android/platform_hal.cpp.o	c2b0af67618ddb64
-779	4727	1793733353469552802	CMakeFiles/openzzs-android.dir/sensr_jni.cpp.o	aae50669c6dc7d8f
-4728	4757	1793733353507552527	/home/tommicord/CLionProjects/openzzs/android/app/build/intermediates/cxx/Debug/4323234u/obj/armeabi-v7a/libopenzzs-android.so	865125b6c047fb62
+0	2049	1793741097306696901	model_blob_generated.cpp	97af8238558ff277
+0	2049	1793741097306696901	/home/tommicord/CLionProjects/openzzs/android/app/.cxx/Debug/4323234u/armeabi-v7a/model_blob_generated.cpp	97af8238558ff277
+2063	3565	1793741098808254149	CMakeFiles/openzzs-android.dir/model_blob_generated.cpp.o	918ff3ea15e3f8ed
+2060	12057	1793741107256330813	CMakeFiles/openzzs-android.dir/home/tommicord/CLionProjects/openzzs/kernel/sensor-driver/platforms/android/platform_hal.cpp.o	c2b0af67618ddb64
+2062	14287	1793741109518351340	CMakeFiles/openzzs-android.dir/sensr_jni.cpp.o	aae50669c6dc7d8f
+14288	14449	1793741109701353001	/home/tommicord/CLionProjects/openzzs/android/app/build/intermediates/cxx/Debug/4323234u/obj/armeabi-v7a/libopenzzs-android.so	865125b6c047fb62

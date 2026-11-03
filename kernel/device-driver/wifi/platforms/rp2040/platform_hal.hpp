@@ -35,8 +35,7 @@
 namespace zzs::kernel::device::driver::wifi::platform::rp2040 {
 
 /** @brief Build the RP2040 WiFi HAL vtable. */
-[[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *,
-                              zzs::kernel::Status>
+[[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *, zzs::kernel::Status>
 create_rp2040_wifi_hal (WifiHal &hal_out) noexcept;
 
 /** @} */

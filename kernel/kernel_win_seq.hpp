@@ -43,52 +43,52 @@ namespace zzs::kernel::seq {
 
 /** @brief Sequence state. */
 struct _S_Sequence {
-  int8_t *_M_rows;       /* caller storage: seq_len * feature_count bytes */
-  uint32_t _M_row_bytes; /* == feature_count */
-  uint32_t _M_write;     /* next row write index */
-  uint32_t _M_count;     /* rows stored */
-  bool _M_full;
+    int8_t *_M_rows;       /* caller storage: seq_len * feature_count bytes */
+    uint32_t _M_row_bytes; /* == feature_count */
+    uint32_t _M_write;     /* next row write index */
+    uint32_t _M_count;     /* rows stored */
+    bool _M_full;
 };
 
 /** @brief Initialize over caller-owned row storage. */
 [[nodiscard]] inline zzs::kernel::Status
 sequence_init (_S_Sequence &seq, int8_t *const rows, const uint32_t row_bytes) noexcept {
-  if (rows == nullptr || row_bytes == 0u)
-    return zzs::kernel::Status::OUT_OF_RANGE;
-  seq._M_rows = rows;
-  seq._M_row_bytes = row_bytes;
-  seq._M_write = 0;
-  seq._M_count = 0;
-  seq._M_full = false;
-  return zzs::kernel::Status::OK;
+    if (rows == nullptr || row_bytes == 0u)
+        return zzs::kernel::Status::OUT_OF_RANGE;
+    seq._M_rows = rows;
+    seq._M_row_bytes = row_bytes;
+    seq._M_write = 0;
+    seq._M_count = 0;
+    seq._M_full = false;
+    return zzs::kernel::Status::OK;
 }
 
 /** @brief Append one packed feature row. Overwrites oldest when full. */
 inline void
 sequence_push_row (_S_Sequence &seq, const int8_t *const row) noexcept {
-  if (row == nullptr)
-    return;
-  int8_t *const dst = seq._M_rows + seq._M_write * seq._M_row_bytes;
-  for (uint32_t i = 0; i < seq._M_row_bytes; ++i)
-    dst[i] = row[i];
-  if (seq._M_count < zzs::kernel::_S_seq_len)
-    ++seq._M_count;
-  else
-    seq._M_full = true;
-  /* seq_len (5) is not a power of two; avoid the modulo by branching. */
-  seq._M_write = (seq._M_write + 1u) >= zzs::kernel::_S_seq_len ? 0u : seq._M_write + 1u;
+    if (row == nullptr)
+        return;
+    int8_t *const dst = seq._M_rows + seq._M_write * seq._M_row_bytes;
+    for (uint32_t i = 0; i < seq._M_row_bytes; ++i)
+        dst[i] = row[i];
+    if (seq._M_count < zzs::kernel::_S_seq_len)
+        ++seq._M_count;
+    else
+        seq._M_full = true;
+    /* seq_len (5) is not a power of two; avoid the modulo by branching. */
+    seq._M_write = (seq._M_write + 1u) >= zzs::kernel::_S_seq_len ? 0u : seq._M_write + 1u;
 }
 
 /** @brief Rows currently stored. */
 [[nodiscard]] inline uint32_t
 sequence_count (const _S_Sequence &seq) noexcept {
-  return seq._M_count;
+    return seq._M_count;
 }
 
 /** @brief True when a full seq_len sequence is available. */
 [[nodiscard]] inline bool
 sequence_ready (const _S_Sequence &seq) noexcept {
-  return seq._M_count >= zzs::kernel::_S_seq_len;
+    return seq._M_count >= zzs::kernel::_S_seq_len;
 }
 
 /**
@@ -99,29 +99,29 @@ sequence_ready (const _S_Sequence &seq) noexcept {
  */
 [[nodiscard]] inline zzs::kernel::Status
 sequence_snapshot (const _S_Sequence &seq, int8_t *const out) noexcept {
-  if (!sequence_ready (seq) || out == nullptr)
-    return zzs::kernel::Status::NOT_READY;
-  /* Oldest row is at (write - count) mod seq_len; rows are contiguous in time.
-     seq_len (5) is not a power of two, so wrap by conditional subtract
-     instead of a modulo (constant time on Cortex-M4). */
-  const uint32_t start_raw = seq._M_write + zzs::kernel::_S_seq_len - seq._M_count;
-  const uint32_t start = start_raw >= zzs::kernel::_S_seq_len ? start_raw - zzs::kernel::_S_seq_len : start_raw;
-  for (uint32_t r = 0; r < zzs::kernel::_S_seq_len; ++r) {
-    uint32_t src_index = start + r;
-    if (src_index >= zzs::kernel::_S_seq_len)
-      src_index -= zzs::kernel::_S_seq_len;
-    const int8_t *const src = seq._M_rows + src_index * seq._M_row_bytes;
-    int8_t *const dst = out + r * seq._M_row_bytes;
-    for (uint32_t i = 0; i < seq._M_row_bytes; ++i)
-      dst[i] = src[i];
-  }
-  return zzs::kernel::Status::OK;
+    if (!sequence_ready (seq) || out == nullptr)
+        return zzs::kernel::Status::NOT_READY;
+    /* Oldest row is at (write - count) mod seq_len; rows are contiguous in time.
+       seq_len (5) is not a power of two, so wrap by conditional subtract
+       instead of a modulo (constant time on Cortex-M4). */
+    const uint32_t start_raw = seq._M_write + zzs::kernel::_S_seq_len - seq._M_count;
+    const uint32_t start = start_raw >= zzs::kernel::_S_seq_len ? start_raw - zzs::kernel::_S_seq_len : start_raw;
+    for (uint32_t r = 0; r < zzs::kernel::_S_seq_len; ++r) {
+        uint32_t src_index = start + r;
+        if (src_index >= zzs::kernel::_S_seq_len)
+            src_index -= zzs::kernel::_S_seq_len;
+        const int8_t *const src = seq._M_rows + src_index * seq._M_row_bytes;
+        int8_t *const dst = out + r * seq._M_row_bytes;
+        for (uint32_t i = 0; i < seq._M_row_bytes; ++i)
+            dst[i] = src[i];
+    }
+    return zzs::kernel::Status::OK;
 }
 
 /** @brief Bytes of one sequence frame (seq_len * feature_count). */
 [[nodiscard]] inline constexpr uint32_t
 sequence_frame_bytes (void) noexcept {
-  return zzs::kernel::_S_sequence_bytes;
+    return zzs::kernel::_S_sequence_bytes;
 }
 
 /** @} */

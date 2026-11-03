@@ -30,7 +30,7 @@
 /** @brief Raw 16-bit little-endian sample from a byte pair. */
 [[nodiscard]] inline constexpr uint16_t
 ltr558_raw16 (const uint8_t *p) noexcept {
-  return static_cast<uint16_t> (p[0]) | (static_cast<uint16_t> (p[1]) << 8);
+    return static_cast<uint16_t> (p[0]) | (static_cast<uint16_t> (p[1]) << 8);
 }
 
 /**
@@ -44,84 +44,84 @@ namespace zzs::kernel::sensor::driver::sensors {
 
 /** @brief LTR-558 light sensor driver (LIGHT channel). */
 class Ltr558LightDriver : public SensorDriver {
-public:
-  /** @brief Construct with a non-owning bus pointer and an optional clock
-   *         source callback for timestamps. */
-  explicit Ltr558LightDriver (bus::BusInterface *bus, uint64_t (*clock) (void) = nullptr) noexcept
-      : SensorDriver (bus, clock) {
-  }
+  public:
+    /** @brief Construct with a non-owning bus pointer and an optional clock
+     *         source callback for timestamps. */
+    explicit Ltr558LightDriver (bus::BusInterface *bus, uint64_t (*clock) (void) = nullptr) noexcept
+        : SensorDriver (bus, clock) {
+    }
 
-  [[nodiscard]] zzs::kernel::Status
-  init () noexcept override {
-    uint8_t who = 0;
-    zzs::kernel::Status st = bus_read8 (ltr558::RegPartId, who);
-    if (!zzs::kernel::status_ok (st))
-      return st;
-    if (who != ltr558::PartIdValue)
-      return zzs::kernel::Status::BAD_TYPE;
-    _M_device_id = who;
+    [[nodiscard]] zzs::kernel::Status
+    init () noexcept override {
+        uint8_t who = 0;
+        zzs::kernel::Status st = bus_read8 (ltr558::RegPartId, who);
+        if (!zzs::kernel::status_ok (st))
+            return st;
+        if (who != ltr558::PartIdValue)
+            return zzs::kernel::Status::BAD_TYPE;
+        _M_device_id = who;
 
-    /* ALS active mode, gain 1x, ODR 100 ms (10 Hz). */
-    st = bus_write8 (ltr558::RegAlsCtrl, static_cast<uint8_t> (ltr558::AlsCtrlModeActive | ltr558::AlsCtrlGain1x
-                                                               | ltr558::AlsCtrlOdr100ms));
-    if (!zzs::kernel::status_ok (st))
-      return st;
+        /* ALS active mode, gain 1x, ODR 100 ms (10 Hz). */
+        st = bus_write8 (ltr558::RegAlsCtrl, static_cast<uint8_t> (ltr558::AlsCtrlModeActive | ltr558::AlsCtrlGain1x
+                                                                   | ltr558::AlsCtrlOdr100ms));
+        if (!zzs::kernel::status_ok (st))
+            return st;
 
-    return zzs::kernel::Status::OK;
-  }
+        return zzs::kernel::Status::OK;
+    }
 
-  [[nodiscard]] zzs::kernel::Status
-  read_sample (sensor::Sample &out) noexcept override {
-    uint8_t status = 0;
-    zzs::kernel::Status st = bus_read8 (ltr558::RegAlsStatus, status);
-    if (!zzs::kernel::status_ok (st))
-      return st;
-    if ((status & ltr558::AlsStatusAlsValid) == 0u)
-      return zzs::kernel::Status::STALE;
+    [[nodiscard]] zzs::kernel::Status
+    read_sample (sensor::Sample &out) noexcept override {
+        uint8_t status = 0;
+        zzs::kernel::Status st = bus_read8 (ltr558::RegAlsStatus, status);
+        if (!zzs::kernel::status_ok (st))
+            return st;
+        if ((status & ltr558::AlsStatusAlsValid) == 0u)
+            return zzs::kernel::Status::STALE;
 
-    uint8_t data[ltr558::AlsDataBytes] = {0};
-    st = bus_read (ltr558::RegAlsDataCh1Low, data, ltr558::AlsDataBytes);
-    if (!zzs::kernel::status_ok (st))
-      return st;
+        uint8_t data[ltr558::AlsDataBytes] = {0};
+        st = bus_read (ltr558::RegAlsDataCh1Low, data, ltr558::AlsDataBytes);
+        if (!zzs::kernel::status_ok (st))
+            return st;
 
-    const uint16_t raw = ltr558_raw16 (data);
-    const int32_t q15 = zzs::kernel::sensor::driver::fixed::q15_from_raw (static_cast<int16_t> (raw));
-    const int32_t phys_q15 = zzs::kernel::sensor::driver::fixed::q15_mul (q15, ltr558::LuxSensQ15MilliLuxPerCount);
+        const uint16_t raw = ltr558_raw16 (data);
+        const int32_t q15 = zzs::kernel::sensor::driver::fixed::q15_from_raw (static_cast<int16_t> (raw));
+        const int32_t phys_q15 = zzs::kernel::sensor::driver::fixed::q15_mul (q15, ltr558::LuxSensQ15MilliLuxPerCount);
 
-    out._M_channel = sensor::Channel::LIGHT;
-    out._M_sample_q15 = zzs::kernel::sensor::driver::fixed::q15_to_raw (phys_q15);
-    out._M_timestamp_ns = timestamp_ns ();
-    return zzs::kernel::Status::OK;
-  }
+        out._M_channel = sensor::Channel::LIGHT;
+        out._M_sample_q15 = zzs::kernel::sensor::driver::fixed::q15_to_raw (phys_q15);
+        out._M_timestamp_ns = timestamp_ns ();
+        return zzs::kernel::Status::OK;
+    }
 
-  [[nodiscard]] zzs::kernel::Status
-  set_channel_enabled (sensor::Channel ch, bool enabled) noexcept override {
-    if (ch != sensor::Channel::LIGHT)
-      return zzs::kernel::Status::OUT_OF_RANGE;
-    _M_enabled = enabled;
-    return zzs::kernel::Status::OK;
-  }
+    [[nodiscard]] zzs::kernel::Status
+    set_channel_enabled (sensor::Channel ch, bool enabled) noexcept override {
+        if (ch != sensor::Channel::LIGHT)
+            return zzs::kernel::Status::OUT_OF_RANGE;
+        _M_enabled = enabled;
+        return zzs::kernel::Status::OK;
+    }
 
-  [[nodiscard]] uint32_t
-  channel_rate_hz (sensor::Channel ch) noexcept override {
-    (void) ch;
-    return ltr558::OdrHz;
-  }
+    [[nodiscard]] uint32_t
+    channel_rate_hz (sensor::Channel ch) noexcept override {
+        (void) ch;
+        return ltr558::OdrHz;
+    }
 
-  [[nodiscard]] uint8_t
-  device_id () const noexcept override {
-    return _M_device_id;
-  }
+    [[nodiscard]] uint8_t
+    device_id () const noexcept override {
+        return _M_device_id;
+    }
 
-  [[nodiscard]] bool
-  self_test () noexcept override {
-    uint8_t data[ltr558::AlsDataBytes] = {0};
-    return zzs::kernel::status_ok (bus_read (ltr558::RegAlsDataCh1Low, data, ltr558::AlsDataBytes));
-  }
+    [[nodiscard]] bool
+    self_test () noexcept override {
+        uint8_t data[ltr558::AlsDataBytes] = {0};
+        return zzs::kernel::status_ok (bus_read (ltr558::RegAlsDataCh1Low, data, ltr558::AlsDataBytes));
+    }
 
-private:
-  /** @brief Whether the light channel is enabled. */
-  bool _M_enabled = true;
+  private:
+    /** @brief Whether the light channel is enabled. */
+    bool _M_enabled = true;
 };
 
 /** @} */

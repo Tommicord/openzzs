@@ -35,8 +35,7 @@
 namespace zzs::kernel::device::driver::wifi::platform::beaglebone {
 
 /** @brief Build the BeagleBone WiFi HAL vtable. */
-[[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *,
-                              zzs::kernel::Status>
+[[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *, zzs::kernel::Status>
 create_beaglebone_wifi_hal (WifiHal &hal_out) noexcept;
 
 /** @} */

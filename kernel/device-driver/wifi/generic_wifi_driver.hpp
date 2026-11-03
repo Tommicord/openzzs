@@ -54,29 +54,29 @@ namespace zzs::kernel::device::driver::wifi {
 
 /** @brief Command codes sent to the WiFi module. */
 enum class WifiCmd : uint8_t {
-  Reset = 0x01,
-  SetChannel = 0x02,
-  SetCountry = 0x03,
-  Scan = 0x04,
-  Connect = 0x05,
-  Disconnect = 0x06,
+    Reset = 0x01,
+    SetChannel = 0x02,
+    SetCountry = 0x03,
+    Scan = 0x04,
+    Connect = 0x05,
+    Disconnect = 0x06,
 };
 
 /** @brief Response codes returned by the WiFi module. */
 enum class WifiResp : uint8_t {
-  Ok = 0x80,
-  Fail = 0x81,
-  ScanDone = 0x82,
-  BssEntry = 0x83,
-  ConnectResult = 0x84,
+    Ok = 0x80,
+    Fail = 0x81,
+    ScanDone = 0x82,
+    BssEntry = 0x83,
+    ConnectResult = 0x84,
 };
 
 /** @brief Async event codes from the WiFi module. */
 enum class WifiEvent : uint8_t {
-  Beacon = 0xA0,
-  ProbeResp = 0xA1,
-  AssocResp = 0xA2,
-  Deauth = 0xA3,
+    Beacon = 0xA0,
+    ProbeResp = 0xA1,
+    AssocResp = 0xA2,
+    Deauth = 0xA3,
 };
 
 /** @brief Maximum PSK octets the driver buffers. */
@@ -94,118 +94,118 @@ inline constexpr uint8_t WifiMaxConnectRetries = 3u;
 
 /** @brief Generic WiFi station driver. */
 class GenericWifiDriver : public WifiDriver {
-public:
-  /** @brief Construct with a stream bus, platform HAL radio hooks, and clock.
-   *         The bus and HAL are non-owning. */
-  explicit GenericWifiDriver (zzs::kernel::device::driver::StreamBusInterface *bus, const platform::WifiHal &hal,
-                              uint64_t (*clock) (void) = nullptr) noexcept;
+  public:
+    /** @brief Construct with a stream bus, platform HAL radio hooks, and clock.
+     *         The bus and HAL are non-owning. */
+    explicit GenericWifiDriver (zzs::kernel::device::driver::StreamBusInterface *bus, const platform::WifiHal &hal,
+                                uint64_t (*clock) (void) = nullptr) noexcept;
 
-  GenericWifiDriver (const GenericWifiDriver &) = delete;
-  GenericWifiDriver &
-  operator= (const GenericWifiDriver &) = delete;
-  GenericWifiDriver (GenericWifiDriver &&) = delete;
-  GenericWifiDriver &
-  operator= (GenericWifiDriver &&) = delete;
-  ~GenericWifiDriver () override = default;
+    GenericWifiDriver (const GenericWifiDriver &) = delete;
+    GenericWifiDriver &
+    operator= (const GenericWifiDriver &) = delete;
+    GenericWifiDriver (GenericWifiDriver &&) = delete;
+    GenericWifiDriver &
+    operator= (GenericWifiDriver &&) = delete;
+    ~GenericWifiDriver () override = default;
 
-  /** @brief Initialize the WiFi radio: reset, set country/channel, enable
-   *         interface, read MAC address. */
-  [[nodiscard]] zzs::kernel::Status
-  init () noexcept override;
+    /** @brief Initialize the WiFi radio: reset, set country/channel, enable
+     *         interface, read MAC address. */
+    [[nodiscard]] zzs::kernel::Status
+    init () noexcept override;
 
-  /** @brief Deinitialize / power down the radio. */
-  [[nodiscard]] zzs::kernel::Status
-  deinit () noexcept override;
+    /** @brief Deinitialize / power down the radio. */
+    [[nodiscard]] zzs::kernel::Status
+    deinit () noexcept override;
 
-  /** @brief Start a scan for BSSes. */
-  [[nodiscard]] zzs::kernel::Status
-  scan () noexcept override;
+    /** @brief Start a scan for BSSes. */
+    [[nodiscard]] zzs::kernel::Status
+    scan () noexcept override;
 
-  /** @brief Poll the radio: drive the connect state machine, drain the
-   *         stream, parse incoming frames/events. */
-  [[nodiscard]] zzs::kernel::Status
-  poll () noexcept override;
+    /** @brief Poll the radio: drive the connect state machine, drain the
+     *         stream, parse incoming frames/events. */
+    [[nodiscard]] zzs::kernel::Status
+    poll () noexcept override;
 
-  /** @brief Connect to an SSID. */
-  [[nodiscard]] zzs::kernel::Status
-  connect (const char *ssid, uint8_t ssid_len, const uint8_t *psk, uint8_t psk_len) noexcept override;
+    /** @brief Connect to an SSID. */
+    [[nodiscard]] zzs::kernel::Status
+    connect (const char *ssid, uint8_t ssid_len, const uint8_t *psk, uint8_t psk_len) noexcept override;
 
-  /** @brief Disconnect from the current AP. */
-  [[nodiscard]] zzs::kernel::Status
-  disconnect () noexcept override;
+    /** @brief Disconnect from the current AP. */
+    [[nodiscard]] zzs::kernel::Status
+    disconnect () noexcept override;
 
-  /** @brief Read the latest received frame into `out`. */
-  [[nodiscard]] zzs::kernel::Status
-  read_frame (Frame &out) noexcept override;
+    /** @brief Read the latest received frame into `out`. */
+    [[nodiscard]] zzs::kernel::Status
+    read_frame (Frame &out) noexcept override;
 
-  /** @brief Return the scanned BSS table. */
-  [[nodiscard]] zzs::kernel::Status
-  read_bss_table (BssTable &out) noexcept override;
+    /** @brief Return the scanned BSS table. */
+    [[nodiscard]] zzs::kernel::Status
+    read_bss_table (BssTable &out) noexcept override;
 
-  /** @brief Return the current connection state. */
-  [[nodiscard]] WifiConnectionState
-  connection_state () const noexcept override {
-    return _M_state;
-  }
+    /** @brief Return the current connection state. */
+    [[nodiscard]] WifiConnectionState
+    connection_state () const noexcept override {
+        return _M_state;
+    }
 
-  /** @brief Return the negotiated cipher for the active connection. */
-  [[nodiscard]] WifiCipher
-  connection_cipher () const noexcept override {
-    return _M_cipher;
-  }
+    /** @brief Return the negotiated cipher for the active connection. */
+    [[nodiscard]] WifiCipher
+    connection_cipher () const noexcept override {
+        return _M_cipher;
+    }
 
-  /** @brief Return the station MAC address. */
-  [[nodiscard]] MacAddr
-  mac_addr () const noexcept override {
-    return _M_mac_addr;
-  }
+    /** @brief Return the station MAC address. */
+    [[nodiscard]] MacAddr
+    mac_addr () const noexcept override {
+        return _M_mac_addr;
+    }
 
-  /** @brief True when the driver has been initialized. */
-  [[nodiscard]] bool
-  initialized () const noexcept {
-    return _M_initialized;
-  }
+    /** @brief True when the driver has been initialized. */
+    [[nodiscard]] bool
+    initialized () const noexcept {
+        return _M_initialized;
+    }
 
-private:
-  // -- command protocol --
-  [[nodiscard]] zzs::kernel::Status
-  _M_send_cmd (WifiCmd cmd, const uint8_t *payload, uint8_t payload_len) noexcept;
+  private:
+    // -- command protocol --
+    [[nodiscard]] zzs::kernel::Status
+    _M_send_cmd (WifiCmd cmd, const uint8_t *payload, uint8_t payload_len) noexcept;
 
-  // -- state machine --
-  void
-  _M_state_machine () noexcept;
+    // -- state machine --
+    void
+    _M_state_machine () noexcept;
 
-  [[nodiscard]] zzs::kernel::Status
-  _M_handle_scan_done (const uint8_t *payload, uint8_t len) noexcept;
+    [[nodiscard]] zzs::kernel::Status
+    _M_handle_scan_done (const uint8_t *payload, uint8_t len) noexcept;
 
-  [[nodiscard]] zzs::kernel::Status
-  _M_handle_bss_entry (const uint8_t *payload, uint8_t len) noexcept;
+    [[nodiscard]] zzs::kernel::Status
+    _M_handle_bss_entry (const uint8_t *payload, uint8_t len) noexcept;
 
-  [[nodiscard]] zzs::kernel::Status
-  _M_handle_connect_result (const uint8_t *payload, uint8_t len) noexcept;
+    [[nodiscard]] zzs::kernel::Status
+    _M_handle_connect_result (const uint8_t *payload, uint8_t len) noexcept;
 
-  [[nodiscard]] zzs::kernel::Status
-  _M_handle_event_frame (const Frame &frame) noexcept;
+    [[nodiscard]] zzs::kernel::Status
+    _M_handle_event_frame (const Frame &frame) noexcept;
 
-  // -- frame callback for the stream pipeline --
-  static void
-  _M_frame_cb (const Frame &frame, void *context) noexcept;
+    // -- frame callback for the stream pipeline --
+    static void
+    _M_frame_cb (const Frame &frame, void *context) noexcept;
 
-  // -- members --
-  stream::WifiStream _M_stream;
-  const platform::WifiHal *_M_hal = nullptr;
-  WifiConnectionState _M_state = WifiConnectionState::Disconnected;
-  WifiCipher _M_cipher = WifiCipher::None;
-  MacAddr _M_mac_addr{};
-  crypto::Handshake _M_handshake = crypto::wifi_handshake_make_empty ();
-  uint32_t _M_connect_deadline_ms = 0u;
-  uint8_t _M_connect_retries = 0u;
-  char _M_connect_ssid[WifiMaxSsidLen + 1] = {0};
-  uint8_t _M_connect_ssid_len = 0u;
-  uint8_t _M_connect_psk[WifiMaxPskLen] = {};
-  uint8_t _M_connect_psk_len = 0u;
-  bool _M_scan_in_progress = false;
-  bool _M_initialized = false;
+    // -- members --
+    stream::WifiStream _M_stream;
+    const platform::WifiHal *_M_hal = nullptr;
+    WifiConnectionState _M_state = WifiConnectionState::Disconnected;
+    WifiCipher _M_cipher = WifiCipher::None;
+    MacAddr _M_mac_addr{};
+    crypto::Handshake _M_handshake = crypto::wifi_handshake_make_empty ();
+    uint32_t _M_connect_deadline_ms = 0u;
+    uint8_t _M_connect_retries = 0u;
+    char _M_connect_ssid[WifiMaxSsidLen + 1] = {0};
+    uint8_t _M_connect_ssid_len = 0u;
+    uint8_t _M_connect_psk[WifiMaxPskLen] = {};
+    uint8_t _M_connect_psk_len = 0u;
+    bool _M_scan_in_progress = false;
+    bool _M_initialized = false;
 };
 
 /** @} */

@@ -31,8 +31,7 @@
  * timing and envelope parameters.  Integer-only; no float.
  * @{
  */
-namespace zzs::kernel::sensor::driver::sensors::ics43434
-{
+namespace zzs::kernel::sensor::driver::sensors::ics43434 {
 
 /** @brief I2S bit clock period in microseconds (e.g. 2.083 us = 480 kHz). */
 inline constexpr uint32_t I2sSckPeriodUs = 2u;

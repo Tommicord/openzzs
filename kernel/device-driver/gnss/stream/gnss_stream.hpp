@@ -42,76 +42,76 @@ namespace zzs::kernel::device::driver::gnss::stream {
 
 /** @brief Configuration for the GNSS stream pipeline. */
 struct GnssStreamConfig {
-  uint16_t _M_byte_ring_depth = 256u; /**< Depth of the byte ring (power of 2). */
-  uint8_t _M_protocol_mask = 0x03u;   /**< Bit0=NMEA, bit1=UBX. */
+    uint16_t _M_byte_ring_depth = 256u; /**< Depth of the byte ring (power of 2). */
+    uint8_t _M_protocol_mask = 0x03u;   /**< Bit0=NMEA, bit1=UBX. */
 };
 
 /** @brief Streaming GNSS pipeline. */
 class GnssStream {
-public:
-  /** @brief Construct with a stream bus and optional clock. */
-  GnssStream (zzs::kernel::device::driver::StreamBusInterface *bus, uint64_t (*clock) (void) = nullptr,
-              const GnssStreamConfig &config = GnssStreamConfig{}) noexcept
-      : _M_bus (bus), _M_clock (clock), _M_byte_ring (config._M_byte_ring_depth),
-        _M_protocol_mask (config._M_protocol_mask) {
-  }
+  public:
+    /** @brief Construct with a stream bus and optional clock. */
+    GnssStream (zzs::kernel::device::driver::StreamBusInterface *bus, uint64_t (*clock) (void) = nullptr,
+                const GnssStreamConfig &config = GnssStreamConfig{}) noexcept
+        : _M_bus (bus), _M_clock (clock), _M_byte_ring (config._M_byte_ring_depth),
+          _M_protocol_mask (config._M_protocol_mask) {
+    }
 
-  GnssStream (const GnssStream &) = delete;
-  GnssStream &
-  operator= (const GnssStream &) = delete;
-  GnssStream (GnssStream &&) = delete;
-  GnssStream &
-  operator= (GnssStream &&) = delete;
+    GnssStream (const GnssStream &) = delete;
+    GnssStream &
+    operator= (const GnssStream &) = delete;
+    GnssStream (GnssStream &&) = delete;
+    GnssStream &
+    operator= (GnssStream &&) = delete;
 
-  /** @brief Drain the stream bus into the byte ring and run both parsers.
-   *         Returns OK when at least one new message was decoded, STALE when
-   *         nothing new, NOT_READY when the bus is not open, or a bus error. */
-  [[nodiscard]] zzs::kernel::Status
-  poll () noexcept;
+    /** @brief Drain the stream bus into the byte ring and run both parsers.
+     *         Returns OK when at least one new message was decoded, STALE when
+     *         nothing new, NOT_READY when the bus is not open, or a bus error. */
+    [[nodiscard]] zzs::kernel::Status
+    poll () noexcept;
 
-  /** @brief Send a raw command to the receiver (e.g. UBX CFG or NMEA
-   *         PUBX). */
-  [[nodiscard]] zzs::kernel::Status
-  send_command (const uint8_t *buf, uint16_t len) noexcept;
+    /** @brief Send a raw command to the receiver (e.g. UBX CFG or NMEA
+     *         PUBX). */
+    [[nodiscard]] zzs::kernel::Status
+    send_command (const uint8_t *buf, uint16_t len) noexcept;
 
-  /** @brief Flush the receiver's receive buffer. */
-  [[nodiscard]] zzs::kernel::Status
-  flush_rx () noexcept;
+    /** @brief Flush the receiver's receive buffer. */
+    [[nodiscard]] zzs::kernel::Status
+    flush_rx () noexcept;
 
-  /** @brief Return true when the underlying stream is open. */
-  [[nodiscard]] bool
-  is_open () const noexcept;
+    /** @brief Return true when the underlying stream is open. */
+    [[nodiscard]] bool
+    is_open () const noexcept;
 
-  /** @brief Access the NMEA parser (read-only). */
-  [[nodiscard]] const nmea::Parser &
-  nmea_parser () const noexcept {
-    return _M_nmea;
-  }
+    /** @brief Access the NMEA parser (read-only). */
+    [[nodiscard]] const nmea::Parser &
+    nmea_parser () const noexcept {
+        return _M_nmea;
+    }
 
-  /** @brief Access the UBX parser (read-only). */
-  [[nodiscard]] const ubx::Parser &
-  ubx_parser () const noexcept {
-    return _M_ubx;
-  }
+    /** @brief Access the UBX parser (read-only). */
+    [[nodiscard]] const ubx::Parser &
+    ubx_parser () const noexcept {
+        return _M_ubx;
+    }
 
-  /** @brief Number of bytes currently buffered in the ring. */
-  [[nodiscard]] uint16_t
-  buffered_bytes () const noexcept {
-    return _M_byte_ring.filled ();
-  }
+    /** @brief Number of bytes currently buffered in the ring. */
+    [[nodiscard]] uint16_t
+    buffered_bytes () const noexcept {
+        return _M_byte_ring.filled ();
+    }
 
-private:
-  [[nodiscard]] zzs::kernel::Status
-  _M_feed_parsers (uint8_t b) noexcept;
+  private:
+    [[nodiscard]] zzs::kernel::Status
+    _M_feed_parsers (uint8_t b) noexcept;
 
-  zzs::kernel::device::driver::StreamBusInterface *_M_bus = nullptr;
-  uint64_t (*_M_clock) (void) = nullptr;
-  GnssStreamConfig _M_config{};
-  stream::GnssByteRing _M_byte_ring{1u};
-  nmea::Parser _M_nmea{};
-  ubx::Parser _M_ubx{};
-  uint8_t _M_protocol_mask = 0x03u;
-  uint32_t _M_bytes_drained = 0u;
+    zzs::kernel::device::driver::StreamBusInterface *_M_bus = nullptr;
+    uint64_t (*_M_clock) (void) = nullptr;
+    GnssStreamConfig _M_config{};
+    stream::GnssByteRing _M_byte_ring{1u};
+    nmea::Parser _M_nmea{};
+    ubx::Parser _M_ubx{};
+    uint8_t _M_protocol_mask = 0x03u;
+    uint32_t _M_bytes_drained = 0u;
 };
 
 /** @} */

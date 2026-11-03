@@ -22,40 +22,43 @@ In file included from /home/tommicord/CLionProjects/openzzs/android/app/src/main
   742 | }
       | ^
 In file included from /home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/sensr_jni.cpp:21:
-/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/../../../../../kernel/kernel_feat_vibration.hpp:204:18: warning: array index 3 is past the end of the array (that has type 'int16_t[3][200]' (aka 'short[3][200]')) [-Warray-bounds]
-  204 |     int32_t vx = s->_M_window_buf[ac::X][i];
-      |                  ^                ~~~~~
-/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/../../../../../kernel/kernel_feat_vibration.hpp:81:3: note: array '_M_window_buf' declared here
-   81 |   int16_t _M_window_buf[ac::COUNT][_S_vibration_samples];
-      |   ^
-/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/../../../../../kernel/kernel_feat_vibration.hpp:205:18: warning: array index 4 is past the end of the array (that has type 'int16_t[3][200]' (aka 'short[3][200]')) [-Warray-bounds]
-  205 |     int32_t vy = s->_M_window_buf[ac::Y][i];
-      |                  ^                ~~~~~
-/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/../../../../../kernel/kernel_feat_vibration.hpp:81:3: note: array '_M_window_buf' declared here
-   81 |   int16_t _M_window_buf[ac::COUNT][_S_vibration_samples];
-      |   ^
-/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/../../../../../kernel/kernel_feat_vibration.hpp:206:18: warning: array index 5 is past the end of the array (that has type 'int16_t[3][200]' (aka 'short[3][200]')) [-Warray-bounds]
-  206 |     int32_t vz = s->_M_window_buf[ac::Z][i];
-      |                  ^                ~~~~~
-/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/../../../../../kernel/kernel_feat_vibration.hpp:81:3: note: array '_M_window_buf' declared here
-   81 |   int16_t _M_window_buf[ac::COUNT][_S_vibration_samples];
-      |   ^
-/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/sensr_jni.cpp:272:9: warning: data argument not used by format string [-Wformat-extra-args]
-  262 |   LOGE ("DEBUG row: [%d %d %d %d %d %d %d %d %d %d | P%u V%u %u %u F%u %u %u %u A%u %u %u R%u %u %u]",
-      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  263 |         _S_frame.data ()[0], _S_frame.data ()[1], _S_frame.data ()[2], _S_frame.data ()[3], _S_frame.data ()[4],
-  264 |         _S_frame.data ()[5], _S_frame.data ()[6], _S_frame.data ()[7], _S_frame.data ()[8], _S_frame.data ()[9],
-  265 |         static_cast<unsigned int> (_S_frame.data ()[20]), static_cast<unsigned int> (_S_frame.data ()[21]),
-  266 |         static_cast<unsigned int> (_S_frame.data ()[22]), static_cast<unsigned int> (_S_frame.data ()[23]),
-  267 |         static_cast<unsigned int> (_S_frame.data ()[24]), static_cast<unsigned int> (_S_frame.data ()[25]),
-  268 |         static_cast<unsigned int> (_S_frame.data ()[26]), static_cast<unsigned int> (_S_frame.data ()[27]),
-  269 |         static_cast<unsigned int> (_S_frame.data ()[28]), static_cast<unsigned int> (_S_frame.data ()[29]),
-  270 |         static_cast<unsigned int> (_S_frame.data ()[30]), static_cast<unsigned int> (_S_frame.data ()[31]),
-  271 |         static_cast<unsigned int> (_S_frame.data ()[32]), static_cast<unsigned int> (_S_frame.data ()[33]),
-  272 |         static_cast<unsigned int> (_S_frame.data ()[34]), static_cast<unsigned int> (_S_frame.data ()[35]),
-      |         ^
+/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/../../../../../kernel/kernel_feat_vibration.hpp:206:22: warning: array index 3 is past the end of the array (that has type 'int16_t[3][200]' (aka 'short[3][200]')) [-Warray-bounds]
+  206 |         int32_t vx = s->_M_window_buf[ac::X][i];
+      |                      ^                ~~~~~
+/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/../../../../../kernel/kernel_feat_vibration.hpp:81:5: note: array '_M_window_buf' declared here
+   81 |     int16_t _M_window_buf[ac::COUNT][_S_vibration_samples];
+      |     ^
+/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/../../../../../kernel/kernel_feat_vibration.hpp:207:22: warning: array index 4 is past the end of the array (that has type 'int16_t[3][200]' (aka 'short[3][200]')) [-Warray-bounds]
+  207 |         int32_t vy = s->_M_window_buf[ac::Y][i];
+      |                      ^                ~~~~~
+/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/../../../../../kernel/kernel_feat_vibration.hpp:81:5: note: array '_M_window_buf' declared here
+   81 |     int16_t _M_window_buf[ac::COUNT][_S_vibration_samples];
+      |     ^
+/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/../../../../../kernel/kernel_feat_vibration.hpp:208:22: warning: array index 5 is past the end of the array (that has type 'int16_t[3][200]' (aka 'short[3][200]')) [-Warray-bounds]
+  208 |         int32_t vz = s->_M_window_buf[ac::Z][i];
+      |                      ^                ~~~~~
+/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/../../../../../kernel/kernel_feat_vibration.hpp:81:5: note: array '_M_window_buf' declared here
+   81 |     int16_t _M_window_buf[ac::COUNT][_S_vibration_samples];
+      |     ^
+/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/sensr_jni.cpp:310:11: warning: data argument not used by format string [-Wformat-extra-args]
+  300 |     LOGE ("DEBUG row: [%d %d %d %d %d %d %d %d %d %d | P%u V%u %u %u F%u %u %u %u A%u %u %u R%u %u %u]",
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  301 |           _S_frame.data ()[0], _S_frame.data ()[1], _S_frame.data ()[2], _S_frame.data ()[3], _S_frame.data ()[4],
+  302 |           _S_frame.data ()[5], _S_frame.data ()[6], _S_frame.data ()[7], _S_frame.data ()[8], _S_frame.data ()[9],
+  303 |           static_cast<unsigned int> (_S_frame.data ()[20]), static_cast<unsigned int> (_S_frame.data ()[21]),
+  304 |           static_cast<unsigned int> (_S_frame.data ()[22]), static_cast<unsigned int> (_S_frame.data ()[23]),
+  305 |           static_cast<unsigned int> (_S_frame.data ()[24]), static_cast<unsigned int> (_S_frame.data ()[25]),
+  306 |           static_cast<unsigned int> (_S_frame.data ()[26]), static_cast<unsigned int> (_S_frame.data ()[27]),
+  307 |           static_cast<unsigned int> (_S_frame.data ()[28]), static_cast<unsigned int> (_S_frame.data ()[29]),
+  308 |           static_cast<unsigned int> (_S_frame.data ()[30]), static_cast<unsigned int> (_S_frame.data ()[31]),
+  309 |           static_cast<unsigned int> (_S_frame.data ()[32]), static_cast<unsigned int> (_S_frame.data ()[33]),
+  310 |           static_cast<unsigned int> (_S_frame.data ()[34]), static_cast<unsigned int> (_S_frame.data ()[35]),
+      |           ^
 /home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/sensr_jni.cpp:47:70: note: expanded from macro 'LOGE'
-   47 | #define LOGE(...) __android_log_print (ANDROID_LOG_ERROR, "OpenZZS", __VA_ARGS__)
+   47 | #define LOGE(...) __android_log_print (ANDROID_LOG_ERROR, "openzzs", __VA_ARGS__)
       |                                                                      ^~~~~~~~~~~
-5 warnings generated.
+/home/tommicord/CLionProjects/openzzs/android/app/src/main/cpp/sensr_jni.cpp:634:52: warning: data argument not used by format string [-Wformat-extra-args]
+  634 |             LOGE ("stage {} configure failed: {}", i, static_cast<int> (cst));
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  ^
+6 warnings generated.
 [5/5] Linking CXX shared library /home/tommicord/CLionProjects/openzzs/android/app/build/intermediates/cxx/Debug/4323234u/obj/arm64-v8a/libopenzzs-android.so

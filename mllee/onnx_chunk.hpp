@@ -36,8 +36,8 @@ namespace zzs::mllee::onnx {
  * by the caller.
  */
 struct Chunk {
-  const uint8_t *_M_data = nullptr;
-  uint32_t _M_size = 0;
+    const uint8_t *_M_data = nullptr;
+    uint32_t _M_size = 0;
 };
 
 /** @brief Chunk source callback. `offset` is absolute in the ONNX file. */
@@ -45,16 +45,16 @@ using ChunkFn = Chunk (*) (void *_M_context, uint32_t _M_offset) noexcept;
 
 /** @brief A contiguous model image, useful for tests and memory-mapped files. */
 struct MemorySource {
-  const uint8_t *_M_data = nullptr;
-  uint32_t _M_size = 0;
+    const uint8_t *_M_data = nullptr;
+    uint32_t _M_size = 0;
 };
 
 [[nodiscard]] inline Chunk
 memory_chunk (void *const context, const uint32_t offset) noexcept {
-  const MemorySource *const source = static_cast<const MemorySource *> (context);
-  if (source == nullptr || source->_M_data == nullptr || offset >= source->_M_size)
-    return Chunk{};
-  return Chunk{source->_M_data + offset, source->_M_size - offset};
+    const MemorySource *const source = static_cast<const MemorySource *> (context);
+    if (source == nullptr || source->_M_data == nullptr || offset >= source->_M_size)
+        return Chunk{};
+    return Chunk{source->_M_data + offset, source->_M_size - offset};
 }
 
 /**
@@ -66,28 +66,28 @@ memory_chunk (void *const context, const uint32_t offset) noexcept {
  * of regions, and a binary search table would cost more Flash than it saves.
  */
 struct ChunkList {
-  const Chunk *_M_chunks = nullptr;
-  uint32_t _M_count = 0;
+    const Chunk *_M_chunks = nullptr;
+    uint32_t _M_count = 0;
 };
 
 [[nodiscard]] inline Chunk
 chunk_list_chunk (void *const context, const uint32_t offset) noexcept {
-  const ChunkList *const list = static_cast<const ChunkList *> (context);
-  if (list == nullptr || list->_M_chunks == nullptr)
+    const ChunkList *const list = static_cast<const ChunkList *> (context);
+    if (list == nullptr || list->_M_chunks == nullptr)
+        return Chunk{};
+    uint32_t base = 0;
+    for (uint32_t i = 0; i < list->_M_count; ++i) {
+        const Chunk chunk = list->_M_chunks[i];
+        if (chunk._M_data == nullptr || chunk._M_size == 0u)
+            continue;
+        if (offset < base)
+            return Chunk{};
+        if (offset - base < chunk._M_size)
+            return Chunk{chunk._M_data + (offset - base), chunk._M_size - (offset - base)};
+        if (chunk._M_size > 0xFFFFFFFFu - base)
+            return Chunk{};
+        base += chunk._M_size;
+    }
     return Chunk{};
-  uint32_t base = 0;
-  for (uint32_t i = 0; i < list->_M_count; ++i) {
-    const Chunk chunk = list->_M_chunks[i];
-    if (chunk._M_data == nullptr || chunk._M_size == 0u)
-      continue;
-    if (offset < base)
-      return Chunk{};
-    if (offset - base < chunk._M_size)
-      return Chunk{chunk._M_data + (offset - base), chunk._M_size - (offset - base)};
-    if (chunk._M_size > 0xFFFFFFFFu - base)
-      return Chunk{};
-    base += chunk._M_size;
-  }
-  return Chunk{};
 }
 } // namespace zzs::mllee::onnx

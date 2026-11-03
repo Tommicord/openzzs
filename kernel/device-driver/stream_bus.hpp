@@ -39,40 +39,42 @@ namespace zzs::kernel::device::driver {
 /** @brief Abstract byte-stream bus implemented by UART, USB-CDC, or SPI-data
  *         platform adapters. */
 class StreamBusInterface {
-public:
-  /** @brief Default constructor. */
-  StreamBusInterface () = default;
+  public:
+    /** @brief Default constructor. */
+    StreamBusInterface () = default;
 
-  /** @brief Virtual destructor, defaulted. */
-  virtual ~StreamBusInterface () = default;
+    /** @brief Virtual destructor, defaulted. */
+    virtual ~StreamBusInterface () = default;
 
-  StreamBusInterface (const StreamBusInterface &) = delete;
-  StreamBusInterface &operator= (const StreamBusInterface &) = delete;
-  StreamBusInterface (StreamBusInterface &&) = delete;
-  StreamBusInterface &operator= (StreamBusInterface &&) = delete;
+    StreamBusInterface (const StreamBusInterface &) = delete;
+    StreamBusInterface &
+    operator= (const StreamBusInterface &) = delete;
+    StreamBusInterface (StreamBusInterface &&) = delete;
+    StreamBusInterface &
+    operator= (StreamBusInterface &&) = delete;
 
-  /** @brief Read up to `max_bytes` into `buf`; `*filled` is set to the number
-   *         of bytes actually read. Returns OK when at least one byte was read,
-   *         STALE when none are available, or a bus error. Non-blocking. */
-  [[nodiscard]] virtual Status
-  read_bytes (uint8_t *buf, uint16_t max_bytes, uint16_t *filled) noexcept = 0;
+    /** @brief Read up to `max_bytes` into `buf`; `*filled` is set to the number
+     *         of bytes actually read. Returns OK when at least one byte was read,
+     *         STALE when none are available, or a bus error. Non-blocking. */
+    [[nodiscard]] virtual Status
+    read_bytes (uint8_t *buf, uint16_t max_bytes, uint16_t *filled) noexcept = 0;
 
-  /** @brief Write `len` bytes from `buf`. Returns OK when all bytes were
-   *         accepted by the underlying driver, or a bus error. */
-  [[nodiscard]] virtual Status
-  write_bytes (const uint8_t *buf, uint16_t len) noexcept = 0;
+    /** @brief Write `len` bytes from `buf`. Returns OK when all bytes were
+     *         accepted by the underlying driver, or a bus error. */
+    [[nodiscard]] virtual Status
+    write_bytes (const uint8_t *buf, uint16_t len) noexcept = 0;
 
-  /** @brief Block for at least `ms` milliseconds. */
-  virtual void
-  delay_ms (uint32_t ms) noexcept = 0;
+    /** @brief Block for at least `ms` milliseconds. */
+    virtual void
+    delay_ms (uint32_t ms) noexcept = 0;
 
-  /** @brief Flush any buffered receive data (discard pending bytes). */
-  [[nodiscard]] virtual Status
-  flush_rx () noexcept = 0;
+    /** @brief Flush any buffered receive data (discard pending bytes). */
+    [[nodiscard]] virtual Status
+    flush_rx () noexcept = 0;
 
-  /** @brief Return true when the underlying stream is open/ready. */
-  [[nodiscard]] virtual bool
-  is_open () const noexcept = 0;
+    /** @brief Return true when the underlying stream is open/ready. */
+    [[nodiscard]] virtual bool
+    is_open () const noexcept = 0;
 };
 
 /** @} */

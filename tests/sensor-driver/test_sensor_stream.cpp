@@ -31,18 +31,15 @@
  * No hardware, no float, no heap. Every driver talks to a mock bus.
  */
 
-#include <catch2/catch_test_macros.hpp>
-
-#include <cstdint>
-
-#include "kernel/sensor-driver/stream/sensor_stream.hpp"
 #include "kernel/sensor-driver/sensors/lsm6dso/lsm6dso.hpp"
 #include "kernel/sensor-driver/sensors/lsm6dso/lsm6dso_reg.h"
-
+#include "kernel/sensor-driver/stream/sensor_stream.hpp"
 #include "test_mock_bus.hpp"
 
-namespace
-{
+#include <catch2/catch_test_macros.hpp>
+#include <cstdint>
+
+namespace {
 using namespace zzs::kernel;
 using namespace zzs::kernel::sensor;
 using namespace zzs::kernel::sensor::driver::sensors;
@@ -50,9 +47,7 @@ using namespace zzs::kernel::sensor::driver::stream;
 using namespace zzs::kernel::sensor::driver::sensors::lsm6dso;
 } // namespace
 
-TEST_CASE ("ScanRing push/pop ordering and emptiness",
-           "[sensor-driver][stream][ring]")
-{
+TEST_CASE ("ScanRing push/pop ordering and emptiness", "[sensor-driver][stream][ring]") {
     ScanRing ring (4u);
     REQUIRE (ring.empty ());
     REQUIRE (ring.filled () == 0u);
@@ -86,21 +81,18 @@ TEST_CASE ("ScanRing push/pop ordering and emptiness",
     REQUIRE (ring.pop (out) == zzs::kernel::Status::STALE);
 }
 
-TEST_CASE ("ScanRing drop-oldest when full and watermark",
-           "[sensor-driver][stream][ring][watermark]")
-{
+TEST_CASE ("ScanRing drop-oldest when full and watermark", "[sensor-driver][stream][ring][watermark]") {
     ScanRing ring (3u);
     ring.set_watermark (2u);
 
     sensor::Sample s{};
     s._M_sample_q15 = 0;
     s._M_timestamp_ns = 0;
-    for (int ch = 0; ch < 5; ++ch)
-        {
+    for (int ch = 0; ch < 5; ++ch) {
         s._M_channel = static_cast<sensor::Channel> (ch);
         s._M_sample_q15 = static_cast<int16_t> (ch * 10);
         REQUIRE (ring.push (s) == zzs::kernel::Status::OK);
-        }
+    }
     /* Depth 3, 5 pushes -> oldest 2 dropped, 3 remain. */
     REQUIRE (ring.filled () == 3u);
     REQUIRE (ring.full ());
@@ -114,8 +106,7 @@ TEST_CASE ("ScanRing drop-oldest when full and watermark",
 }
 
 TEST_CASE ("LSM6DSO accel streaming burst: one transaction -> 3 axes, one ts",
-           "[sensor-driver][stream][lsm6dso][accel-burst]")
-{
+           "[sensor-driver][stream][lsm6dso][accel-burst]") {
     test::MockBus bus;
     bus.set_initialized (true);
     bus.set_reg (RegWhoAmI, WhoAmIValue);
@@ -123,12 +114,9 @@ TEST_CASE ("LSM6DSO accel streaming burst: one transaction -> 3 axes, one ts",
 
     /* 6-byte block: X=1000, Y=-2000, Z=3000 (little-endian). */
     uint8_t data[6] = {
-        static_cast<uint8_t> (1000 & 0xFF),
-        static_cast<uint8_t> ((1000 >> 8) & 0xFF),
-        static_cast<uint8_t> ((-2000) & 0xFF),
-        static_cast<uint8_t> (((-2000) >> 8) & 0xFF),
-        static_cast<uint8_t> (3000 & 0xFF),
-        static_cast<uint8_t> ((3000 >> 8) & 0xFF),
+        static_cast<uint8_t> (1000 & 0xFF),    static_cast<uint8_t> ((1000 >> 8) & 0xFF),
+        static_cast<uint8_t> ((-2000) & 0xFF), static_cast<uint8_t> (((-2000) >> 8) & 0xFF),
+        static_cast<uint8_t> (3000 & 0xFF),    static_cast<uint8_t> ((3000 >> 8) & 0xFF),
     };
     bus.set_block (RegOutXLAccel, data, 6u);
 
@@ -164,17 +152,13 @@ TEST_CASE ("LSM6DSO accel streaming burst: one transaction -> 3 axes, one ts",
     REQUIRE (filled2 == 3u);
 }
 
-TEST_CASE ("LSM6DSO accel streaming partial drain (max_samples limit)",
-           "[sensor-driver][stream][lsm6dso][partial]")
-{
+TEST_CASE ("LSM6DSO accel streaming partial drain (max_samples limit)", "[sensor-driver][stream][lsm6dso][partial]") {
     test::MockBus bus;
     bus.set_initialized (true);
     bus.set_reg (RegWhoAmI, WhoAmIValue);
     bus.set_reg (RegStatusReg, StatusXlda);
     uint8_t data[6] = {
-        static_cast<uint8_t> (10 & 0xFF), 0,
-        static_cast<uint8_t> (20 & 0xFF), 0,
-        static_cast<uint8_t> (30 & 0xFF), 0,
+        static_cast<uint8_t> (10 & 0xFF), 0, static_cast<uint8_t> (20 & 0xFF), 0, static_cast<uint8_t> (30 & 0xFF), 0,
     };
     bus.set_block (RegOutXLAccel, data, 6u);
 
@@ -202,17 +186,13 @@ TEST_CASE ("LSM6DSO accel streaming partial drain (max_samples limit)",
     REQUIRE (filled == 1u);
 }
 
-TEST_CASE ("LSM6DSO accel channel enable reduces streamed samples",
-           "[sensor-driver][stream][lsm6dso][channel]")
-{
+TEST_CASE ("LSM6DSO accel channel enable reduces streamed samples", "[sensor-driver][stream][lsm6dso][channel]") {
     test::MockBus bus;
     bus.set_initialized (true);
     bus.set_reg (RegWhoAmI, WhoAmIValue);
     bus.set_reg (RegStatusReg, StatusXlda);
     uint8_t data[6] = {
-        static_cast<uint8_t> (5 & 0xFF), 0,
-        static_cast<uint8_t> (6 & 0xFF), 0,
-        static_cast<uint8_t> (7 & 0xFF), 0,
+        static_cast<uint8_t> (5 & 0xFF), 0, static_cast<uint8_t> (6 & 0xFF), 0, static_cast<uint8_t> (7 & 0xFF), 0,
     };
     bus.set_block (RegOutXLAccel, data, 6u);
 
@@ -220,10 +200,8 @@ TEST_CASE ("LSM6DSO accel channel enable reduces streamed samples",
     REQUIRE (accel.init () == zzs::kernel::Status::OK);
 
     /* Disable Y and Z: only X is streamed. */
-    REQUIRE (accel.set_channel_enabled (sensor::Channel::ACCEL_Y, false)
-             == zzs::kernel::Status::OK);
-    REQUIRE (accel.set_channel_enabled (sensor::Channel::ACCEL_Z, false)
-             == zzs::kernel::Status::OK);
+    REQUIRE (accel.set_channel_enabled (sensor::Channel::ACCEL_Y, false) == zzs::kernel::Status::OK);
+    REQUIRE (accel.set_channel_enabled (sensor::Channel::ACCEL_Z, false) == zzs::kernel::Status::OK);
 
     sensor::Sample out[3];
     uint16_t filled = 0u;
@@ -232,14 +210,12 @@ TEST_CASE ("LSM6DSO accel channel enable reduces streamed samples",
     REQUIRE (out[0]._M_channel == sensor::Channel::ACCEL_X);
 }
 
-TEST_CASE ("LSM6DSO accel read_sample single still works (back-compat)",
-           "[sensor-driver][stream][lsm6dso][single]")
-{
+TEST_CASE ("LSM6DSO accel read_sample single still works (back-compat)", "[sensor-driver][stream][lsm6dso][single]") {
     test::MockBus bus;
     bus.set_initialized (true);
     bus.set_reg (RegWhoAmI, WhoAmIValue);
     bus.set_reg (RegStatusReg, StatusXlda);
-    uint8_t data[6] = { 42, 0, 0, 0, 0, 0 };
+    uint8_t data[6] = {42, 0, 0, 0, 0, 0};
     bus.set_block (RegOutXLAccel, data, 6u);
 
     Lsm6dsoAccelDriver accel (&bus);
@@ -250,9 +226,7 @@ TEST_CASE ("LSM6DSO accel read_sample single still works (back-compat)",
     REQUIRE (out._M_channel == sensor::Channel::ACCEL_X);
 }
 
-TEST_CASE ("LSM6DSO accel STALE when no data ready",
-           "[sensor-driver][stream][lsm6dso][stale]")
-{
+TEST_CASE ("LSM6DSO accel STALE when no data ready", "[sensor-driver][stream][lsm6dso][stale]") {
     test::MockBus bus;
     bus.set_initialized (true);
     bus.set_reg (RegWhoAmI, WhoAmIValue);
@@ -267,9 +241,7 @@ TEST_CASE ("LSM6DSO accel STALE when no data ready",
     REQUIRE (filled == 0u);
 }
 
-TEST_CASE ("LSM6DSO accel read_samples argument validation",
-           "[sensor-driver][stream][lsm6dso][args]")
-{
+TEST_CASE ("LSM6DSO accel read_samples argument validation", "[sensor-driver][stream][lsm6dso][args]") {
     test::MockBus bus;
     bus.set_initialized (true);
     bus.set_reg (RegWhoAmI, WhoAmIValue);
@@ -279,10 +251,8 @@ TEST_CASE ("LSM6DSO accel read_samples argument validation",
 
     sensor::Sample out{};
     uint16_t filled = 3u;
-    REQUIRE (accel.read_samples (nullptr, 3u, &filled)
-             == zzs::kernel::Status::OUT_OF_RANGE);
-    REQUIRE (accel.read_samples (&out, 3u, nullptr)
-             == zzs::kernel::Status::OUT_OF_RANGE);
+    REQUIRE (accel.read_samples (nullptr, 3u, &filled) == zzs::kernel::Status::OUT_OF_RANGE);
+    REQUIRE (accel.read_samples (&out, 3u, nullptr) == zzs::kernel::Status::OUT_OF_RANGE);
 
     filled = 3u;
     REQUIRE (accel.read_samples (&out, 0u, &filled) == zzs::kernel::Status::OK);

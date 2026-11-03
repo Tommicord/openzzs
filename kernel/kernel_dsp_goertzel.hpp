@@ -47,32 +47,32 @@ namespace zzs::kernel::dsp {
 
 /** @brief One Goertzel bin resonator: coefficient plus two Q7 state delays. */
 struct _S_GoertzelBin {
-  int16_t _M_cosine_q15; /* cos(theta), Q15 (2*cos supplied by the doubling MAC) */
-  int16_t _M_s1_q7;      /* newest resonator state, Q7 */
-  int16_t _M_s2_q7;      /* previous resonator state, Q7 */
+    int16_t _M_cosine_q15; /* cos(theta), Q15 (2*cos supplied by the doubling MAC) */
+    int16_t _M_s1_q7;      /* newest resonator state, Q7 */
+    int16_t _M_s2_q7;      /* previous resonator state, Q7 */
 };
 
 /** @brief Configure a bin for `frequency_hz` at `sample_rate_hz`. */
 [[nodiscard]] inline zzs::kernel::Status
 goertzel_bin_configure (_S_GoertzelBin &bin, const uint32_t frequency_hz, const uint32_t sample_rate_hz) noexcept {
-  if (sample_rate_hz == 0u) {
-    zzs::base::log_error ("goertzel_bin_configure: freq={} rate={} -> {}", frequency_hz, sample_rate_hz,
-                          zzs::kernel::status_name (zzs::kernel::Status::OUT_OF_RANGE));
-    return zzs::kernel::Status::OUT_OF_RANGE;
-  }
-  zzs::base::log_debug ("goertzel_bin_configure: freq={} rate={}", frequency_hz, sample_rate_hz);
-  bin._M_cosine_q15 = zzs::kernel::fx::coeff_cos_q15_of_hz (frequency_hz, sample_rate_hz);
-  bin._M_s1_q7 = 0;
-  bin._M_s2_q7 = 0;
-  return zzs::kernel::Status::OK;
+    if (sample_rate_hz == 0u) {
+        zzs::base::log_error ("goertzel_bin_configure: freq={} rate={} -> {}", frequency_hz, sample_rate_hz,
+                              zzs::kernel::status_name (zzs::kernel::Status::OUT_OF_RANGE));
+        return zzs::kernel::Status::OUT_OF_RANGE;
+    }
+    zzs::base::log_debug ("goertzel_bin_configure: freq={} rate={}", frequency_hz, sample_rate_hz);
+    bin._M_cosine_q15 = zzs::kernel::fx::coeff_cos_q15_of_hz (frequency_hz, sample_rate_hz);
+    bin._M_s1_q7 = 0;
+    bin._M_s2_q7 = 0;
+    return zzs::kernel::Status::OK;
 }
 
 /** @brief Reset resonator state without changing the coefficient. */
 inline void
 goertzel_bin_reset (_S_GoertzelBin &bin) noexcept {
-  zzs::base::log_debug ("goertzel_bin_reset");
-  bin._M_s1_q7 = 0;
-  bin._M_s2_q7 = 0;
+    zzs::base::log_debug ("goertzel_bin_reset");
+    bin._M_s1_q7 = 0;
+    bin._M_s2_q7 = 0;
 }
 
 /**
@@ -83,10 +83,10 @@ goertzel_bin_reset (_S_GoertzelBin &bin) noexcept {
  */
 ZZS_KERNEL_INLINE void
 goertzel_bin_step (_S_GoertzelBin &bin, const int16_t sample_q15) noexcept {
-  const int16_t input_q7 = zzs::kernel::fx::to_resonator_q7 (sample_q15);
-  const int16_t s0 = zzs::kernel::fx::resonator_step (bin._M_cosine_q15, bin._M_s1_q7, bin._M_s2_q7, input_q7);
-  bin._M_s2_q7 = bin._M_s1_q7;
-  bin._M_s1_q7 = s0;
+    const int16_t input_q7 = zzs::kernel::fx::to_resonator_q7 (sample_q15);
+    const int16_t s0 = zzs::kernel::fx::resonator_step (bin._M_cosine_q15, bin._M_s1_q7, bin._M_s2_q7, input_q7);
+    bin._M_s2_q7 = bin._M_s1_q7;
+    bin._M_s1_q7 = s0;
 }
 
 /**
@@ -97,13 +97,13 @@ goertzel_bin_step (_S_GoertzelBin &bin, const int16_t sample_q15) noexcept {
  */
 [[nodiscard]] inline uint32_t
 goertzel_bin_power_q14 (const _S_GoertzelBin &bin) noexcept {
-  return zzs::kernel::fx::resonator_power (bin._M_s1_q7, bin._M_s2_q7, bin._M_cosine_q15);
+    return zzs::kernel::fx::resonator_power (bin._M_s1_q7, bin._M_s2_q7, bin._M_cosine_q15);
 }
 
 /** @brief Finished-bin magnitude in Q7. */
 [[nodiscard]] inline int32_t
 goertzel_bin_magnitude_q7 (const _S_GoertzelBin &bin) noexcept {
-  return zzs::kernel::fx::magnitude_q7 (goertzel_bin_power_q14 (bin));
+    return zzs::kernel::fx::magnitude_q7 (goertzel_bin_power_q14 (bin));
 }
 
 /** @} */

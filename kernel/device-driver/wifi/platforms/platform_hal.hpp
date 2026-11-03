@@ -42,16 +42,16 @@ namespace zzs::kernel::device::driver::wifi::platform {
 
 /** @brief Radio control operations exposed by a platform HAL. */
 struct WifiHal {
-  /** @brief Reset the WiFi radio. */
-  zzs::kernel::Status (*_M_reset) (void) noexcept = nullptr;
-  /** @brief Set the operating channel (1..165). */
-  zzs::kernel::Status (*_M_set_channel) (uint8_t channel) noexcept = nullptr;
-  /** @brief Set the regulatory country code (2 ASCII octets). */
-  zzs::kernel::Status (*_M_set_country) (const char cc[2]) noexcept = nullptr;
-  /** @brief Return the station MAC address (6 octets). */
-  zzs::kernel::Status (*_M_mac_addr) (uint8_t mac[6]) noexcept = nullptr;
-  /** @brief Platform-specific delay. */
-  void (*_M_delay_ms) (uint32_t ms) noexcept = nullptr;
+    /** @brief Reset the WiFi radio. */
+    zzs::kernel::Status (*_M_reset) (void) noexcept = nullptr;
+    /** @brief Set the operating channel (1..165). */
+    zzs::kernel::Status (*_M_set_channel) (uint8_t channel) noexcept = nullptr;
+    /** @brief Set the regulatory country code (2 ASCII octets). */
+    zzs::kernel::Status (*_M_set_country) (const char cc[2]) noexcept = nullptr;
+    /** @brief Return the station MAC address (6 octets). */
+    zzs::kernel::Status (*_M_mac_addr) (uint8_t mac[6]) noexcept = nullptr;
+    /** @brief Platform-specific delay. */
+    void (*_M_delay_ms) (uint32_t ms) noexcept = nullptr;
 };
 
 /** @brief Linux host HAL (/dev or socket stream bus). */
@@ -134,46 +134,46 @@ create_rtlinux_wifi_hal (WifiHal &hal_out) noexcept;
 [[nodiscard]] inline zzs::base::Maybe<StreamBusInterface *, zzs::kernel::Status>
 create_platform_wifi_hal (WifiHal &hal_out) noexcept {
 #if defined(ZZS_KERNEL_PLATFORM_LINUX)
-  return create_linux_wifi_hal (hal_out);
+    return create_linux_wifi_hal (hal_out);
 #elif defined(ZZS_KERNEL_PLATFORM_WINDOWS)
-  return create_windows_wifi_hal (hal_out);
+    return create_windows_wifi_hal (hal_out);
 #elif defined(ZZS_KERNEL_PLATFORM_STM32F4)
-  return create_stm32f4_wifi_hal (hal_out);
+    return create_stm32f4_wifi_hal (hal_out);
 #elif defined(ZZS_KERNEL_PLATFORM_STM32F7)
-  return create_stm32f7_wifi_hal (hal_out);
+    return create_stm32f7_wifi_hal (hal_out);
 #elif defined(ZZS_KERNEL_PLATFORM_STM32H7)
-  return create_stm32h7_wifi_hal (hal_out);
+    return create_stm32h7_wifi_hal (hal_out);
 #elif defined(ZZS_KERNEL_PLATFORM_STM32L4)
-  return create_stm32l4_wifi_hal (hal_out);
+    return create_stm32l4_wifi_hal (hal_out);
 #elif defined(ZZS_KERNEL_PLATFORM_ESP32)
-  return create_esp32_wifi_hal (hal_out);
+    return create_esp32_wifi_hal (hal_out);
 #elif defined(ZZS_KERNEL_PLATFORM_FREERTOS)
-  return create_freertos_wifi_hal (hal_out);
+    return create_freertos_wifi_hal (hal_out);
 #elif defined(ZZS_KERNEL_PLATFORM_ANDROID)
-  return create_android_wifi_hal (hal_out);
+    return create_android_wifi_hal (hal_out);
 #elif defined(ZZS_KERNEL_PLATFORM_IOS)
-  return create_ios_wifi_hal (hal_out);
+    return create_ios_wifi_hal (hal_out);
 #elif defined(ZZS_KERNEL_PLATFORM_ZEPHYR)
-  return create_zephyr_wifi_hal (hal_out);
+    return create_zephyr_wifi_hal (hal_out);
 #elif defined(ZZS_KERNEL_PLATFORM_RP2040)
-  return create_rp2040_wifi_hal (hal_out);
+    return create_rp2040_wifi_hal (hal_out);
 #elif defined(ZZS_KERNEL_PLATFORM_NRF52)
-  return create_nrf52_wifi_hal (hal_out);
+    return create_nrf52_wifi_hal (hal_out);
 #elif defined(ZZS_KERNEL_PLATFORM_SAMD21)
-  return create_samd21_wifi_hal (hal_out);
+    return create_samd21_wifi_hal (hal_out);
 #elif defined(ZZS_KERNEL_PLATFORM_BEAGLEBONE)
-  return create_beaglebone_wifi_hal (hal_out);
+    return create_beaglebone_wifi_hal (hal_out);
 #elif defined(ZZS_KERNEL_PLATFORM_MACOS)
-  return create_macos_wifi_hal (hal_out);
+    return create_macos_wifi_hal (hal_out);
 #elif defined(ZZS_KERNEL_PLATFORM_QNX)
-  return create_qnx_wifi_hal (hal_out);
+    return create_qnx_wifi_hal (hal_out);
 #elif defined(ZZS_KERNEL_PLATFORM_VXWORKS)
-  return create_vxworks_wifi_hal (hal_out);
+    return create_vxworks_wifi_hal (hal_out);
 #elif defined(ZZS_KERNEL_PLATFORM_RTLINUX)
-  return create_rtlinux_wifi_hal (hal_out);
+    return create_rtlinux_wifi_hal (hal_out);
 #else
-  (void) hal_out;
-  return zzs::kernel::Status::UNSUPPORTED;
+    (void) hal_out;
+    return zzs::kernel::Status::UNSUPPORTED;
 #endif
 }
 

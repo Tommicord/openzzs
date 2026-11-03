@@ -19,36 +19,30 @@
  * @brief Unit tests for the ICS43434 sound sensor driver (mock bus).
  */
 
-#include <catch2/catch_test_macros.hpp>
-
-#include <cstdint>
-
 #include "kernel/sensor-driver/sensors/ics43434/ics43434.hpp"
 #include "kernel/sensor-driver/sensors/ics43434/ics43434_reg.h"
-
 #include "test_mock_bus.hpp"
 
-namespace
-{
+#include <catch2/catch_test_macros.hpp>
+#include <cstdint>
+
+namespace {
 using namespace zzs::kernel;
 using namespace zzs::kernel::sensor::driver::sensors;
 using namespace zzs::kernel::sensor::driver::sensors::ics43434;
 using namespace zzs::kernel::sensor::driver::fixed;
 } // namespace
 
-namespace
-{
+namespace {
 thread_local int16_t g_pdm_value = 0;
 
 int16_t
-pdm_read (void) noexcept
-{
+pdm_read (void) noexcept {
     return g_pdm_value;
 }
 } // namespace
 
-TEST_CASE ("PDM/I2S read", "[sensor-driver][ics43434][pdm]")
-{
+TEST_CASE ("PDM/I2S read", "[sensor-driver][ics43434][pdm]") {
     test::MockBus bus;
     bus.set_initialized (true);
 
@@ -69,8 +63,7 @@ TEST_CASE ("PDM/I2S read", "[sensor-driver][ics43434][pdm]")
     REQUIRE (sample._M_sample_q15 > 0);
 }
 
-TEST_CASE ("Q15 sound envelope computation", "[sensor-driver][ics43434][envelope]")
-{
+TEST_CASE ("Q15 sound envelope computation", "[sensor-driver][ics43434][envelope]") {
     test::MockBus bus;
     bus.set_initialized (true);
 
@@ -89,9 +82,7 @@ TEST_CASE ("Q15 sound envelope computation", "[sensor-driver][ics43434][envelope
     REQUIRE (sample._M_sample_q15 == 0);
 }
 
-TEST_CASE ("Edge cases: silence (envelope = 0), max amplitude",
-           "[sensor-driver][ics43434][edge]")
-{
+TEST_CASE ("Edge cases: silence (envelope = 0), max amplitude", "[sensor-driver][ics43434][edge]") {
     test::MockBus bus;
     bus.set_initialized (true);
 

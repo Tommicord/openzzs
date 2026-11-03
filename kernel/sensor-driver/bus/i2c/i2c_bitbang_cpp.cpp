@@ -35,15 +35,13 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include <unistd.h>
 #include <fcntl.h>
 #include <time.h>
+#include <unistd.h>
 
-namespace zzs::kernel::sensor::driver::bus
-{
+namespace zzs::kernel::sensor::driver::bus {
 
-namespace
-{
+namespace {
 
 /** @brief GPIO sysfs base path. */
 constexpr char k_gpio_sysfs[] = "/sys/class/gpio";
@@ -55,8 +53,7 @@ constexpr char k_gpio_sysfs[] = "/sys/class/gpio";
  * @return 0 on success, -1 on error
  */
 [[nodiscard]] int
-sysfs_write (const char *path, const char *value) noexcept
-{
+sysfs_write (const char *path, const char *value) noexcept {
     int fd = open (path, O_WRONLY);
     if (fd < 0)
         return -1;
@@ -74,8 +71,7 @@ sysfs_write (const char *path, const char *value) noexcept
  * @return 0 on success, -1 on error
  */
 [[nodiscard]] int
-sysfs_read (const char *path, char *out, size_t out_size) noexcept
-{
+sysfs_read (const char *path, char *out, size_t out_size) noexcept {
     if (out_size == 0u)
         return -1;
     int fd = open (path, O_RDONLY);
@@ -100,8 +96,7 @@ sysfs_read (const char *path, char *out, size_t out_size) noexcept
  * @return pointer into buf, or nullptr if truncated
  */
 [[nodiscard]] const char *
-gpio_path (uint32_t pin, const char *attr, char *buf, size_t buf_size) noexcept
-{
+gpio_path (uint32_t pin, const char *attr, char *buf, size_t buf_size) noexcept {
     int n = std::snprintf (buf, buf_size, "%s/gpio%u/%s", k_gpio_sysfs, pin, attr);
     if (n < 0 || static_cast<size_t> (n) >= buf_size)
         return nullptr;
@@ -110,21 +105,19 @@ gpio_path (uint32_t pin, const char *attr, char *buf, size_t buf_size) noexcept
 
 /** @brief Export a GPIO pin via sysfs (idempotent: ignores errors). */
 [[nodiscard]] int
-gpio_export (uint32_t pin) noexcept
-{
+gpio_export (uint32_t pin) noexcept {
     char export_path[64];
     std::snprintf (export_path, sizeof (export_path), "%s/export", k_gpio_sysfs);
     char pin_str[16];
     std::snprintf (pin_str, sizeof (pin_str), "%u", pin);
     /* Ignore failure: pin may already be exported. */
-    (void)sysfs_write (export_path, pin_str);
+    (void) sysfs_write (export_path, pin_str);
     return 0;
 }
 
 /** @brief Set GPIO pin direction via sysfs. */
 [[nodiscard]] int
-gpio_direction (uint32_t pin, const char *direction) noexcept
-{
+gpio_direction (uint32_t pin, const char *direction) noexcept {
     char path[96];
     const char *p = gpio_path (pin, direction, path, sizeof (path));
     if (p == nullptr)
@@ -134,8 +127,7 @@ gpio_direction (uint32_t pin, const char *direction) noexcept
 
 /** @brief Set GPIO pin value via sysfs. */
 [[nodiscard]] int
-gpio_set_value (uint32_t pin, uint8_t value) noexcept
-{
+gpio_set_value (uint32_t pin, uint8_t value) noexcept {
     char path[96];
     const char *p = gpio_path (pin, "value", path, sizeof (path));
     if (p == nullptr)
@@ -145,8 +137,7 @@ gpio_set_value (uint32_t pin, uint8_t value) noexcept
 
 /** @brief Get GPIO pin value via sysfs. Returns 0 or 1, or -1 on error. */
 [[nodiscard]] int
-gpio_get_value (uint32_t pin) noexcept
-{
+gpio_get_value (uint32_t pin) noexcept {
     char path[96];
     const char *p = gpio_path (pin, "value", path, sizeof (path));
     if (p == nullptr)
@@ -159,17 +150,15 @@ gpio_get_value (uint32_t pin) noexcept
 
 /** @brief Best-effort microsecond delay using nanosleep. */
 void
-delay_us_cpp (uint32_t us) noexcept
-{
+delay_us_cpp (uint32_t us) noexcept {
     if (us == 0u)
         return;
     timespec ts;
     ts.tv_sec = static_cast<time_t> (us / 1000000u);
     ts.tv_nsec = static_cast<long> ((us % 1000000u) * 1000L);
-    while (nanosleep (&ts, &ts) != 0)
-        {
+    while (nanosleep (&ts, &ts) != 0) {
         /* EINTR: retry with remaining time already in ts. */
-        }
+    }
 }
 
 } // namespace
@@ -181,122 +170,106 @@ delay_us_cpp (uint32_t us) noexcept
 extern "C" {
 
 void
-bus_gpio_set (uint32_t /*gpio_base*/, uint32_t pin, uint8_t value) noexcept
-{
-    (void)gpio_export (pin);
-    (void)gpio_direction (pin, "out");
-    (void)gpio_set_value (pin, value);
+bus_gpio_set (uint32_t /*gpio_base*/, uint32_t pin, uint8_t value) noexcept {
+    (void) gpio_export (pin);
+    (void) gpio_direction (pin, "out");
+    (void) gpio_set_value (pin, value);
 }
 
 uint8_t
-bus_gpio_get (uint32_t /*gpio_base*/, uint32_t pin) noexcept
-{
-    (void)gpio_export (pin);
-    (void)gpio_direction (pin, "in");
+bus_gpio_get (uint32_t /*gpio_base*/, uint32_t pin) noexcept {
+    (void) gpio_export (pin);
+    (void) gpio_direction (pin, "in");
     int v = gpio_get_value (pin);
     return static_cast<uint8_t> (v < 0 ? 0 : v);
 }
 
 void
-bus_i2c_delay_us (uint32_t us) noexcept
-{
+bus_i2c_delay_us (uint32_t us) noexcept {
     delay_us_cpp (us);
 }
 
 void
-bus_i2c_start (uint32_t /*gpio_base*/, uint32_t sda_pin, uint32_t scl_pin) noexcept
-{
+bus_i2c_start (uint32_t /*gpio_base*/, uint32_t sda_pin, uint32_t scl_pin) noexcept {
     /* Start condition: SDA goes low while SCL is high. */
-    (void)gpio_export (sda_pin);
-    (void)gpio_export (scl_pin);
-    (void)gpio_direction (scl_pin, "out");
-    (void)gpio_direction (sda_pin, "out");
-    (void)gpio_set_value (sda_pin, 1u);   /* SDA high while SCL high */
-    (void)gpio_set_value (scl_pin, 1u);   /* SCL high */
+    (void) gpio_export (sda_pin);
+    (void) gpio_export (scl_pin);
+    (void) gpio_direction (scl_pin, "out");
+    (void) gpio_direction (sda_pin, "out");
+    (void) gpio_set_value (sda_pin, 1u); /* SDA high while SCL high */
+    (void) gpio_set_value (scl_pin, 1u); /* SCL high */
     bus_i2c_delay_us (4u);
-    (void)gpio_set_value (sda_pin, 0u);   /* SDA low -> start */
+    (void) gpio_set_value (sda_pin, 0u); /* SDA low -> start */
     bus_i2c_delay_us (4u);
 }
 
 void
-bus_i2c_stop (uint32_t /*gpio_base*/, uint32_t sda_pin, uint32_t scl_pin) noexcept
-{
+bus_i2c_stop (uint32_t /*gpio_base*/, uint32_t sda_pin, uint32_t scl_pin) noexcept {
     /* Stop condition: SDA goes high while SCL is high. */
-    (void)gpio_direction (sda_pin, "out");
-    (void)gpio_direction (scl_pin, "out");
-    (void)gpio_set_value (sda_pin, 0u);   /* SDA low while SCL high */
-    (void)gpio_set_value (scl_pin, 1u);   /* SCL high */
+    (void) gpio_direction (sda_pin, "out");
+    (void) gpio_direction (scl_pin, "out");
+    (void) gpio_set_value (sda_pin, 0u); /* SDA low while SCL high */
+    (void) gpio_set_value (scl_pin, 1u); /* SCL high */
     bus_i2c_delay_us (4u);
-    (void)gpio_set_value (sda_pin, 1u);   /* SDA high -> stop */
+    (void) gpio_set_value (sda_pin, 1u); /* SDA high -> stop */
     bus_i2c_delay_us (4u);
 }
 
 uint8_t
-bus_i2c_write_bit (uint32_t /*gpio_base*/, uint32_t sda_pin,
-                   uint32_t scl_pin, uint8_t bit) noexcept
-{
+bus_i2c_write_bit (uint32_t /*gpio_base*/, uint32_t sda_pin, uint32_t scl_pin, uint8_t bit) noexcept {
     /* Drive SDA according to bit. */
-    (void)gpio_direction (sda_pin, "out");
-    (void)gpio_set_value (sda_pin, bit != 0u ? 1u : 0u);
+    (void) gpio_direction (sda_pin, "out");
+    (void) gpio_set_value (sda_pin, bit != 0u ? 1u : 0u);
     bus_i2c_delay_us (2u);
     /* Pulse SCL high. */
-    (void)gpio_direction (scl_pin, "out");
-    (void)gpio_set_value (scl_pin, 1u);
+    (void) gpio_direction (scl_pin, "out");
+    (void) gpio_set_value (scl_pin, 1u);
     bus_i2c_delay_us (2u);
     /* Sample SDA while SCL high (ACK/NACK from slave). */
-    (void)gpio_direction (sda_pin, "in");
+    (void) gpio_direction (sda_pin, "in");
     bus_i2c_delay_us (1u);
     uint8_t ack = static_cast<uint8_t> (gpio_get_value (sda_pin));
-    (void)gpio_set_value (scl_pin, 0u);   /* SCL low */
+    (void) gpio_set_value (scl_pin, 0u); /* SCL low */
     bus_i2c_delay_us (2u);
-    return ack;   /* 0 = ACK, 1 = NACK */
+    return ack; /* 0 = ACK, 1 = NACK */
 }
 
 uint8_t
-bus_i2c_read_bit (uint32_t /*gpio_base*/, uint32_t sda_pin,
-                  uint32_t scl_pin) noexcept
-{
+bus_i2c_read_bit (uint32_t /*gpio_base*/, uint32_t sda_pin, uint32_t scl_pin) noexcept {
     /* Release SDA for read. */
-    (void)gpio_direction (sda_pin, "in");
+    (void) gpio_direction (sda_pin, "in");
     bus_i2c_delay_us (2u);
     /* Pulse SCL high. */
-    (void)gpio_direction (scl_pin, "out");
-    (void)gpio_set_value (scl_pin, 1u);
+    (void) gpio_direction (scl_pin, "out");
+    (void) gpio_set_value (scl_pin, 1u);
     bus_i2c_delay_us (2u);
     uint8_t bit = static_cast<uint8_t> (gpio_get_value (sda_pin));
-    (void)gpio_set_value (scl_pin, 0u);   /* SCL low */
+    (void) gpio_set_value (scl_pin, 0u); /* SCL low */
     bus_i2c_delay_us (2u);
     return bit;
 }
 
 uint8_t
-bus_i2c_write_byte (uint32_t gpio_base, uint32_t sda_pin,
-                    uint32_t scl_pin, uint8_t byte) noexcept
-{
+bus_i2c_write_byte (uint32_t gpio_base, uint32_t sda_pin, uint32_t scl_pin, uint8_t byte) noexcept {
     /* Write MSB-first, 8 bits, then read ACK/NACK. */
-    for (int32_t bit = 7; bit >= 0; --bit)
-        {
+    for (int32_t bit = 7; bit >= 0; --bit) {
         uint8_t b = static_cast<uint8_t> ((byte >> bit) & 1u);
-        (void)bus_i2c_write_bit (gpio_base, sda_pin, scl_pin, b);
-        }
+        (void) bus_i2c_write_bit (gpio_base, sda_pin, scl_pin, b);
+    }
     /* Read ACK/NACK after 8 bits. */
     return bus_i2c_read_bit (gpio_base, sda_pin, scl_pin);
 }
 
 uint8_t
-bus_i2c_read_byte (uint32_t gpio_base, uint32_t sda_pin,
-                   uint32_t scl_pin, uint8_t ack) noexcept
-{
+bus_i2c_read_byte (uint32_t gpio_base, uint32_t sda_pin, uint32_t scl_pin, uint8_t ack) noexcept {
     /* Read 8 bits MSB-first. */
     uint8_t val = 0u;
-    for (int32_t bit = 7; bit >= 0; --bit)
-        {
+    for (int32_t bit = 7; bit >= 0; --bit) {
         uint8_t b = bus_i2c_read_bit (gpio_base, sda_pin, scl_pin);
         val = static_cast<uint8_t> ((val << 1) | b);
-        }
+    }
     /* Send ACK (ack==0) or NACK (ack!=0). */
-    (void)bus_i2c_write_bit (gpio_base, sda_pin, scl_pin,
-                             ack != 0u ? 1u : 0u);
+    (void) bus_i2c_write_bit (gpio_base, sda_pin, scl_pin, ack != 0u ? 1u : 0u);
     return val;
 }
 

@@ -19,6 +19,4 @@
 
 #include "kernel/device-driver/gnss/nmea/nmea_checksum.hpp"
 
-namespace zzs::kernel::device::driver::gnss::nmea {
-
-} // namespace
+namespace zzs::kernel::device::driver::gnss::nmea {} // namespace zzs::kernel::device::driver::gnss::nmea

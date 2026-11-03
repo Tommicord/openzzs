@@ -88,14 +88,14 @@ namespace zzs::kernel::builtins {
 inline void
 prefetch (const void *const addr, const int rw, const int locality) noexcept {
 #if defined(_MSC_VER)
-  /* Map locality to an MSVC _MM_HINT. */
-  static const int _S_hint[4] = {_MM_HINT_T0, _MM_HINT_T1, _MM_HINT_T2, _MM_HINT_NTA};
-  const int hint = locality < 0 ? _MM_HINT_T0 : (locality > 3 ? _MM_HINT_NTA : _S_hint[locality]);
-  _mm_prefetch (static_cast<const char *> (addr), hint);
+    /* Map locality to an MSVC _MM_HINT. */
+    static const int _S_hint[4] = {_MM_HINT_T0, _MM_HINT_T1, _MM_HINT_T2, _MM_HINT_NTA};
+    const int hint = locality < 0 ? _MM_HINT_T0 : (locality > 3 ? _MM_HINT_NTA : _S_hint[locality]);
+    _mm_prefetch (static_cast<const char *> (addr), hint);
 #else
-  (void) addr;
-  (void) rw;
-  (void) locality;
+    (void) addr;
+    (void) rw;
+    (void) locality;
 #endif
 }
 
@@ -104,9 +104,9 @@ template <typename T>
 [[nodiscard]] inline constexpr bool
 likely (const T &expr) noexcept {
 #if defined(__GNUC__) || defined(__clang__)
-  return __builtin_expect (!!static_cast<bool> (expr), 1);
+    return __builtin_expect (!!static_cast<bool> (expr), 1);
 #else
-  return static_cast<bool> (expr);
+    return static_cast<bool> (expr);
 #endif
 }
 
@@ -115,9 +115,9 @@ template <typename T>
 [[nodiscard]] inline constexpr bool
 unlikely (const T &expr) noexcept {
 #if defined(__GNUC__) || defined(__clang__)
-  return __builtin_expect (!!static_cast<bool> (expr), 0);
+    return __builtin_expect (!!static_cast<bool> (expr), 0);
 #else
-  return static_cast<bool> (expr);
+    return static_cast<bool> (expr);
 #endif
 }
 
@@ -129,26 +129,26 @@ template <typename T>
 [[nodiscard]] inline bool
 mul_overflow (const T a, const T b, T &res) noexcept {
 #if defined(ZZS_BUILTINS_HAS_OVERFLOW_BUILTINS)
-  return __builtin_mul_overflow (a, b, &res);
+    return __builtin_mul_overflow (a, b, &res);
 #else
-  using U = typename std::make_unsigned<T>::type;
-  const U ua = static_cast<U> (a);
-  const U ub = static_cast<U> (b);
-  const U prod = static_cast<U> (ua * ub);
-  res = static_cast<T> (prod);
+    using U = typename std::make_unsigned<T>::type;
+    const U ua = static_cast<U> (a);
+    const U ub = static_cast<U> (b);
+    const U prod = static_cast<U> (ua * ub);
+    res = static_cast<T> (prod);
 
-  if constexpr (std::is_signed_v<T>) {
-    constexpr U k_sign_bit = U (1) << (sizeof (T) * 8u - 1u);
-    constexpr U k_pos_max = static_cast<U> (~k_sign_bit);
-    const bool neg = (a < T (0)) != (b < T (0));
-    const U ma = (a < T (0)) ? static_cast<U> (U (0) - ua) : ua;
-    const U mb = (b < T (0)) ? static_cast<U> (U (0) - ub) : ub;
-    const U limit = neg ? k_sign_bit : k_pos_max;
-    return ma != U (0) && mb != U (0) && ma > static_cast<U> (limit / mb);
-  } else {
-    const T max = static_cast<T> (~T (0));
-    return b != T (0) && a > static_cast<T> (max / b);
-  }
+    if constexpr (std::is_signed_v<T>) {
+        constexpr U k_sign_bit = U (1) << (sizeof (T) * 8u - 1u);
+        constexpr U k_pos_max = static_cast<U> (~k_sign_bit);
+        const bool neg = (a < T (0)) != (b < T (0));
+        const U ma = (a < T (0)) ? static_cast<U> (U (0) - ua) : ua;
+        const U mb = (b < T (0)) ? static_cast<U> (U (0) - ub) : ub;
+        const U limit = neg ? k_sign_bit : k_pos_max;
+        return ma != U (0) && mb != U (0) && ma > static_cast<U> (limit / mb);
+    } else {
+        const T max = static_cast<T> (~T (0));
+        return b != T (0) && a > static_cast<T> (max / b);
+    }
 #endif
 }
 
@@ -157,24 +157,24 @@ template <typename T>
 [[nodiscard]] inline bool
 add_overflow (const T a, const T b, T &res) noexcept {
 #if defined(ZZS_BUILTINS_HAS_OVERFLOW_BUILTINS)
-  return __builtin_add_overflow (a, b, &res);
+    return __builtin_add_overflow (a, b, &res);
 #else
-  using U = typename std::make_unsigned<T>::type;
-  const U sum = static_cast<U> (static_cast<U> (a) + static_cast<U> (b));
-  res = static_cast<T> (sum);
+    using U = typename std::make_unsigned<T>::type;
+    const U sum = static_cast<U> (static_cast<U> (a) + static_cast<U> (b));
+    res = static_cast<T> (sum);
 
-  if constexpr (std::is_signed_v<T>) {
-    constexpr U k_sign_bit = U (1) << (sizeof (T) * 8u - 1u);
-    constexpr T k_min = static_cast<T> (k_sign_bit);
-    constexpr T k_max = static_cast<T> (~k_sign_bit);
-    if (b > T (0))
-      return a > static_cast<T> (k_max - b);
-    if (b < T (0))
-      return a < static_cast<T> (k_min - b);
-    return false;
-  } else {
-    return sum < static_cast<U> (a);
-  }
+    if constexpr (std::is_signed_v<T>) {
+        constexpr U k_sign_bit = U (1) << (sizeof (T) * 8u - 1u);
+        constexpr T k_min = static_cast<T> (k_sign_bit);
+        constexpr T k_max = static_cast<T> (~k_sign_bit);
+        if (b > T (0))
+            return a > static_cast<T> (k_max - b);
+        if (b < T (0))
+            return a < static_cast<T> (k_min - b);
+        return false;
+    } else {
+        return sum < static_cast<U> (a);
+    }
 #endif
 }
 
@@ -183,24 +183,24 @@ template <typename T>
 [[nodiscard]] inline bool
 sub_overflow (const T a, const T b, T &res) noexcept {
 #if defined(ZZS_BUILTINS_HAS_OVERFLOW_BUILTINS)
-  return __builtin_sub_overflow (a, b, &res);
+    return __builtin_sub_overflow (a, b, &res);
 #else
-  using U = typename std::make_unsigned<T>::type;
-  const U diff = static_cast<U> (static_cast<U> (a) - static_cast<U> (b));
-  res = static_cast<T> (diff);
+    using U = typename std::make_unsigned<T>::type;
+    const U diff = static_cast<U> (static_cast<U> (a) - static_cast<U> (b));
+    res = static_cast<T> (diff);
 
-  if constexpr (std::is_signed_v<T>) {
-    constexpr U k_sign_bit = U (1) << (sizeof (T) * 8u - 1u);
-    constexpr T k_min = static_cast<T> (k_sign_bit);
-    constexpr T k_max = static_cast<T> (~k_sign_bit);
-    if (b > T (0))
-      return a < static_cast<T> (k_min + b);
-    if (b < T (0))
-      return a > static_cast<T> (k_max + b);
-    return false;
-  } else {
-    return a < b;
-  }
+    if constexpr (std::is_signed_v<T>) {
+        constexpr U k_sign_bit = U (1) << (sizeof (T) * 8u - 1u);
+        constexpr T k_min = static_cast<T> (k_sign_bit);
+        constexpr T k_max = static_cast<T> (~k_sign_bit);
+        if (b > T (0))
+            return a < static_cast<T> (k_min + b);
+        if (b < T (0))
+            return a > static_cast<T> (k_max + b);
+        return false;
+    } else {
+        return a < b;
+    }
 #endif
 }
 
@@ -210,12 +210,12 @@ sub_overflow (const T a, const T b, T &res) noexcept {
 [[noreturn]] inline void
 unreachable () noexcept {
 #if defined(__GNUC__) || defined(__clang__)
-  __builtin_unreachable ();
+    __builtin_unreachable ();
 #elif defined(_MSC_VER)
-  __assume (false);
+    __assume (false);
 #else
-  for (;;) {
-  }
+    for (;;) {
+    }
 #endif
 }
 
@@ -225,9 +225,9 @@ unreachable () noexcept {
 inline void *
 builtin_memcpy (void *const dst, const void *const src, const size_t n) noexcept {
 #if defined(__GNUC__) || defined(__clang__)
-  return __builtin_memcpy (dst, src, n);
+    return __builtin_memcpy (dst, src, n);
 #else
-  return std::memcpy (dst, src, n);
+    return std::memcpy (dst, src, n);
 #endif
 }
 
@@ -236,9 +236,9 @@ builtin_memcpy (void *const dst, const void *const src, const size_t n) noexcept
 inline void *
 builtin_memset (void *const dst, const int c, const size_t n) noexcept {
 #if defined(__GNUC__) || defined(__clang__)
-  return __builtin_memset (dst, c, n);
+    return __builtin_memset (dst, c, n);
 #else
-  return std::memset (dst, c, n);
+    return std::memset (dst, c, n);
 #endif
 }
 
@@ -326,9 +326,9 @@ builtin_memset (void *const dst, const int c, const size_t n) noexcept {
  */
 #ifndef ZZS_ASSUME_ALIGNED_CHECK
 #if defined(__GNUC__) || defined(__clang__)
-#define ZZS_ASSUME_ALIGNED_CHECK(ptr, alignment)                                              \
-  static_assert (alignof (typename std::remove_pointer<decltype (ptr)>::type) >= (alignment), \
-                 "pointee type not aligned")
+#define ZZS_ASSUME_ALIGNED_CHECK(ptr, alignment)                                                \
+    static_assert (alignof (typename std::remove_pointer<decltype (ptr)>::type) >= (alignment), \
+                   "pointee type not aligned")
 #else
 #define ZZS_ASSUME_ALIGNED_CHECK(ptr, alignment) (void) 0
 #endif

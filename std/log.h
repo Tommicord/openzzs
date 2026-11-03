@@ -29,10 +29,10 @@ extern "C" {
 
 /** @brief Log severity levels. */
 typedef enum ZZS_std_log_level {
-  ZZS_LOG_LEVEL_ERROR = 1,
-  ZZS_LOG_LEVEL_WARN = 2,
-  ZZS_LOG_LEVEL_INFO = 3,
-  ZZS_LOG_LEVEL_DEBUG = 4,
+    ZZS_LOG_LEVEL_ERROR = 1,
+    ZZS_LOG_LEVEL_WARN = 2,
+    ZZS_LOG_LEVEL_INFO = 3,
+    ZZS_LOG_LEVEL_DEBUG = 4,
 } ZZS_std_log_level_t;
 
 /** @brief Initialise the logging subsystem. */
@@ -43,7 +43,7 @@ ZZS_std_log_init (void) noexcept {
 /** @brief Set the minimum log level. */
 static inline void
 ZZS_std_log_set_min_level (ZZS_std_log_level_t level) noexcept {
-  (void) level;
+    (void) level;
 }
 
 /** @brief Shut down the logging subsystem. */

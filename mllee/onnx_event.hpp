@@ -31,28 +31,28 @@
 namespace zzs::mllee::onnx {
 /** @brief One streaming event emitted by the ONNX reader. */
 enum class EventKind : uint8_t {
-  NONE = 0,
-  MODEL_BEGIN,
-  OPSET,
-  MODEL_END,
-  GRAPH_BEGIN,
-  GRAPH_END,
-  NODE_BEGIN,
-  NODE_INPUT,
-  NODE_OUTPUT,
-  NODE_END,
-  ATTRIBUTE_BEGIN,
-  ATTRIBUTE_ELEMENT,
-  ATTRIBUTE_END,
-  TENSOR_BEGIN,
-  TENSOR_DIM,
-  TENSOR_DATA,
-  TENSOR_END,
-  VALUE_BEGIN,
-  VALUE_DIM,
-  VALUE_END,
-  EXTERNAL_DATA,
-  DONE,
+    NONE = 0,
+    MODEL_BEGIN,
+    OPSET,
+    MODEL_END,
+    GRAPH_BEGIN,
+    GRAPH_END,
+    NODE_BEGIN,
+    NODE_INPUT,
+    NODE_OUTPUT,
+    NODE_END,
+    ATTRIBUTE_BEGIN,
+    ATTRIBUTE_ELEMENT,
+    ATTRIBUTE_END,
+    TENSOR_BEGIN,
+    TENSOR_DIM,
+    TENSOR_DATA,
+    TENSOR_END,
+    VALUE_BEGIN,
+    VALUE_DIM,
+    VALUE_END,
+    EXTERNAL_DATA,
+    DONE,
 };
 
 /**
@@ -65,30 +65,30 @@ enum class EventKind : uint8_t {
  * copy them with Loader::copy() without the loader buffering them.
  */
 struct Event {
-  EventKind _M_kind = EventKind::NONE;
-  TensorRole _M_role = TensorRole::NONE;
-  uint16_t _M_index = 0;
-  uint32_t _M_offset = 0;
-  uint64_t _M_value = 0;
-  const void *_M_info = nullptr;
-  uint32_t _M_length = 0;
-  uint8_t _M_flags = 0;
-  uint8_t _M_reserved[3]{};
+    EventKind _M_kind = EventKind::NONE;
+    TensorRole _M_role = TensorRole::NONE;
+    uint16_t _M_index = 0;
+    uint32_t _M_offset = 0;
+    uint64_t _M_value = 0;
+    const void *_M_info = nullptr;
+    uint32_t _M_length = 0;
+    uint8_t _M_flags = 0;
+    uint8_t _M_reserved[3]{};
 
-  [[nodiscard]] const ModelInfo *
-  model () const noexcept {
-    return static_cast<const ModelInfo *> (this->_M_info);
-  }
+    [[nodiscard]] const ModelInfo *
+    model () const noexcept {
+        return static_cast<const ModelInfo *> (this->_M_info);
+    }
 
-  [[nodiscard]] const NodeInfo *
-  node () const noexcept {
-    return static_cast<const NodeInfo *> (this->_M_info);
-  }
+    [[nodiscard]] const NodeInfo *
+    node () const noexcept {
+        return static_cast<const NodeInfo *> (this->_M_info);
+    }
 
-  [[nodiscard]] const TensorInfo *
-  tensor () const noexcept {
-    return static_cast<const TensorInfo *> (this->_M_info);
-  }
+    [[nodiscard]] const TensorInfo *
+    tensor () const noexcept {
+        return static_cast<const TensorInfo *> (this->_M_info);
+    }
 };
 
 static_assert (sizeof (Event) <= 32u, "onnx::Event exceeds its stack budget");
@@ -97,17 +97,17 @@ static_assert (sizeof (Event) <= 32u, "onnx::Event exceeds its stack budget");
 using EventFn = bool (*) (void *_M_context, const Event &_M_event) noexcept;
 
 struct Visitor {
-  EventFn _M_on_event = nullptr;
-  void *_M_context = nullptr;
+    EventFn _M_on_event = nullptr;
+    void *_M_context = nullptr;
 
-  [[nodiscard]] bool
-  emit (const Event &event) const noexcept {
-    return this->_M_on_event == nullptr ? true : this->_M_on_event (this->_M_context, event);
-  }
+    [[nodiscard]] bool
+    emit (const Event &event) const noexcept {
+        return this->_M_on_event == nullptr ? true : this->_M_on_event (this->_M_context, event);
+    }
 };
 
 [[nodiscard]] inline Visitor
 visitor (const EventFn function, void *const context = nullptr) noexcept {
-  return Visitor{function, context};
+    return Visitor{function, context};
 }
 } // namespace zzs::mllee::onnx

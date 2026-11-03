@@ -35,8 +35,7 @@
 namespace zzs::kernel::device::driver::wifi::platform::freertos {
 
 /** @brief Build the FreeRTOS WiFi HAL vtable. */
-[[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *,
-                              zzs::kernel::Status>
+[[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *, zzs::kernel::Status>
 create_freertos_wifi_hal (WifiHal &hal_out) noexcept;
 
 /** @} */

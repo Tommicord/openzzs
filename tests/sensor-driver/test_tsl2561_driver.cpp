@@ -19,25 +19,21 @@
  * @brief Unit tests for the TSL2561 light sensor driver (mock bus).
  */
 
-#include <catch2/catch_test_macros.hpp>
-
-#include <cstdint>
-
 #include "kernel/sensor-driver/sensors/tsl2561/tsl2561.hpp"
 #include "kernel/sensor-driver/sensors/tsl2561/tsl2561_reg.h"
-
 #include "test_mock_bus.hpp"
 
-namespace
-{
+#include <catch2/catch_test_macros.hpp>
+#include <cstdint>
+
+namespace {
 using namespace zzs::kernel;
 using namespace zzs::kernel::sensor::driver::sensors;
 using namespace zzs::kernel::sensor::driver::sensors::tsl2561;
 using namespace zzs::kernel::sensor::driver::fixed;
 } // namespace
 
-TEST_CASE ("Power on/off", "[sensor-driver][tsl2561][power]")
-{
+TEST_CASE ("Power on/off", "[sensor-driver][tsl2561][power]") {
     test::MockBus bus;
     bus.set_initialized (true);
 
@@ -50,8 +46,7 @@ TEST_CASE ("Power on/off", "[sensor-driver][tsl2561][power]")
     REQUIRE (bus.get_reg (RegControl | CmdRegisterBit) == ControlPowerOn);
 }
 
-TEST_CASE ("Gain and timing configuration", "[sensor-driver][tsl2561][config]")
-{
+TEST_CASE ("Gain and timing configuration", "[sensor-driver][tsl2561][config]") {
     test::MockBus bus;
     bus.set_initialized (true);
 
@@ -62,12 +57,10 @@ TEST_CASE ("Gain and timing configuration", "[sensor-driver][tsl2561][config]")
     REQUIRE (drv.init () == zzs::kernel::Status::OK);
 
     /* 1x gain, 402 ms integration time. */
-    REQUIRE (bus.get_reg (RegTiming | CmdRegisterBit) ==
-             static_cast<uint8_t> (TimingGain1x | TimingInteg402ms));
+    REQUIRE (bus.get_reg (RegTiming | CmdRegisterBit) == static_cast<uint8_t> (TimingGain1x | TimingInteg402ms));
 }
 
-TEST_CASE ("Two-channel read (CH0, CH1)", "[sensor-driver][tsl2561][read]")
-{
+TEST_CASE ("Two-channel read (CH0, CH1)", "[sensor-driver][tsl2561][read]") {
     test::MockBus bus;
     bus.set_initialized (true);
 
@@ -79,20 +72,20 @@ TEST_CASE ("Two-channel read (CH0, CH1)", "[sensor-driver][tsl2561][read]")
 
     /* CH0=500, CH1=100 (little-endian pairs). */
     uint8_t data[4] = {
-        static_cast<uint8_t> (500 & 0xFF), static_cast<uint8_t> ((500 >> 8) & 0xFF),
-        static_cast<uint8_t> (100 & 0xFF), static_cast<uint8_t> ((100 >> 8) & 0xFF),
+        static_cast<uint8_t> (500 & 0xFF),
+        static_cast<uint8_t> ((500 >> 8) & 0xFF),
+        static_cast<uint8_t> (100 & 0xFF),
+        static_cast<uint8_t> ((100 >> 8) & 0xFF),
     };
     bus.set_block (RegChan0Low | CmdRegisterBit | CmdAutoIncBit, data, 4u);
 
     sensor::Sample sample;
     REQUIRE (drv.read_sample (sample) == zzs::kernel::Status::OK);
     REQUIRE (sample._M_channel == sensor::Channel::LIGHT);
-    REQUIRE (sample._M_sample_q15 == q11_to_q15 (
-        tsl2561_compute_lux_q11 (500, 100)));
+    REQUIRE (sample._M_sample_q15 == q11_to_q15 (tsl2561_compute_lux_q11 (500, 100)));
 }
 
-TEST_CASE ("Q11 lux computation", "[sensor-driver][tsl2561][lux]")
-{
+TEST_CASE ("Q11 lux computation", "[sensor-driver][tsl2561][lux]") {
     /* Dark: ch0 == 0 -> lux 0. */
     REQUIRE (tsl2561_compute_lux_q11 (0, 0) == 0);
 
@@ -104,9 +97,7 @@ TEST_CASE ("Q11 lux computation", "[sensor-driver][tsl2561][lux]")
     REQUIRE (tsl2561_compute_lux_q11 (100, 500) == 0);
 }
 
-TEST_CASE ("Edge cases: saturation (CH0 max), dark condition (CH0=0)",
-           "[sensor-driver][tsl2561][edge]")
-{
+TEST_CASE ("Edge cases: saturation (CH0 max), dark condition (CH0=0)", "[sensor-driver][tsl2561][edge]") {
     /* CH0 max (0xFFFF) with CH1=0 -> range 1, large lux clamped to Q11 max. */
     q11_t lux = tsl2561_compute_lux_q11 (0xFFFFu, 0u);
     REQUIRE (lux <= _S_q11_max);

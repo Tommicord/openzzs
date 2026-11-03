@@ -10,9 +10,9 @@
 
 #pragma once
 
-#include <cstdint>
-
 #include "kernel/kernel_sensor_types.hpp"
+
+#include <cstdint>
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,9 +31,8 @@ extern "C" {
  * @param sample_q15 Q15 fixed-point sample value
  * @param timestamp_ns Monotonic nanosecond timestamp
  */
-void feed_native_sample (zzs::kernel::sensor::Channel channel,
-                         int16_t sample_q15,
-                         uint64_t timestamp_ns) noexcept;
+void
+feed_native_sample (zzs::kernel::sensor::Channel channel, int16_t sample_q15, uint64_t timestamp_ns) noexcept;
 
 #ifdef __cplusplus
 } // extern "C"

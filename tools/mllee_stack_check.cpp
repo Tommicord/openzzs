@@ -30,9 +30,8 @@
  * output for mllee_worst_case and any outlined mllee callees.
  */
 extern "C" int
-mllee_worst_case (zzs::mllee::Core &core, const uint8_t *model, const uint32_t model_len,
-                  const std::int8_t *input, const uint32_t input_len)
-{
+mllee_worst_case (zzs::mllee::Core &core, const uint8_t *model, const uint32_t model_len, const std::int8_t *input,
+                  const uint32_t input_len) {
     const auto result = core.run (model, model_len, input, input_len);
     return result.has_value () ? 1 : 0;
 }

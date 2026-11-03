@@ -75,52 +75,52 @@ namespace zzs::mllee {
  * no storage beyond a single byte is needed.
  */
 struct Error {
-  enum class Kind : uint8_t {
-    OK = 0,
-    TRUNCATED,
-    CORRUPT_STREAM,
-    BAD_MAGIC,
-    BAD_VERSION,
-    BAD_LAYOUT,
-    OUT_OF_RANGE,
-    ARENA_OVERFLOW,
-    UNSUPPORTED,
-    INTERNAL,
-  };
+    enum class Kind : uint8_t {
+        OK = 0,
+        TRUNCATED,
+        CORRUPT_STREAM,
+        BAD_MAGIC,
+        BAD_VERSION,
+        BAD_LAYOUT,
+        OUT_OF_RANGE,
+        ARENA_OVERFLOW,
+        UNSUPPORTED,
+        INTERNAL,
+    };
 
-  Error () = delete;
-  explicit constexpr Error (const Kind kind) noexcept : _M_kind (kind) {
-  }
+    Error () = delete;
+    explicit constexpr Error (const Kind kind) noexcept : _M_kind (kind) {
+    }
 
-  [[nodiscard]] constexpr Kind
-  kind () const noexcept {
-    return this->_M_kind;
-  }
+    [[nodiscard]] constexpr Kind
+    kind () const noexcept {
+        return this->_M_kind;
+    }
 
-  [[nodiscard]] constexpr bool
-  is_ok () const noexcept {
-    return this->_M_kind == Kind::OK;
-  }
+    [[nodiscard]] constexpr bool
+    is_ok () const noexcept {
+        return this->_M_kind == Kind::OK;
+    }
 
-  [[nodiscard]] constexpr bool
-  operator== (const Error &other) const noexcept {
-    return this->_M_kind == other._M_kind;
-  }
+    [[nodiscard]] constexpr bool
+    operator== (const Error &other) const noexcept {
+        return this->_M_kind == other._M_kind;
+    }
 
-  [[nodiscard]] constexpr explicit
-  operator bool () const noexcept {
-    return this->_M_kind != Kind::OK;
-  }
+    [[nodiscard]] constexpr explicit
+    operator bool () const noexcept {
+        return this->_M_kind != Kind::OK;
+    }
 
-private:
-  Kind _M_kind;
+  private:
+    Kind _M_kind;
 };
 
 using Status = Error::Kind;
 
 [[nodiscard]] constexpr bool
 status_ok (const Status status) noexcept {
-  return status == Status::OK;
+    return status == Status::OK;
 }
 
 /**
@@ -133,45 +133,45 @@ status_ok (const Status status) noexcept {
  */
 [[nodiscard]] constexpr uint16_t
 _S_crc16_update (uint16_t crc, const uint8_t byte) noexcept {
-  crc = static_cast<uint16_t> (crc ^ (static_cast<uint16_t> (byte) << 8));
-  for (int bit = 0; bit < 8; ++bit)
-    crc = static_cast<uint16_t> ((crc & 0x8000u) != 0 ? static_cast<uint16_t> ((crc << 1) ^ 0x1021u)
-                                                      : static_cast<uint16_t> (crc << 1));
-  return crc;
+    crc = static_cast<uint16_t> (crc ^ (static_cast<uint16_t> (byte) << 8));
+    for (int bit = 0; bit < 8; ++bit)
+        crc = static_cast<uint16_t> ((crc & 0x8000u) != 0 ? static_cast<uint16_t> ((crc << 1) ^ 0x1021u)
+                                                          : static_cast<uint16_t> (crc << 1));
+    return crc;
 }
 
 [[nodiscard]] constexpr uint16_t
 _S_crc16 (const uint8_t *data, const uint32_t length) noexcept {
-  uint16_t crc = 0xFFFFu;
-  for (uint32_t i = 0; i < length; ++i)
-    crc = _S_crc16_update (crc, data[i]);
-  return crc;
+    uint16_t crc = 0xFFFFu;
+    for (uint32_t i = 0; i < length; ++i)
+        crc = _S_crc16_update (crc, data[i]);
+    return crc;
 }
 
 [[nodiscard]] constexpr const char *
 status_name (const Status status) noexcept {
-  switch (status) {
-  case Status::OK:
-    return "ok";
-  case Status::TRUNCATED:
-    return "truncated";
-  case Status::CORRUPT_STREAM:
-    return "corrupt_stream";
-  case Status::BAD_MAGIC:
-    return "bad_magic";
-  case Status::BAD_VERSION:
-    return "bad_version";
-  case Status::BAD_LAYOUT:
-    return "bad_layout";
-  case Status::OUT_OF_RANGE:
-    return "out_of_range";
-  case Status::ARENA_OVERFLOW:
-    return "arena_overflow";
-  case Status::UNSUPPORTED:
-    return "unsupported";
-  case Status::INTERNAL:
-    return "internal";
-  }
-  return "unknown";
+    switch (status) {
+    case Status::OK:
+        return "ok";
+    case Status::TRUNCATED:
+        return "truncated";
+    case Status::CORRUPT_STREAM:
+        return "corrupt_stream";
+    case Status::BAD_MAGIC:
+        return "bad_magic";
+    case Status::BAD_VERSION:
+        return "bad_version";
+    case Status::BAD_LAYOUT:
+        return "bad_layout";
+    case Status::OUT_OF_RANGE:
+        return "out_of_range";
+    case Status::ARENA_OVERFLOW:
+        return "arena_overflow";
+    case Status::UNSUPPORTED:
+        return "unsupported";
+    case Status::INTERNAL:
+        return "internal";
+    }
+    return "unknown";
 }
 } // namespace zzs::mllee

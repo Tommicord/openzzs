@@ -57,13 +57,13 @@ using q31_t = int64_t;
 /** @brief Wrap a raw int64 as a Q31 value without range checking. */
 [[nodiscard]] inline constexpr q31_t
 q31_from_raw (const int64_t raw) noexcept {
-  return raw;
+    return raw;
 }
 
 /** @brief Return the raw int64 storage of a Q31 value. */
 [[nodiscard]] inline constexpr int64_t
 q31_to_raw (const q31_t value) noexcept {
-  return value;
+    return value;
 }
 
 /** @brief Saturating Q31 add.  Uses __builtin_add_overflow when available,
@@ -71,10 +71,10 @@ q31_to_raw (const q31_t value) noexcept {
  *         range. */
 [[nodiscard]] inline constexpr q31_t
 q31_add (const q31_t lhs, const q31_t rhs) noexcept {
-  int64_t sum = 0;
-  if (_S_add_overflow_s64 (lhs, rhs, sum))
-    return rhs > 0 ? _S_q31_max : _S_q31_min;
-  return sum > _S_q31_max ? _S_q31_max : (sum < _S_q31_min ? _S_q31_min : sum);
+    int64_t sum = 0;
+    if (_S_add_overflow_s64 (lhs, rhs, sum))
+        return rhs > 0 ? _S_q31_max : _S_q31_min;
+    return sum > _S_q31_max ? _S_q31_max : (sum < _S_q31_min ? _S_q31_min : sum);
 }
 
 /** @brief Saturating Q31 subtract.  Uses __builtin_sub_overflow when
@@ -82,10 +82,10 @@ q31_add (const q31_t lhs, const q31_t rhs) noexcept {
  *         the Q31 range. */
 [[nodiscard]] inline constexpr q31_t
 q31_sub (const q31_t lhs, const q31_t rhs) noexcept {
-  int64_t diff = 0;
-  if (_S_sub_overflow_s64 (lhs, rhs, diff))
-    return rhs < 0 ? _S_q31_max : _S_q31_min;
-  return diff > _S_q31_max ? _S_q31_max : (diff < _S_q31_min ? _S_q31_min : diff);
+    int64_t diff = 0;
+    if (_S_sub_overflow_s64 (lhs, rhs, diff))
+        return rhs < 0 ? _S_q31_max : _S_q31_min;
+    return diff > _S_q31_max ? _S_q31_max : (diff < _S_q31_min ? _S_q31_min : diff);
 }
 
 /** @brief Q31 x Q31 -> Q31 with round-half-up.
@@ -96,10 +96,10 @@ q31_sub (const q31_t lhs, const q31_t rhs) noexcept {
  *  result saturates to the Q31 range. */
 [[nodiscard]] inline constexpr q31_t
 q31_mul (const q31_t lhs, const q31_t rhs) noexcept {
-  int64_t product = 0;
-  if (_S_mul_overflow_s64 (lhs, rhs, product))
-    return ((lhs < 0) != (rhs < 0)) ? _S_q31_min : _S_q31_max;
-  return zzs::mllee::_S_round_shift (product, _S_q31_frac_bits);
+    int64_t product = 0;
+    if (_S_mul_overflow_s64 (lhs, rhs, product))
+        return ((lhs < 0) != (rhs < 0)) ? _S_q31_min : _S_q31_max;
+    return zzs::mllee::_S_round_shift (product, _S_q31_frac_bits);
 }
 
 /** @brief Q31 x Q31 -> Q31 saturating multiply (explicit saturation helper).
@@ -108,31 +108,31 @@ q31_mul (const q31_t lhs, const q31_t rhs) noexcept {
  *  call site. */
 [[nodiscard]] inline constexpr q31_t
 q31_mul_sat (const q31_t lhs, const q31_t rhs) noexcept {
-  return q31_mul (lhs, rhs);
+    return q31_mul (lhs, rhs);
 }
 
 /** @brief Q15 -> Q31: shift left by 16 (gain 16 fraction bits).  The shift is
  *         an int64 multiply by 2^16, guarded by __builtin_mul_overflow. */
 [[nodiscard]] inline constexpr q31_t
 q31_from_q15 (const q15_t value) noexcept {
-  int64_t out = 0;
-  if (_S_mul_overflow_s64 (static_cast<int64_t> (value), 1LL << 16, out))
-    return value > 0 ? _S_q31_max : _S_q31_min;
-  return out;
+    int64_t out = 0;
+    if (_S_mul_overflow_s64 (static_cast<int64_t> (value), 1LL << 16, out))
+        return value > 0 ? _S_q31_max : _S_q31_min;
+    return out;
 }
 
 /** @brief Q31 -> Q15: narrow with saturation.  Drop 16 fraction bits and
  *         clamp into the Q15 int16 range. */
 [[nodiscard]] inline constexpr q15_t
 q31_to_q15 (const q31_t value) noexcept {
-  return zzs::kernel::sensor::driver::fixed::q15_clamp (static_cast<int32_t> (value >> 16));
+    return zzs::kernel::sensor::driver::fixed::q15_clamp (static_cast<int32_t> (value >> 16));
 }
 
 /** @brief Add a Q15 sample to a Q31 accumulator.  The sample is promoted to
  *         Q31 (shift left 16) and added with Q31 saturation. */
 [[nodiscard]] inline constexpr q31_t
 q31_accumulate (const q31_t acc, const q15_t val) noexcept {
-  return q31_add (acc, q31_from_q15 (val));
+    return q31_add (acc, q31_from_q15 (val));
 }
 
 /** @} */

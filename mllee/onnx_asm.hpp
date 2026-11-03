@@ -44,71 +44,71 @@ namespace zzs::mllee::onnx {
  */
 [[nodiscard]] inline uint32_t
 varint32_decode (const uint8_t *const data, const uint32_t available, uint32_t &out) noexcept {
-  uint32_t result = 0;
-  uint32_t shift = 0;
-  const uint32_t limit = available < 5u ? available : 5u;
-  for (uint32_t i = 0; i < limit; ++i) {
-    const uint8_t byte = data[i];
-    if (i == 4u && (byte & 0xF0u) != 0u)
-      return 0;
-    result |= static_cast<uint32_t> (byte & 0x7Fu) << shift;
-    if ((byte & 0x80u) == 0u) {
-      out = result;
-      return i + 1u;
+    uint32_t result = 0;
+    uint32_t shift = 0;
+    const uint32_t limit = available < 5u ? available : 5u;
+    for (uint32_t i = 0; i < limit; ++i) {
+        const uint8_t byte = data[i];
+        if (i == 4u && (byte & 0xF0u) != 0u)
+            return 0;
+        result |= static_cast<uint32_t> (byte & 0x7Fu) << shift;
+        if ((byte & 0x80u) == 0u) {
+            out = result;
+            return i + 1u;
+        }
+        shift += 7u;
     }
-    shift += 7u;
-  }
-  return 0;
+    return 0;
 }
 
 /** @brief Portable 64-bit varint decoder with the assembly ABI. */
 [[nodiscard]] inline uint32_t
 varint64_decode (const uint8_t *const data, const uint32_t available, uint64_t &out) noexcept {
-  uint64_t result = 0;
-  uint32_t shift = 0;
-  const uint32_t limit = available < 10u ? available : 10u;
-  for (uint32_t i = 0; i < limit; ++i) {
-    const uint8_t byte = data[i];
-    if (i == 9u && (byte & 0xFEu) != 0u)
-      return 0;
-    result |= static_cast<uint64_t> (byte & 0x7Fu) << shift;
-    if ((byte & 0x80u) == 0u) {
-      out = result;
-      return i + 1u;
+    uint64_t result = 0;
+    uint32_t shift = 0;
+    const uint32_t limit = available < 10u ? available : 10u;
+    for (uint32_t i = 0; i < limit; ++i) {
+        const uint8_t byte = data[i];
+        if (i == 9u && (byte & 0xFEu) != 0u)
+            return 0;
+        result |= static_cast<uint64_t> (byte & 0x7Fu) << shift;
+        if ((byte & 0x80u) == 0u) {
+            out = result;
+            return i + 1u;
+        }
+        shift += 7u;
     }
-    shift += 7u;
-  }
-  return 0;
+    return 0;
 }
 
 /** @brief Decode a 32-bit varint, using the target kernel when available. */
 [[nodiscard]] inline uint32_t
 varint32_bytes (const uint8_t *const data, const uint32_t available, uint32_t &out) noexcept {
-  return varint32_decode (data, available, out);
+    return varint32_decode (data, available, out);
 }
 
 /** @brief Decode a 64-bit varint, using the target kernel when available. */
 [[nodiscard]] inline uint32_t
 varint64_bytes (const uint8_t *const data, const uint32_t available, uint64_t &out) noexcept {
-  return varint64_decode (data, available, out);
+    return varint64_decode (data, available, out);
 }
 
 /** @brief FNV-1a over a byte range, dispatched to the target kernel. */
 [[nodiscard]] inline uint32_t
 hash_bytes (const uint8_t *const data, const uint32_t length) noexcept {
-  return fnv1a (data, length);
+    return fnv1a (data, length);
 }
 
 /** @brief Second, independent hash used for operator-name collision checks. */
 [[nodiscard]] inline uint32_t
 hash_bytes2 (const uint8_t *const data, const uint32_t length) noexcept {
-  return djb2 (data, length);
+    return djb2 (data, length);
 }
 
 /** @brief Non-overlapping byte copy. */
 inline void
 copy_bytes (uint8_t *const dst, const uint8_t *const src, const uint32_t length) noexcept {
-  for (uint32_t i = 0; i < length; ++i)
-    dst[i] = src[i];
+    for (uint32_t i = 0; i < length; ++i)
+        dst[i] = src[i];
 }
 } // namespace zzs::mllee::onnx

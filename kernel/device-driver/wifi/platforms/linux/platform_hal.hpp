@@ -54,52 +54,52 @@ create_linux_wifi_hal (WifiHal &hal_out) noexcept;
  * allocation; no heap, no statics.
  */
 class LinuxStreamBus : public zzs::kernel::device::driver::StreamBusInterface {
-public:
-  /** @brief Wrap an existing socket file descriptor. */
-  explicit LinuxStreamBus (int fd) noexcept;
+  public:
+    /** @brief Wrap an existing socket file descriptor. */
+    explicit LinuxStreamBus (int fd) noexcept;
 
-  /** @brief Close the socket. */
-  ~LinuxStreamBus () override;
+    /** @brief Close the socket. */
+    ~LinuxStreamBus () override;
 
-  LinuxStreamBus (const LinuxStreamBus &) = delete;
-  LinuxStreamBus &
-  operator= (const LinuxStreamBus &) = delete;
-  LinuxStreamBus (LinuxStreamBus &&) = delete;
-  LinuxStreamBus &
-  operator= (LinuxStreamBus &&) = delete;
+    LinuxStreamBus (const LinuxStreamBus &) = delete;
+    LinuxStreamBus &
+    operator= (const LinuxStreamBus &) = delete;
+    LinuxStreamBus (LinuxStreamBus &&) = delete;
+    LinuxStreamBus &
+    operator= (LinuxStreamBus &&) = delete;
 
-  [[nodiscard]] zzs::kernel::Status
-  read_bytes (uint8_t *buf, uint16_t max_bytes, uint16_t *filled) noexcept override;
+    [[nodiscard]] zzs::kernel::Status
+    read_bytes (uint8_t *buf, uint16_t max_bytes, uint16_t *filled) noexcept override;
 
-  [[nodiscard]] zzs::kernel::Status
-  write_bytes (const uint8_t *buf, uint16_t len) noexcept override;
+    [[nodiscard]] zzs::kernel::Status
+    write_bytes (const uint8_t *buf, uint16_t len) noexcept override;
 
-  void
-  delay_ms (uint32_t ms) noexcept override;
+    void
+    delay_ms (uint32_t ms) noexcept override;
 
-  [[nodiscard]] zzs::kernel::Status
-  flush_rx () noexcept override;
+    [[nodiscard]] zzs::kernel::Status
+    flush_rx () noexcept override;
 
-  [[nodiscard]] bool
-  is_open () const noexcept override;
+    [[nodiscard]] bool
+    is_open () const noexcept override;
 
-  /** @brief Return the underlying socket file descriptor. */
-  [[nodiscard]] int
-  fd () const noexcept {
-    return _M_fd;
-  }
+    /** @brief Return the underlying socket file descriptor. */
+    [[nodiscard]] int
+    fd () const noexcept {
+        return _M_fd;
+    }
 
-  /** @brief Create a connected non-blocking unix-domain socketpair.
-   *
-   * `fds[0]` and `fds[1]` are set to the two socket descriptors.  The caller
-   * wraps one end in a `LinuxStreamBus` and uses the other for a module
-   * emulator or test harness.  No heap, no statics.
-   */
-  [[nodiscard]] static zzs::kernel::Status
-  create_socketpair (int fds[2]) noexcept;
+    /** @brief Create a connected non-blocking unix-domain socketpair.
+     *
+     * `fds[0]` and `fds[1]` are set to the two socket descriptors.  The caller
+     * wraps one end in a `LinuxStreamBus` and uses the other for a module
+     * emulator or test harness.  No heap, no statics.
+     */
+    [[nodiscard]] static zzs::kernel::Status
+    create_socketpair (int fds[2]) noexcept;
 
-private:
-  int _M_fd = -1;
+  private:
+    int _M_fd = -1;
 };
 
 #endif /* defined(__linux__) */

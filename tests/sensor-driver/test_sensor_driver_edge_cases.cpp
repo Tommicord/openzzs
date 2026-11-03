@@ -34,25 +34,22 @@
  *   - zzs::base::format_into() instead of snprintf.
  */
 
-#include <catch2/catch_test_macros.hpp>
-
-#include <cstdint>
-#include <cstring>
-#include <string_view>
-
-#include "kernel/sensor-driver/sensors/lsm6dso/lsm6dso.hpp"
-#include "kernel/sensor-driver/sensors/lsm6dso/lsm6dso_reg.h"
+#include "kernel/kernel_clock_source.hpp"
 #include "kernel/sensor-driver/bus/bus_interface.hpp"
 #include "kernel/sensor-driver/bus/bus_registry.hpp"
 #include "kernel/sensor-driver/fixed/q15.hpp"
 #include "kernel/sensor-driver/fixed/q31.hpp"
-#include "kernel/kernel_clock_source.hpp"
+#include "kernel/sensor-driver/sensors/lsm6dso/lsm6dso.hpp"
+#include "kernel/sensor-driver/sensors/lsm6dso/lsm6dso_reg.h"
 #include "std/fmt.hpp"
-
 #include "test_mock_bus.hpp"
 
-namespace
-{
+#include <catch2/catch_test_macros.hpp>
+#include <cstdint>
+#include <cstring>
+#include <string_view>
+
+namespace {
 using namespace zzs::kernel;
 using namespace zzs::kernel::sensor::driver::sensors;
 using namespace zzs::kernel::sensor::driver::sensors::lsm6dso;
@@ -66,59 +63,51 @@ using namespace zzs::base;
 // shifted (different) output.  This lets the test verify that self-test both
 // toggles a real bit and observes the resulting change.
 // ---------------------------------------------------------------------------
-class SelfTestBus : public BusInterface
-{
-public:
+class SelfTestBus : public BusInterface {
+  public:
     SelfTestBus () noexcept = default;
 
     [[nodiscard]] Status
-    write_reg (uint8_t reg, const uint8_t *data, uint16_t len) noexcept override
-    {
+    write_reg (uint8_t reg, const uint8_t *data, uint16_t len) noexcept override {
         if (data == nullptr || len == 0u)
             return Status::OUT_OF_RANGE;
-        if (reg == RegCtrl5C && (data[0] & Ctrl5CStXlPos))
-            {
-                _M_st_written = true;
-                _M_data_shifted = true;
-            }
+        if (reg == RegCtrl5C && (data[0] & Ctrl5CStXlPos)) {
+            _M_st_written = true;
+            _M_data_shifted = true;
+        }
         for (uint16_t i = 0u; i < len; ++i)
             _M_regs[static_cast<uint32_t> (reg) + i] = data[i];
         return Status::OK;
     }
 
     [[nodiscard]] Status
-    read_reg (uint8_t reg, uint8_t *data, uint16_t len) noexcept override
-    {
+    read_reg (uint8_t reg, uint8_t *data, uint16_t len) noexcept override {
         if (data == nullptr || len == 0u)
             return Status::OUT_OF_RANGE;
-        if (reg == RegStatusReg)
-            {
-                data[0] = StatusXlda;
-                return Status::OK;
-            }
-        if (reg == RegOutXLAccel)
-            {
-                data[0] = static_cast<uint8_t> (_M_data_shifted ? 200 : 100);
-                data[1] = 0u;
-                return Status::OK;
-            }
+        if (reg == RegStatusReg) {
+            data[0] = StatusXlda;
+            return Status::OK;
+        }
+        if (reg == RegOutXLAccel) {
+            data[0] = static_cast<uint8_t> (_M_data_shifted ? 200 : 100);
+            data[1] = 0u;
+            return Status::OK;
+        }
         for (uint16_t i = 0u; i < len; ++i)
             data[i] = _M_regs[static_cast<uint32_t> (reg) + i];
         return Status::OK;
     }
 
     void
-    delay_ms (uint32_t) noexcept override
-    {
+    delay_ms (uint32_t) noexcept override {
     }
 
     bool
-    st_written () const noexcept
-    {
+    st_written () const noexcept {
         return _M_st_written;
     }
 
-private:
+  private:
     uint8_t _M_regs[256] = {};
     bool _M_st_written = false;
     bool _M_data_shifted = false;
@@ -126,9 +115,7 @@ private:
 
 } // namespace
 
-TEST_CASE ("Q15 gyro sensitivity overflows; Q31/wide path preserves precision",
-           "[sensor-driver][edge][q15-overflow]")
-{
+TEST_CASE ("Q15 gyro sensitivity overflows; Q31/wide path preserves precision", "[sensor-driver][edge][q15-overflow]") {
     /* Gyro sensitivity at ±125 dps is 4.375 mdps/LSB = 143360 in Q15, which is
      * one past Q15_MAX (32767).  A saturating Q15 multiply therefore clamps. */
     REQUIRE (GyroSensQ15MdpsPerLsb > _S_q15_max);
@@ -141,9 +128,7 @@ TEST_CASE ("Q15 gyro sensitivity overflows; Q31/wide path preserves precision",
     REQUIRE (zzs::kernel::fx::q15_mul_wide (zzs::kernel::_S_q15_one, GyroSensQ15MdpsPerLsb) > _S_q15_max);
 }
 
-TEST_CASE ("__builtin_* overflow detection in fixed-point math",
-           "[sensor-driver][edge][builtin-overflow]")
-{
+TEST_CASE ("__builtin_* overflow detection in fixed-point math", "[sensor-driver][edge][builtin-overflow]") {
     int32_t out = 0;
 
     /* Multiplication that overflows int32 is detected. */
@@ -165,13 +150,10 @@ TEST_CASE ("__builtin_* overflow detection in fixed-point math",
     REQUIRE (out == 3000);
 }
 
-TEST_CASE ("zzs::base::format_into instead of snprintf",
-           "[sensor-driver][edge][format-into]")
-{
+TEST_CASE ("zzs::base::format_into instead of snprintf", "[sensor-driver][edge][format-into]") {
     char buf[32] = {};
 
-    const unsigned int n =
-        format_into (buf, "gyro={} temp={} {}", 123, -456, 7u);
+    const unsigned int n = format_into (buf, "gyro={} temp={} {}", 123, -456, 7u);
     REQUIRE (n > 0u);
     REQUIRE (n < sizeof (buf));
     REQUIRE (std::string_view (buf) == "gyro=123 temp=-456 7");
@@ -180,15 +162,13 @@ TEST_CASE ("zzs::base::format_into instead of snprintf",
     char small[5] = {};
     const unsigned int buf_cap = sizeof (small) - 1u;
     const unsigned int m = format_into (small, "much-longer-string", 1);
-    const bool truncation_ok =
-        (m > buf_cap) || (std::string_view (small).size () <= buf_cap);
+    const bool truncation_ok = (m > buf_cap) || (std::string_view (small).size () <= buf_cap);
     REQUIRE (truncation_ok);
     REQUIRE (small[buf_cap] == '\0');
 }
 
 TEST_CASE ("Configurable I2C bus: registry lookup by path, not hardcoded",
-           "[sensor-driver][edge][i2c-bus-configurable]")
-{
+           "[sensor-driver][edge][i2c-bus-configurable]") {
     test::MockBus bus_a;
     test::MockBus bus_b;
     bus_a.set_initialized (true);
@@ -206,9 +186,7 @@ TEST_CASE ("Configurable I2C bus: registry lookup by path, not hardcoded",
     REQUIRE (bus_registry_unregister ("/dev/i2c-2") == true);
 }
 
-TEST_CASE ("Multi-instance driver: no shared static axis counter",
-           "[sensor-driver][edge][multi-instance]")
-{
+TEST_CASE ("Multi-instance driver: no shared static axis counter", "[sensor-driver][edge][multi-instance]") {
     /* Two independent accel drivers on two independent buses.  Each instance
      * must start its round-robin at X (axis 0); a shared static counter would
      * make the second instance continue from where the first left off. */
@@ -220,7 +198,7 @@ TEST_CASE ("Multi-instance driver: no shared static axis counter",
     bus_b.set_reg (RegWhoAmI, WhoAmIValue);
     bus_a.set_reg (RegStatusReg, StatusXlda);
     bus_b.set_reg (RegStatusReg, StatusXlda);
-    uint8_t block[6] = { 10, 0, 20, 0, 30, 0 };
+    uint8_t block[6] = {10, 0, 20, 0, 30, 0};
     bus_a.set_block (RegOutXLAccel, block, 6u);
     bus_b.set_block (RegOutXLAccel, block, 6u);
 
@@ -241,22 +219,18 @@ TEST_CASE ("Multi-instance driver: no shared static axis counter",
     REQUIRE (sa._M_timestamp_ns == sb._M_timestamp_ns);
 }
 
-TEST_CASE ("Timestamps are non-zero and come from the clock source",
-           "[sensor-driver][edge][timestamp]")
-{
+TEST_CASE ("Timestamps are non-zero and come from the clock source", "[sensor-driver][edge][timestamp]") {
     test::MockBus bus;
     bus.set_initialized (true);
     bus.set_reg (RegWhoAmI, WhoAmIValue);
     bus.set_reg (RegStatusReg, StatusXlda);
-    uint8_t block[6] = { 10, 0, 0, 0, 0, 0 };
+    uint8_t block[6] = {10, 0, 0, 0, 0, 0};
     bus.set_block (RegOutXLAccel, block, 6u);
 
     /* Install a software clock source that reports a non-zero, monotonic time. */
     uint64_t now = 1000000000ull; /* 1 s */
     REQUIRE (zzs::kernel::clock::clock_source_install (
-                 [] () noexcept -> zzs::kernel::clock::Nanoseconds {
-                     return 1000000000ull;
-                 })
+                 [] () noexcept -> zzs::kernel::clock::Nanoseconds { return 1000000000ull; })
              == Status::OK);
 
     Lsm6dsoAccelDriver accel (&bus);
@@ -269,9 +243,7 @@ TEST_CASE ("Timestamps are non-zero and come from the clock source",
     REQUIRE (sample._M_timestamp_ns != 0u);
 }
 
-TEST_CASE ("Self-test toggles a register bit and verifies the output changed",
-           "[sensor-driver][edge][self-test]")
-{
+TEST_CASE ("Self-test toggles a register bit and verifies the output changed", "[sensor-driver][edge][self-test]") {
     SelfTestBus bus;
 
     Lsm6dsoAccelDriver accel (&bus);

@@ -35,8 +35,7 @@
 namespace zzs::kernel::device::driver::wifi::platform::esp32 {
 
 /** @brief Build the ESP32 WiFi HAL vtable. */
-[[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *,
-                              zzs::kernel::Status>
+[[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *, zzs::kernel::Status>
 create_esp32_wifi_hal (WifiHal &hal_out) noexcept;
 
 /** @} */

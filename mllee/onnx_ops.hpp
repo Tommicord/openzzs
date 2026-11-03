@@ -33,43 +33,43 @@
 namespace zzs::mllee::onnx {
 /** @brief Attribute names the lowering path understands. */
 enum class AttrId : uint8_t {
-  NONE = 0,
-  ALPHA,
-  BETA,
-  TRANSA,
-  TRANSB,
-  AXIS,
-  AXES,
-  KEEPDIMS,
-  KERNEL_SHAPE,
-  STRIDES,
-  PADS,
-  DILATIONS,
-  GROUP,
-  AUTO_PAD,
-  EPSILON,
-  MOMENTUM,
-  COUNT_INCLUDE_PAD,
-  CEIL_MODE,
-  PERM,
-  SPLIT,
-  VALUE,
-  TO,
-  SEED,
-  ELEMENTWISE_AFFINE,
-  STORAGE_ORDER,
-  LARGEST,
-  SELECT_LAST_INDEX,
-  NOOP_WITH_BIAS,
-  TRAINING_MODE,
-  OUTPUT_DTYPE,
+    NONE = 0,
+    ALPHA,
+    BETA,
+    TRANSA,
+    TRANSB,
+    AXIS,
+    AXES,
+    KEEPDIMS,
+    KERNEL_SHAPE,
+    STRIDES,
+    PADS,
+    DILATIONS,
+    GROUP,
+    AUTO_PAD,
+    EPSILON,
+    MOMENTUM,
+    COUNT_INCLUDE_PAD,
+    CEIL_MODE,
+    PERM,
+    SPLIT,
+    VALUE,
+    TO,
+    SEED,
+    ELEMENTWISE_AFFINE,
+    STORAGE_ORDER,
+    LARGEST,
+    SELECT_LAST_INDEX,
+    NOOP_WITH_BIAS,
+    TRAINING_MODE,
+    OUTPUT_DTYPE,
 };
 
 struct AttrBinding {
-  uint32_t _M_hash;
-  uint32_t _M_hash2;
-  uint16_t _M_length;
-  AttrId _M_id;
+    uint32_t _M_hash;
+    uint32_t _M_hash2;
+    uint16_t _M_length;
+    AttrId _M_id;
 };
 
 inline constexpr AttrBinding _S_attribute_registry[] = {
@@ -106,20 +106,20 @@ inline constexpr AttrBinding _S_attribute_registry[] = {
 
 [[nodiscard]] inline AttrId
 attribute_id (const StringInfo &name) noexcept {
-  for (const AttrBinding &binding : _S_attribute_registry)
-    if (binding._M_length == name._M_length && binding._M_hash == name._M_hash && binding._M_hash2 == name._M_hash2)
-      return binding._M_id;
-  return AttrId::NONE;
+    for (const AttrBinding &binding : _S_attribute_registry)
+        if (binding._M_length == name._M_length && binding._M_hash == name._M_hash && binding._M_hash2 == name._M_hash2)
+            return binding._M_id;
+    return AttrId::NONE;
 }
 
 /** @brief An ONNX operator mapped onto the mllee executor. */
 struct OpBinding {
-  uint32_t _M_hash;
-  uint32_t _M_hash2;
-  uint16_t _M_length;
-  Op _M_op;
-  Act _M_act;
-  uint8_t _M_flags;
+    uint32_t _M_hash;
+    uint32_t _M_hash2;
+    uint16_t _M_length;
+    Op _M_op;
+    Act _M_act;
+    uint8_t _M_flags;
 };
 
 /** @brief Set on a binding whose ONNX semantics need an attribute rewrite. */
@@ -188,81 +188,81 @@ inline constexpr OpBinding _S_operator_registry[] = {
 
 [[nodiscard]] inline OpBinding
 lookup_op (const NodeInfo &node) noexcept {
-  if ((node._M_flags & NODE_FLAG_HAS_OP) == 0u || (node._M_flags & NODE_FLAG_DEFAULT_DOMAIN) == 0u)
+    if ((node._M_flags & NODE_FLAG_HAS_OP) == 0u || (node._M_flags & NODE_FLAG_DEFAULT_DOMAIN) == 0u)
+        return OpBinding{0, 0, 0, Op::COUNT, Act::COUNT, 0};
+    for (const OpBinding &binding : _S_operator_registry)
+        if (binding._M_length == node._M_op_length && binding._M_hash == node._M_op_hash
+            && binding._M_hash2 == node._M_op_hash2)
+            return binding;
     return OpBinding{0, 0, 0, Op::COUNT, Act::COUNT, 0};
-  for (const OpBinding &binding : _S_operator_registry)
-    if (binding._M_length == node._M_op_length && binding._M_hash == node._M_op_hash
-        && binding._M_hash2 == node._M_op_hash2)
-      return binding;
-  return OpBinding{0, 0, 0, Op::COUNT, Act::COUNT, 0};
 }
 
 [[nodiscard]] inline const char *
 operator_name (const Op op) noexcept {
-  switch (op) {
-  case Op::LINEAR:
-    return "Gemm";
-  case Op::MATMUL:
-    return "MatMul";
-  case Op::CONV1D:
-    return "Conv";
-  case Op::ADD:
-    return "Add";
-  case Op::SUB:
-    return "Sub";
-  case Op::MUL:
-    return "Mul";
-  case Op::ACTIVATION:
-    return "Activation";
-  case Op::SOFTMAX:
-    return "Softmax";
-  case Op::LOG_SOFTMAX:
-    return "LogSoftmax";
-  case Op::CLAMP:
-    return "Clip";
-  case Op::PRELU:
-    return "PRelu";
-  case Op::NORM:
-    return "Normalization";
-  case Op::BATCH_NORM:
-    return "BatchNormalization";
-  case Op::GROUP_NORM:
-    return "GroupNormalization";
-  case Op::MAX_POOL1D:
-    return "MaxPool";
-  case Op::AVG_POOL1D:
-    return "AveragePool";
-  case Op::GLOBAL_AVG_POOL:
-    return "GlobalAveragePool";
-  case Op::EMBEDDING:
-    return "Gather";
-  case Op::CONCAT:
-    return "Concat";
-  case Op::SLICE:
-    return "Slice";
-  case Op::PAD1D:
-    return "Pad";
-  case Op::TRANSPOSE2D:
-    return "Transpose";
-  case Op::REDUCE:
-    return "Reduce";
-  case Op::ARGMAX:
-    return "ArgMax";
-  case Op::UPSAMPLE_NEAREST:
-    return "Resize";
-  case Op::FLATTEN:
-    return "Flatten";
-  case Op::DROPOUT:
-    return "Dropout";
-  case Op::ATTENTION:
-    return "Attention";
-  case Op::L2_NORMALIZE:
-    return "L2Normalize";
-  case Op::MASKED_FILL:
-    return "MaskedFill";
-  case Op::COUNT:
+    switch (op) {
+    case Op::LINEAR:
+        return "Gemm";
+    case Op::MATMUL:
+        return "MatMul";
+    case Op::CONV1D:
+        return "Conv";
+    case Op::ADD:
+        return "Add";
+    case Op::SUB:
+        return "Sub";
+    case Op::MUL:
+        return "Mul";
+    case Op::ACTIVATION:
+        return "Activation";
+    case Op::SOFTMAX:
+        return "Softmax";
+    case Op::LOG_SOFTMAX:
+        return "LogSoftmax";
+    case Op::CLAMP:
+        return "Clip";
+    case Op::PRELU:
+        return "PRelu";
+    case Op::NORM:
+        return "Normalization";
+    case Op::BATCH_NORM:
+        return "BatchNormalization";
+    case Op::GROUP_NORM:
+        return "GroupNormalization";
+    case Op::MAX_POOL1D:
+        return "MaxPool";
+    case Op::AVG_POOL1D:
+        return "AveragePool";
+    case Op::GLOBAL_AVG_POOL:
+        return "GlobalAveragePool";
+    case Op::EMBEDDING:
+        return "Gather";
+    case Op::CONCAT:
+        return "Concat";
+    case Op::SLICE:
+        return "Slice";
+    case Op::PAD1D:
+        return "Pad";
+    case Op::TRANSPOSE2D:
+        return "Transpose";
+    case Op::REDUCE:
+        return "Reduce";
+    case Op::ARGMAX:
+        return "ArgMax";
+    case Op::UPSAMPLE_NEAREST:
+        return "Resize";
+    case Op::FLATTEN:
+        return "Flatten";
+    case Op::DROPOUT:
+        return "Dropout";
+    case Op::ATTENTION:
+        return "Attention";
+    case Op::L2_NORMALIZE:
+        return "L2Normalize";
+    case Op::MASKED_FILL:
+        return "MaskedFill";
+    case Op::COUNT:
+        return "Unknown";
+    }
     return "Unknown";
-  }
-  return "Unknown";
 }
 } // namespace zzs::mllee::onnx

@@ -79,19 +79,19 @@ inline constexpr q15_t _S_mag_sensitivity_q15_milligauss_per_lsb = 22412;
 /** @brief Convert a Q15 accelerometer sample to milli-g. */
 [[nodiscard]] inline constexpr q15_t
 accel_raw_to_mg (const q15_t raw_q15) noexcept {
-  return q15_mul (raw_q15, _S_accel_sensitivity_q15_mg_per_lsb);
+    return q15_mul (raw_q15, _S_accel_sensitivity_q15_mg_per_lsb);
 }
 
 /** @brief Convert a Q15 gyroscope sample to milli-degrees per second. */
 [[nodiscard]] inline constexpr q15_t
 gyro_raw_to_mdps (const q15_t raw_q15) noexcept {
-  return q15_mul (raw_q15, _S_gyro_sensitivity_q15_mdps_per_lsb);
+    return q15_mul (raw_q15, _S_gyro_sensitivity_q15_mdps_per_lsb);
 }
 
 /** @brief Convert a Q15 magnetometer sample to milli-gauss. */
 [[nodiscard]] inline constexpr q15_t
 mag_raw_to_milligauss (const q15_t raw_q15) noexcept {
-  return q15_mul (raw_q15, _S_mag_sensitivity_q15_milligauss_per_lsb);
+    return q15_mul (raw_q15, _S_mag_sensitivity_q15_milligauss_per_lsb);
 }
 
 /** @} */
@@ -132,7 +132,7 @@ inline constexpr q11_t _S_mag_temp_coeff_q11[3] = {
  * `compensated_q15 = offset_q15 + q11_to_q15 (q11_mul (coeff_q11, temp_delta_q11))`. */
 [[nodiscard]] inline constexpr q15_t
 temperature_compensate_q15 (const q15_t offset_q15, const q11_t coeff_q11, const q11_t temp_delta_q11) noexcept {
-  return q15_add (offset_q15, q11_to_q15 (q11_mul (coeff_q11, temp_delta_q11)));
+    return q15_add (offset_q15, q11_to_q15 (q11_mul (coeff_q11, temp_delta_q11)));
 }
 
 /** @} */
@@ -148,23 +148,23 @@ temperature_compensate_q15 (const q15_t offset_q15, const q11_t coeff_q11, const
  * @{
  */
 struct _S_BiasAccumulator {
-  q31_t _M_sum_q31 = 0;
-  uint32_t _M_count = 0;
+    q31_t _M_sum_q31 = 0;
+    uint32_t _M_count = 0;
 };
 
 /** @brief Add one Q15 sample to the bias accumulator (Q31 promotion, no
  *         saturation loss on the way in). */
 [[nodiscard]] inline constexpr _S_BiasAccumulator
 bias_accumulate (_S_BiasAccumulator acc, const q15_t sample_q15) noexcept {
-  acc._M_sum_q31 = q31_add (acc._M_sum_q31, q31_from_q15 (sample_q15));
-  acc._M_count += 1u;
-  return acc;
+    acc._M_sum_q31 = q31_add (acc._M_sum_q31, q31_from_q15 (sample_q15));
+    acc._M_count += 1u;
+    return acc;
 }
 
 /** @brief Reset the accumulator to an empty state. */
 [[nodiscard]] inline constexpr _S_BiasAccumulator
 bias_reset (void) noexcept {
-  return _S_BiasAccumulator{};
+    return _S_BiasAccumulator{};
 }
 
 /** @brief Return the accumulated mean bias as a Q15 value, saturating.
@@ -173,26 +173,26 @@ bias_reset (void) noexcept {
  * to Q15 with saturation.  An empty accumulator yields zero. */
 [[nodiscard]] inline constexpr q15_t
 bias_mean_q15 (const _S_BiasAccumulator &acc) noexcept {
-  if (acc._M_count == 0u)
-    return 0;
-  /* Mean in Q31: align sum down by the count's log2, then divide the
-     remainder so no precision is lost before the Q15 narrowing. */
-  const uint32_t shift = zzs::mllee::_S_log2_u32 (acc._M_count);
-  const int64_t aligned = acc._M_sum_q31 >> shift;
-  const int64_t remainder = acc._M_sum_q31 - (aligned << shift);
-  const int64_t mean_q31 = aligned + (remainder / static_cast<int64_t> (acc._M_count));
-  return q31_to_q15 (mean_q31);
+    if (acc._M_count == 0u)
+        return 0;
+    /* Mean in Q31: align sum down by the count's log2, then divide the
+       remainder so no precision is lost before the Q15 narrowing. */
+    const uint32_t shift = zzs::mllee::_S_log2_u32 (acc._M_count);
+    const int64_t aligned = acc._M_sum_q31 >> shift;
+    const int64_t remainder = acc._M_sum_q31 - (aligned << shift);
+    const int64_t mean_q31 = aligned + (remainder / static_cast<int64_t> (acc._M_count));
+    return q31_to_q15 (mean_q31);
 }
 
 /** @brief Return the accumulated mean bias as a Q31 value. */
 [[nodiscard]] inline constexpr q31_t
 bias_mean_q31 (const _S_BiasAccumulator &acc) noexcept {
-  if (acc._M_count == 0u)
-    return 0;
-  const uint32_t shift = zzs::mllee::_S_log2_u32 (acc._M_count);
-  const int64_t aligned = acc._M_sum_q31 >> shift;
-  const int64_t remainder = acc._M_sum_q31 - (aligned << shift);
-  return aligned + (remainder / static_cast<int64_t> (acc._M_count));
+    if (acc._M_count == 0u)
+        return 0;
+    const uint32_t shift = zzs::mllee::_S_log2_u32 (acc._M_count);
+    const int64_t aligned = acc._M_sum_q31 >> shift;
+    const int64_t remainder = acc._M_sum_q31 - (aligned << shift);
+    return aligned + (remainder / static_cast<int64_t> (acc._M_count));
 }
 
 } // namespace zzs::kernel::sensor::driver::fixed

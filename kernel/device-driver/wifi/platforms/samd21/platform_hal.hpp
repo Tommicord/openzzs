@@ -35,8 +35,7 @@
 namespace zzs::kernel::device::driver::wifi::platform::samd21 {
 
 /** @brief Build the SAMD21 WiFi HAL vtable. */
-[[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *,
-                              zzs::kernel::Status>
+[[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *, zzs::kernel::Status>
 create_samd21_wifi_hal (WifiHal &hal_out) noexcept;
 
 /** @} */

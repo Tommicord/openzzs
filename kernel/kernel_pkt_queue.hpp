@@ -43,79 +43,79 @@ namespace zzs::kernel::pkt {
 
 /** @brief One stored packet: header plus stuffed payload plus CRC. */
 struct _S_QueuedPacket {
-  _S_PacketHeader _M_header;
-  uint8_t _M_payload[_S_packet_max_payload];
-  uint8_t _M_crc[_S_packet_crc_bytes];
-  uint32_t _M_payload_len;
-  bool _M_valid;
+    _S_PacketHeader _M_header;
+    uint8_t _M_payload[_S_packet_max_payload];
+    uint8_t _M_crc[_S_packet_crc_bytes];
+    uint32_t _M_payload_len;
+    bool _M_valid;
 };
 
 /** @brief Fixed-capacity receive queue owning `_M_buf[Capacity]` packets. */
 template <uint32_t Capacity> class PacketQueue {
-  static_assert (Capacity != 0u && (Capacity & (Capacity - 1u)) == 0u,
-                 "PacketQueue capacity must be a non-zero power of two");
+    static_assert (Capacity != 0u && (Capacity & (Capacity - 1u)) == 0u,
+                   "PacketQueue capacity must be a non-zero power of two");
 
-  _S_QueuedPacket _M_buf[Capacity]; /* owned packet storage */
-  uint32_t _M_head = 0u;            /* push index */
-  uint32_t _M_tail = 0u;            /* pop index */
-  uint32_t _M_count = 0u;           /* entries in queue */
+    _S_QueuedPacket _M_buf[Capacity]; /* owned packet storage */
+    uint32_t _M_head = 0u;            /* push index */
+    uint32_t _M_tail = 0u;            /* pop index */
+    uint32_t _M_count = 0u;           /* entries in queue */
 
-public:
-  PacketQueue () = default;
-  PacketQueue (const PacketQueue &) = delete;
-  PacketQueue &
-  operator= (const PacketQueue &) = delete;
-  PacketQueue (PacketQueue &&) = delete;
-  PacketQueue &
-  operator= (PacketQueue &&) = delete;
+  public:
+    PacketQueue () = default;
+    PacketQueue (const PacketQueue &) = delete;
+    PacketQueue &
+    operator= (const PacketQueue &) = delete;
+    PacketQueue (PacketQueue &&) = delete;
+    PacketQueue &
+    operator= (PacketQueue &&) = delete;
 
-  /** @brief Capacity of the queue (packets). */
-  [[nodiscard]] inline uint32_t
-  capacity () const noexcept {
-    return Capacity;
-  }
+    /** @brief Capacity of the queue (packets). */
+    [[nodiscard]] inline uint32_t
+    capacity () const noexcept {
+        return Capacity;
+    }
 
-  /** @brief Entries currently in the queue. */
-  [[nodiscard]] inline uint32_t
-  count () const noexcept {
-    return _M_count;
-  }
+    /** @brief Entries currently in the queue. */
+    [[nodiscard]] inline uint32_t
+    count () const noexcept {
+        return _M_count;
+    }
 
-  /** @brief True when the queue is empty. */
-  [[nodiscard]] inline bool
-  empty () const noexcept {
-    return _M_count == 0u;
-  }
+    /** @brief True when the queue is empty. */
+    [[nodiscard]] inline bool
+    empty () const noexcept {
+        return _M_count == 0u;
+    }
 
-  /** @brief True when the queue is full. */
-  [[nodiscard]] inline bool
-  full () const noexcept {
-    return _M_count >= Capacity;
-  }
+    /** @brief True when the queue is full. */
+    [[nodiscard]] inline bool
+    full () const noexcept {
+        return _M_count >= Capacity;
+    }
 
-  /** @brief Push a decoded packet into the queue. Returns QUEUE_FULL if full. */
-  [[nodiscard]] inline zzs::kernel::Status
-  push (const _S_QueuedPacket &packet) noexcept {
-    if (ZZS_UNLIKELY (_M_count >= Capacity))
-      return zzs::kernel::Status::QUEUE_FULL;
-    _M_buf[_M_head] = packet;
-    _M_buf[_M_head]._M_valid = true;
-    _M_head = (_M_head + 1u) & (Capacity - 1u);
-    ++_M_count;
-    return zzs::kernel::Status::OK;
-  }
+    /** @brief Push a decoded packet into the queue. Returns QUEUE_FULL if full. */
+    [[nodiscard]] inline zzs::kernel::Status
+    push (const _S_QueuedPacket &packet) noexcept {
+        if (ZZS_UNLIKELY (_M_count >= Capacity))
+            return zzs::kernel::Status::QUEUE_FULL;
+        _M_buf[_M_head] = packet;
+        _M_buf[_M_head]._M_valid = true;
+        _M_head = (_M_head + 1u) & (Capacity - 1u);
+        ++_M_count;
+        return zzs::kernel::Status::OK;
+    }
 
-  /** @brief Pop the oldest packet. Returns NOT_READY when empty. */
-  [[nodiscard]] inline zzs::kernel::Status
-  pop (_S_QueuedPacket &out) noexcept {
-    if (ZZS_UNLIKELY (_M_count == 0u))
-      return zzs::kernel::Status::NOT_READY;
-    out = _M_buf[_M_tail];
-    _M_buf[_M_tail]._M_valid = false;
-    _M_tail = (_M_tail + 1u) & (Capacity - 1u);
-    --_M_count;
-    return zzs::kernel::Status::OK;
-  }
+    /** @brief Pop the oldest packet. Returns NOT_READY when empty. */
+    [[nodiscard]] inline zzs::kernel::Status
+    pop (_S_QueuedPacket &out) noexcept {
+        if (ZZS_UNLIKELY (_M_count == 0u))
+            return zzs::kernel::Status::NOT_READY;
+        out = _M_buf[_M_tail];
+        _M_buf[_M_tail]._M_valid = false;
+        _M_tail = (_M_tail + 1u) & (Capacity - 1u);
+        --_M_count;
+        return zzs::kernel::Status::OK;
+    }
 };
 
 /** @} */

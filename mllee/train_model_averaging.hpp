@@ -96,9 +96,9 @@
 namespace zzs::mllee::train {
 /** @brief Which averaging rule produced this weight. */
 enum class AveragingMode : uint8_t {
-  Uniform = 0,
-  Ema = 1,
-  Swa = 2,
+    Uniform = 0,
+    Ema = 1,
+    Swa = 2,
 };
 
 /** @brief Largest lane count one averaging pass addresses. */
@@ -119,25 +119,25 @@ inline constexpr int64_t _S_avg_acc_max = (1LL << 60) - 1;
  */
 [[nodiscard]] inline constexpr int32_t
 avg_div_round (const int64_t numerator, const uint32_t denominator) noexcept {
-  if (denominator == 0u)
-    return 0;
-  const uint64_t divisor = denominator;
-  const bool negative = numerator < 0;
-  /* Negate in the unsigned domain: `-INT64_MIN` is not representable as a
-     signed int64, while its two's-complement magnitude is. */
-  const uint64_t magnitude = negative ? ~static_cast<uint64_t> (numerator) + 1u : static_cast<uint64_t> (numerator);
-  const uint64_t quotient = (magnitude + divisor / 2u) / divisor;
-  /* Round-half-away-from-zero can push the magnitude one step past INT32_MAX
-     (e.g. numerator = INT64_MIN-ish, denominator = 1), so saturate instead of
-     letting the cast wrap. */
-  if (quotient > 2147483648ULL)
-    return negative ? (-2147483647 - 1) : 2147483647;
-  const int64_t signed_quotient = negative ? -static_cast<int64_t> (quotient) : static_cast<int64_t> (quotient);
-  if (signed_quotient > 2147483647LL)
-    return 2147483647;
-  if (signed_quotient < (-2147483647 - 1LL))
-    return -2147483647 - 1;
-  return static_cast<int32_t> (signed_quotient);
+    if (denominator == 0u)
+        return 0;
+    const uint64_t divisor = denominator;
+    const bool negative = numerator < 0;
+    /* Negate in the unsigned domain: `-INT64_MIN` is not representable as a
+       signed int64, while its two's-complement magnitude is. */
+    const uint64_t magnitude = negative ? ~static_cast<uint64_t> (numerator) + 1u : static_cast<uint64_t> (numerator);
+    const uint64_t quotient = (magnitude + divisor / 2u) / divisor;
+    /* Round-half-away-from-zero can push the magnitude one step past INT32_MAX
+       (e.g. numerator = INT64_MIN-ish, denominator = 1), so saturate instead of
+       letting the cast wrap. */
+    if (quotient > 2147483648ULL)
+        return negative ? (-2147483647 - 1) : 2147483647;
+    const int64_t signed_quotient = negative ? -static_cast<int64_t> (quotient) : static_cast<int64_t> (quotient);
+    if (signed_quotient > 2147483647LL)
+        return 2147483647;
+    if (signed_quotient < (-2147483647 - 1LL))
+        return -2147483647 - 1;
+    return static_cast<int32_t> (signed_quotient);
 }
 
 /**
@@ -148,11 +148,11 @@ avg_div_round (const int64_t numerator, const uint32_t denominator) noexcept {
  * buffers the trainer or the checkpoint reader already has.
  */
 struct SnapshotSet {
-  const int8_t *const *_M_streams = nullptr;
-  uint32_t _M_snapshots = 0u;
-  uint32_t _M_count = 0u;
-  uint8_t _M_valid = 0u;
-  uint8_t _M_pad[3] = {0u, 0u, 0u};
+    const int8_t *const *_M_streams = nullptr;
+    uint32_t _M_snapshots = 0u;
+    uint32_t _M_count = 0u;
+    uint8_t _M_valid = 0u;
+    uint8_t _M_pad[3] = {0u, 0u, 0u};
 };
 
 static_assert (sizeof (SnapshotSet) == (sizeof (void *) == 4u ? 16u : 24u),
@@ -167,29 +167,29 @@ static_assert (sizeof (SnapshotSet) == (sizeof (void *) == 4u ? 16u : 24u),
 [[nodiscard]] inline Status
 avg_snapshots_open (SnapshotSet &set, const int8_t *const *const streams, const uint32_t snapshots,
                     const uint32_t count) noexcept {
-  set._M_valid = 0u;
-  set._M_streams = nullptr;
-  set._M_snapshots = 0u;
-  set._M_count = 0u;
-  if (streams == nullptr)
-    return Status::BAD_LAYOUT;
-  if (!simd_aligned (streams))
-    return Status::BAD_LAYOUT;
-  if (snapshots == 0u || snapshots > _S_avg_max_snapshots)
-    return Status::OUT_OF_RANGE;
-  if (count == 0u || count > _S_avg_max_count)
-    return Status::OUT_OF_RANGE;
-  for (uint32_t index = 0u; index < snapshots; ++index) {
-    if (streams[index] == nullptr)
-      return Status::BAD_LAYOUT;
-    if (!simd_aligned (streams[index]))
-      return Status::BAD_LAYOUT;
-  }
-  set._M_streams = streams;
-  set._M_snapshots = snapshots;
-  set._M_count = count;
-  set._M_valid = 1u;
-  return Status::OK;
+    set._M_valid = 0u;
+    set._M_streams = nullptr;
+    set._M_snapshots = 0u;
+    set._M_count = 0u;
+    if (streams == nullptr)
+        return Status::BAD_LAYOUT;
+    if (!simd_aligned (streams))
+        return Status::BAD_LAYOUT;
+    if (snapshots == 0u || snapshots > _S_avg_max_snapshots)
+        return Status::OUT_OF_RANGE;
+    if (count == 0u || count > _S_avg_max_count)
+        return Status::OUT_OF_RANGE;
+    for (uint32_t index = 0u; index < snapshots; ++index) {
+        if (streams[index] == nullptr)
+            return Status::BAD_LAYOUT;
+        if (!simd_aligned (streams[index]))
+            return Status::BAD_LAYOUT;
+    }
+    set._M_streams = streams;
+    set._M_snapshots = snapshots;
+    set._M_count = count;
+    set._M_valid = 1u;
+    return Status::OK;
 }
 
 /**
@@ -201,20 +201,20 @@ avg_snapshots_open (SnapshotSet &set, const int8_t *const *const streams, const 
  * pass's traffic without walking the shapes again.
  */
 struct ParamSet {
-  Trainable *_M_params = nullptr;
-  uint32_t _M_tensors = 0u;
-  uint32_t _M_lane_total = 0u;
-  uint8_t _M_valid = 0u;
-  uint8_t _M_pad[3] = {0u, 0u, 0u};
+    Trainable *_M_params = nullptr;
+    uint32_t _M_tensors = 0u;
+    uint32_t _M_lane_total = 0u;
+    uint8_t _M_valid = 0u;
+    uint8_t _M_pad[3] = {0u, 0u, 0u};
 
-  [[nodiscard]] constexpr Status
-  validate () const noexcept {
-    if (this->_M_params == nullptr || this->_M_valid == 0u)
-      return Status::BAD_LAYOUT;
-    if (this->_M_tensors == 0u)
-      return Status::OUT_OF_RANGE;
-    return Status::OK;
-  }
+    [[nodiscard]] constexpr Status
+    validate () const noexcept {
+        if (this->_M_params == nullptr || this->_M_valid == 0u)
+            return Status::BAD_LAYOUT;
+        if (this->_M_tensors == 0u)
+            return Status::OUT_OF_RANGE;
+        return Status::OK;
+    }
 };
 
 static_assert (sizeof (ParamSet) == (sizeof (void *) == 4u ? 16u : 24u),
@@ -229,32 +229,32 @@ static_assert (sizeof (ParamSet) == (sizeof (void *) == 4u ? 16u : 24u),
  */
 [[nodiscard]] inline Status
 avg_params_open (ParamSet &set, Trainable *const params, const uint32_t tensors) noexcept {
-  set._M_valid = 0u;
-  set._M_params = nullptr;
-  set._M_tensors = 0u;
-  set._M_lane_total = 0u;
-  if (params == nullptr)
-    return Status::BAD_LAYOUT;
-  if (!simd_aligned (params))
-    return Status::BAD_LAYOUT;
-  if (tensors == 0u || tensors > _S_avg_max_count)
-    return Status::OUT_OF_RANGE;
-  uint32_t lanes = 0u;
-  for (uint32_t tensor = 0u; tensor < tensors; ++tensor) {
-    const Status status = params[tensor].validate ();
-    if (!status_ok (status))
-      return status;
-    if (params[tensor]._M_code == nullptr)
-      return Status::BAD_LAYOUT;
-    lanes += params[tensor]._M_count;
-    if (lanes > 0x0FFFFFFFu)
-      return Status::OUT_OF_RANGE;
-  }
-  set._M_params = params;
-  set._M_tensors = tensors;
-  set._M_lane_total = lanes;
-  set._M_valid = 1u;
-  return Status::OK;
+    set._M_valid = 0u;
+    set._M_params = nullptr;
+    set._M_tensors = 0u;
+    set._M_lane_total = 0u;
+    if (params == nullptr)
+        return Status::BAD_LAYOUT;
+    if (!simd_aligned (params))
+        return Status::BAD_LAYOUT;
+    if (tensors == 0u || tensors > _S_avg_max_count)
+        return Status::OUT_OF_RANGE;
+    uint32_t lanes = 0u;
+    for (uint32_t tensor = 0u; tensor < tensors; ++tensor) {
+        const Status status = params[tensor].validate ();
+        if (!status_ok (status))
+            return status;
+        if (params[tensor]._M_code == nullptr)
+            return Status::BAD_LAYOUT;
+        lanes += params[tensor]._M_count;
+        if (lanes > 0x0FFFFFFFu)
+            return Status::OUT_OF_RANGE;
+    }
+    set._M_params = params;
+    set._M_tensors = tensors;
+    set._M_lane_total = lanes;
+    set._M_valid = 1u;
+    return Status::OK;
 }
 
 /**
@@ -267,27 +267,27 @@ avg_params_open (ParamSet &set, Trainable *const params, const uint32_t tensors)
  */
 [[nodiscard]] inline Status
 avg_uniform (const SnapshotSet &set, const uint32_t from, const uint32_t to, int8_t *const destination) noexcept {
-  if (set._M_valid == 0u || destination == nullptr)
-    return Status::BAD_LAYOUT;
-  if (!simd_aligned (destination))
-    return Status::BAD_LAYOUT;
-  if (from >= to || to > set._M_snapshots)
-    return Status::OUT_OF_RANGE;
-  const uint32_t window = to - from;
-  const uint32_t count = set._M_count;
-  for (uint32_t lane = 0u; lane < count; ++lane) {
-    int64_t accumulator = 0;
-    for (uint32_t snapshot = from; snapshot < to; ++snapshot) {
-      accumulator += code_to_q15 (set._M_streams[snapshot][lane]);
-      if (accumulator > _S_avg_acc_max)
-        accumulator = _S_avg_acc_max;
-      else if (accumulator < -_S_avg_acc_max)
-        accumulator = -_S_avg_acc_max;
+    if (set._M_valid == 0u || destination == nullptr)
+        return Status::BAD_LAYOUT;
+    if (!simd_aligned (destination))
+        return Status::BAD_LAYOUT;
+    if (from >= to || to > set._M_snapshots)
+        return Status::OUT_OF_RANGE;
+    const uint32_t window = to - from;
+    const uint32_t count = set._M_count;
+    for (uint32_t lane = 0u; lane < count; ++lane) {
+        int64_t accumulator = 0;
+        for (uint32_t snapshot = from; snapshot < to; ++snapshot) {
+            accumulator += code_to_q15 (set._M_streams[snapshot][lane]);
+            if (accumulator > _S_avg_acc_max)
+                accumulator = _S_avg_acc_max;
+            else if (accumulator < -_S_avg_acc_max)
+                accumulator = -_S_avg_acc_max;
+        }
+        const int32_t mean = avg_div_round (accumulator, window);
+        destination[lane] = q15_to_code (mean);
     }
-    const int32_t mean = avg_div_round (accumulator, window);
-    destination[lane] = q15_to_code (mean);
-  }
-  return Status::OK;
+    return Status::OK;
 }
 
 /**
@@ -300,28 +300,28 @@ avg_uniform (const SnapshotSet &set, const uint32_t from, const uint32_t to, int
 [[nodiscard]] inline Status
 avg_swa (const SnapshotSet &set, const uint32_t *const indices, const uint32_t used,
          int8_t *const destination) noexcept {
-  if (set._M_valid == 0u || destination == nullptr || indices == nullptr)
-    return Status::BAD_LAYOUT;
-  if (!simd_aligned (destination) || !simd_aligned (indices))
-    return Status::BAD_LAYOUT;
-  if (used == 0u || used > _S_avg_max_snapshots)
-    return Status::OUT_OF_RANGE;
-  for (uint32_t index = 0u; index < used; ++index)
-    if (indices[index] >= set._M_snapshots)
-      return Status::OUT_OF_RANGE;
-  const uint32_t count = set._M_count;
-  for (uint32_t lane = 0u; lane < count; ++lane) {
-    int64_t accumulator = 0;
-    for (uint32_t index = 0u; index < used; ++index) {
-      accumulator += code_to_q15 (set._M_streams[indices[index]][lane]);
-      if (accumulator > _S_avg_acc_max)
-        accumulator = _S_avg_acc_max;
-      else if (accumulator < -_S_avg_acc_max)
-        accumulator = -_S_avg_acc_max;
+    if (set._M_valid == 0u || destination == nullptr || indices == nullptr)
+        return Status::BAD_LAYOUT;
+    if (!simd_aligned (destination) || !simd_aligned (indices))
+        return Status::BAD_LAYOUT;
+    if (used == 0u || used > _S_avg_max_snapshots)
+        return Status::OUT_OF_RANGE;
+    for (uint32_t index = 0u; index < used; ++index)
+        if (indices[index] >= set._M_snapshots)
+            return Status::OUT_OF_RANGE;
+    const uint32_t count = set._M_count;
+    for (uint32_t lane = 0u; lane < count; ++lane) {
+        int64_t accumulator = 0;
+        for (uint32_t index = 0u; index < used; ++index) {
+            accumulator += code_to_q15 (set._M_streams[indices[index]][lane]);
+            if (accumulator > _S_avg_acc_max)
+                accumulator = _S_avg_acc_max;
+            else if (accumulator < -_S_avg_acc_max)
+                accumulator = -_S_avg_acc_max;
+        }
+        destination[lane] = q15_to_code (avg_div_round (accumulator, used));
     }
-    destination[lane] = q15_to_code (avg_div_round (accumulator, used));
-  }
-  return Status::OK;
+    return Status::OK;
 }
 
 /**
@@ -333,25 +333,25 @@ avg_swa (const SnapshotSet &set, const uint32_t *const indices, const uint32_t u
  * (`state / (1 - decay^n)`) with the module's own integer ratio helper.
  */
 struct EmaState {
-  int16_t *_M_lanes = nullptr;
-  uint32_t _M_count = 0u;
-  int32_t _M_decay_q15 = 32572;
-  uint32_t _M_updates = 0u;
-  /** @brief Saturating count of lanes that clamped during updates. */
-  uint32_t _M_saturation_events = 0u;
-  uint8_t _M_valid = 0u;
-  uint8_t _M_pad[3] = {0u, 0u, 0u};
+    int16_t *_M_lanes = nullptr;
+    uint32_t _M_count = 0u;
+    int32_t _M_decay_q15 = 32572;
+    uint32_t _M_updates = 0u;
+    /** @brief Saturating count of lanes that clamped during updates. */
+    uint32_t _M_saturation_events = 0u;
+    uint8_t _M_valid = 0u;
+    uint8_t _M_pad[3] = {0u, 0u, 0u};
 
-  [[nodiscard]] constexpr Status
-  validate () const noexcept {
-    if (this->_M_lanes == nullptr || this->_M_valid == 0u)
-      return Status::BAD_LAYOUT;
-    if (this->_M_count > _S_avg_max_count)
-      return Status::OUT_OF_RANGE;
-    if (this->_M_decay_q15 < 0 || this->_M_decay_q15 > _S_q15_max)
-      return Status::OUT_OF_RANGE;
-    return Status::OK;
-  }
+    [[nodiscard]] constexpr Status
+    validate () const noexcept {
+        if (this->_M_lanes == nullptr || this->_M_valid == 0u)
+            return Status::BAD_LAYOUT;
+        if (this->_M_count > _S_avg_max_count)
+            return Status::OUT_OF_RANGE;
+        if (this->_M_decay_q15 < 0 || this->_M_decay_q15 > _S_q15_max)
+            return Status::OUT_OF_RANGE;
+        return Status::OK;
+    }
 };
 
 static_assert (sizeof (EmaState) == (sizeof (void *) == 4u ? 24u : 32u),
@@ -360,40 +360,40 @@ static_assert (sizeof (EmaState) == (sizeof (void *) == 4u ? 24u : 32u),
 /** @brief Bind an EMA state over caller-owned int16 lanes. */
 [[nodiscard]] inline Status
 avg_ema_open (EmaState &state, int16_t *const lanes, const uint32_t count, const int32_t decay_q15) noexcept {
-  state._M_valid = 0u;
-  state._M_lanes = nullptr;
-  state._M_count = 0u;
-  state._M_updates = 0u;
-  state._M_saturation_events = 0u;
-  if (lanes == nullptr)
-    return Status::BAD_LAYOUT;
-  if (count == 0u || count > _S_avg_max_count)
-    return Status::OUT_OF_RANGE;
-  if (decay_q15 < 0 || decay_q15 > _S_q15_max)
-    return Status::OUT_OF_RANGE;
-  if (!simd_aligned (lanes))
-    return Status::BAD_LAYOUT;
-  state._M_lanes = lanes;
-  state._M_count = count;
-  state._M_decay_q15 = decay_q15;
-  state._M_valid = 1u;
-  return Status::OK;
+    state._M_valid = 0u;
+    state._M_lanes = nullptr;
+    state._M_count = 0u;
+    state._M_updates = 0u;
+    state._M_saturation_events = 0u;
+    if (lanes == nullptr)
+        return Status::BAD_LAYOUT;
+    if (count == 0u || count > _S_avg_max_count)
+        return Status::OUT_OF_RANGE;
+    if (decay_q15 < 0 || decay_q15 > _S_q15_max)
+        return Status::OUT_OF_RANGE;
+    if (!simd_aligned (lanes))
+        return Status::BAD_LAYOUT;
+    state._M_lanes = lanes;
+    state._M_count = count;
+    state._M_decay_q15 = decay_q15;
+    state._M_valid = 1u;
+    return Status::OK;
 }
 
 /** @brief Seed an EMA state from a code stream: the n = 0 case. */
 [[nodiscard]] inline Status
 avg_ema_seed (EmaState &state, const int8_t *const codes) noexcept {
-  const Status state_status = state.validate ();
-  if (!status_ok (state_status))
-    return state_status;
-  if (codes == nullptr)
-    return Status::BAD_LAYOUT;
-  if (!simd_aligned (codes))
-    return Status::BAD_LAYOUT;
-  train_simd::codes_to_q15 (codes, state._M_lanes, state._M_count);
-  state._M_updates = 0u;
-  state._M_saturation_events = 0u;
-  return Status::OK;
+    const Status state_status = state.validate ();
+    if (!status_ok (state_status))
+        return state_status;
+    if (codes == nullptr)
+        return Status::BAD_LAYOUT;
+    if (!simd_aligned (codes))
+        return Status::BAD_LAYOUT;
+    train_simd::codes_to_q15 (codes, state._M_lanes, state._M_count);
+    state._M_updates = 0u;
+    state._M_saturation_events = 0u;
+    return Status::OK;
 }
 
 /**
@@ -406,45 +406,45 @@ avg_ema_seed (EmaState &state, const int8_t *const codes) noexcept {
  */
 [[nodiscard]] inline Status
 avg_ema_step (EmaState &state, const int8_t *const codes) noexcept {
-  const Status state_status = state.validate ();
-  if (!status_ok (state_status))
-    return state_status;
-  if (codes == nullptr)
-    return Status::BAD_LAYOUT;
-  if (!simd_aligned (codes))
-    return Status::BAD_LAYOUT;
-  const int32_t move = _S_q15_one - 1 - state._M_decay_q15;
-  uint32_t saturations = 0u;
-  for (uint32_t lane = 0u; lane < state._M_count; ++lane) {
-    const int32_t held = state._M_lanes[lane];
-    const int32_t target = code_to_q15 (codes[lane]);
-    /* `q15_mul` clamps its own result, so a delta that exceeds the Q15
-       span after scaling can only move the lane to the rail, never past
-       it; the saturating store below still guards the +/-32768 seam. */
-    const int32_t step_q15 = q15_mul (target - held, move);
-    const int32_t next = held + step_q15;
-    if (next > _S_q15_max || next < _S_q15_min) {
-      state._M_lanes[lane] = q15_to_i16_sat (next);
-      ++saturations;
-    } else
-      state._M_lanes[lane] = static_cast<int16_t> (next);
-  }
-  state._M_saturation_events =
-      state._M_saturation_events > 0xFFFFFFFFu - saturations ? 0xFFFFFFFFu : state._M_saturation_events + saturations;
-  if (state._M_updates < 0xFFFFFFFFu)
-    ++state._M_updates;
-  return Status::OK;
+    const Status state_status = state.validate ();
+    if (!status_ok (state_status))
+        return state_status;
+    if (codes == nullptr)
+        return Status::BAD_LAYOUT;
+    if (!simd_aligned (codes))
+        return Status::BAD_LAYOUT;
+    const int32_t move = _S_q15_one - 1 - state._M_decay_q15;
+    uint32_t saturations = 0u;
+    for (uint32_t lane = 0u; lane < state._M_count; ++lane) {
+        const int32_t held = state._M_lanes[lane];
+        const int32_t target = code_to_q15 (codes[lane]);
+        /* `q15_mul` clamps its own result, so a delta that exceeds the Q15
+           span after scaling can only move the lane to the rail, never past
+           it; the saturating store below still guards the +/-32768 seam. */
+        const int32_t step_q15 = q15_mul (target - held, move);
+        const int32_t next = held + step_q15;
+        if (next > _S_q15_max || next < _S_q15_min) {
+            state._M_lanes[lane] = q15_to_i16_sat (next);
+            ++saturations;
+        } else
+            state._M_lanes[lane] = static_cast<int16_t> (next);
+    }
+    state._M_saturation_events =
+        state._M_saturation_events > 0xFFFFFFFFu - saturations ? 0xFFFFFFFFu : state._M_saturation_events + saturations;
+    if (state._M_updates < 0xFFFFFFFFu)
+        ++state._M_updates;
+    return Status::OK;
 }
 
 /** @brief Set the decay of a live EMA state, e.g. from a warmup schedule. */
 [[nodiscard]] inline constexpr Status
 avg_ema_set_decay (EmaState &state, const int32_t decay_q15) noexcept {
-  if (state._M_valid == 0u)
-    return Status::BAD_LAYOUT;
-  if (decay_q15 < 0 || decay_q15 > _S_q15_max)
-    return Status::OUT_OF_RANGE;
-  state._M_decay_q15 = decay_q15;
-  return Status::OK;
+    if (state._M_valid == 0u)
+        return Status::BAD_LAYOUT;
+    if (decay_q15 < 0 || decay_q15 > _S_q15_max)
+        return Status::OUT_OF_RANGE;
+    state._M_decay_q15 = decay_q15;
+    return Status::OK;
 }
 
 /**
@@ -456,58 +456,58 @@ avg_ema_set_decay (EmaState &state, const int32_t decay_q15) noexcept {
  */
 [[nodiscard]] inline Status
 avg_round_to_codes (const int16_t *const lanes, int8_t *const codes, const uint32_t count) noexcept {
-  if (lanes == nullptr || codes == nullptr)
-    return Status::BAD_LAYOUT;
-  if (count > _S_avg_max_count)
-    return Status::OUT_OF_RANGE;
-  if (!simd_aligned (lanes) || !simd_aligned (codes))
-    return Status::BAD_LAYOUT;
-  train_simd::q15_to_codes (lanes, codes, count);
-  return Status::OK;
+    if (lanes == nullptr || codes == nullptr)
+        return Status::BAD_LAYOUT;
+    if (count > _S_avg_max_count)
+        return Status::OUT_OF_RANGE;
+    if (!simd_aligned (lanes) || !simd_aligned (codes))
+        return Status::BAD_LAYOUT;
+    train_simd::q15_to_codes (lanes, codes, count);
+    return Status::OK;
 }
 
 /** @brief Read an EMA state out as a code stream. */
 [[nodiscard]] inline Status
 avg_ema_read (const EmaState &state, int8_t *const codes) noexcept {
-  const Status state_status = state.validate ();
-  if (!status_ok (state_status))
-    return state_status;
-  return avg_round_to_codes (state._M_lanes, codes, state._M_count);
+    const Status state_status = state.validate ();
+    if (!status_ok (state_status))
+        return state_status;
+    return avg_round_to_codes (state._M_lanes, codes, state._M_count);
 }
 
 /** @brief Bias-correct an EMA state into lanes the caller owns (decay^n form). */
 [[nodiscard]] inline Status
 avg_ema_bias_corrected (const EmaState &state, int16_t *const out) noexcept {
-  const Status state_status = state.validate ();
-  if (!status_ok (state_status))
-    return state_status;
-  if (out == nullptr)
-    return Status::BAD_LAYOUT;
-  if (!simd_aligned (out))
-    return Status::BAD_LAYOUT;
-  /* 1 - decay^n, accumulated in Q15 with the module's own saturating multiply:
-     the correction factor only ever grows towards 1.0, so it cannot overflow.
-     n == 0 means the state is a bare seed, i.e. already unbiased. */
-  if (state._M_updates == 0u) {
+    const Status state_status = state.validate ();
+    if (!status_ok (state_status))
+        return state_status;
+    if (out == nullptr)
+        return Status::BAD_LAYOUT;
+    if (!simd_aligned (out))
+        return Status::BAD_LAYOUT;
+    /* 1 - decay^n, accumulated in Q15 with the module's own saturating multiply:
+       the correction factor only ever grows towards 1.0, so it cannot overflow.
+       n == 0 means the state is a bare seed, i.e. already unbiased. */
+    if (state._M_updates == 0u) {
+        for (uint32_t lane = 0u; lane < state._M_count; ++lane)
+            out[lane] = state._M_lanes[lane];
+        return Status::OK;
+    }
+    int32_t decay_power = state._M_decay_q15;
+    int32_t one_minus = _S_q15_one - 1 - state._M_decay_q15;
+    for (uint32_t update = 1u; update < state._M_updates; ++update) {
+        decay_power = q15_mul (decay_power, state._M_decay_q15);
+        one_minus = _S_q15_one - 1 - decay_power;
+    }
+    if (one_minus <= 0) {
+        for (uint32_t lane = 0u; lane < state._M_count; ++lane)
+            out[lane] = state._M_lanes[lane];
+        return Status::OK;
+    }
+    const int32_t reciprocal = q15_reciprocal (one_minus);
     for (uint32_t lane = 0u; lane < state._M_count; ++lane)
-      out[lane] = state._M_lanes[lane];
+        out[lane] = q15_to_i16_sat (q15_mul (static_cast<int32_t> (state._M_lanes[lane]), reciprocal));
     return Status::OK;
-  }
-  int32_t decay_power = state._M_decay_q15;
-  int32_t one_minus = _S_q15_one - 1 - state._M_decay_q15;
-  for (uint32_t update = 1u; update < state._M_updates; ++update) {
-    decay_power = q15_mul (decay_power, state._M_decay_q15);
-    one_minus = _S_q15_one - 1 - decay_power;
-  }
-  if (one_minus <= 0) {
-    for (uint32_t lane = 0u; lane < state._M_count; ++lane)
-      out[lane] = state._M_lanes[lane];
-    return Status::OK;
-  }
-  const int32_t reciprocal = q15_reciprocal (one_minus);
-  for (uint32_t lane = 0u; lane < state._M_count; ++lane)
-    out[lane] = q15_to_i16_sat (q15_mul (static_cast<int32_t> (state._M_lanes[lane]), reciprocal));
-  return Status::OK;
 }
 
 /**
@@ -520,21 +520,21 @@ avg_ema_bias_corrected (const EmaState &state, int16_t *const out) noexcept {
  * without that, a run started mid-training would never average at all.
  */
 struct AvgGate {
-  int32_t _M_best_q15 = 0;
-  /** @brief Improvement required over `_M_best_q15` to accept a snapshot. */
-  int32_t _M_min_delta_q15 = 1;
-  uint32_t _M_accepted = 0u;
-  uint32_t _M_rejected = 0u;
-  uint32_t _M_compared = 0u;
-  /** @brief 0 == lower metric wins (a loss); 1 == higher metric wins. */
-  uint8_t _M_higher_is_better = 0u;
-  uint8_t _M_has_best = 0u;
-  uint16_t _M_pad = 0u;
+    int32_t _M_best_q15 = 0;
+    /** @brief Improvement required over `_M_best_q15` to accept a snapshot. */
+    int32_t _M_min_delta_q15 = 1;
+    uint32_t _M_accepted = 0u;
+    uint32_t _M_rejected = 0u;
+    uint32_t _M_compared = 0u;
+    /** @brief 0 == lower metric wins (a loss); 1 == higher metric wins. */
+    uint8_t _M_higher_is_better = 0u;
+    uint8_t _M_has_best = 0u;
+    uint16_t _M_pad = 0u;
 
-  [[nodiscard]] constexpr Status
-  validate () const noexcept {
-    return this->_M_min_delta_q15 >= 0 ? Status::OK : Status::OUT_OF_RANGE;
-  }
+    [[nodiscard]] constexpr Status
+    validate () const noexcept {
+        return this->_M_min_delta_q15 >= 0 ? Status::OK : Status::OUT_OF_RANGE;
+    }
 };
 
 static_assert (sizeof (AvgGate) == 24u, "the averaging gate must stay a 24-byte POD");
@@ -542,13 +542,13 @@ static_assert (sizeof (AvgGate) == 24u, "the averaging gate must stay a 24-byte 
 /** @brief Reset a gate, e.g. after a snapshot set was consumed. */
 constexpr void
 avg_gate_reset (AvgGate &gate) noexcept {
-  gate._M_best_q15 = 0;
-  gate._M_min_delta_q15 = gate._M_min_delta_q15 < 0 ? 1 : gate._M_min_delta_q15;
-  gate._M_accepted = 0u;
-  gate._M_rejected = 0u;
-  gate._M_compared = 0u;
-  gate._M_has_best = 0u;
-  gate._M_pad = 0u;
+    gate._M_best_q15 = 0;
+    gate._M_min_delta_q15 = gate._M_min_delta_q15 < 0 ? 1 : gate._M_min_delta_q15;
+    gate._M_accepted = 0u;
+    gate._M_rejected = 0u;
+    gate._M_compared = 0u;
+    gate._M_has_best = 0u;
+    gate._M_pad = 0u;
 }
 
 /**
@@ -560,50 +560,50 @@ avg_gate_reset (AvgGate &gate) noexcept {
  */
 [[nodiscard]] inline Status
 avg_gate_consider (AvgGate &gate, const int32_t metric_q15, bool &accept) noexcept {
-  const Status gate_status = gate.validate ();
-  if (!status_ok (gate_status))
-    return gate_status;
-  if (gate._M_compared < 0xFFFFFFFFu)
-    ++gate._M_compared;
-  if (gate._M_has_best == 0u) {
-    gate._M_has_best = 1u;
-    gate._M_best_q15 = metric_q15;
-    ++gate._M_accepted;
-    accept = true;
+    const Status gate_status = gate.validate ();
+    if (!status_ok (gate_status))
+        return gate_status;
+    if (gate._M_compared < 0xFFFFFFFFu)
+        ++gate._M_compared;
+    if (gate._M_has_best == 0u) {
+        gate._M_has_best = 1u;
+        gate._M_best_q15 = metric_q15;
+        ++gate._M_accepted;
+        accept = true;
+        return Status::OK;
+    }
+    const int64_t margin = gate._M_higher_is_better != 0u ? static_cast<int64_t> (metric_q15) - gate._M_best_q15
+                                                          : static_cast<int64_t> (gate._M_best_q15) - metric_q15;
+    if (margin >= gate._M_min_delta_q15) {
+        gate._M_best_q15 = metric_q15;
+        ++gate._M_accepted;
+        accept = true;
+        return Status::OK;
+    }
+    ++gate._M_rejected;
+    accept = false;
     return Status::OK;
-  }
-  const int64_t margin = gate._M_higher_is_better != 0u ? static_cast<int64_t> (metric_q15) - gate._M_best_q15
-                                                        : static_cast<int64_t> (gate._M_best_q15) - metric_q15;
-  if (margin >= gate._M_min_delta_q15) {
-    gate._M_best_q15 = metric_q15;
-    ++gate._M_accepted;
-    accept = true;
-    return Status::OK;
-  }
-  ++gate._M_rejected;
-  accept = false;
-  return Status::OK;
 }
 
 /** @brief Per-lane sign disagreement against the average; zeros never diverge. */
 [[nodiscard]] inline constexpr bool
 avg_lane_diverges (const int32_t average_code, const int32_t snapshot_code) noexcept {
-  return (average_code > 0 && snapshot_code < 0) || (average_code < 0 && snapshot_code > 0);
+    return (average_code > 0 && snapshot_code < 0) || (average_code < 0 && snapshot_code > 0);
 }
 
 /**
  * @brief What a divergence check found: the worst snapshot and its lane fraction.
  */
 struct DivergenceReport {
-  uint32_t _M_lanes_compared = 0u;
-  /** @brief Total sign-flipped lanes over every snapshot compared. */
-  uint32_t _M_lanes_diverging = 0u;
-  uint32_t _M_worst_snapshot = 0u;
-  uint32_t _M_worst_snapshot_lanes = 0u;
-  /** @brief Worst snapshot's diverging fraction, Q15. */
-  int32_t _M_worst_fraction_q15 = 0;
-  /** @brief Limit the caller supplied, echoed for the log. */
-  int32_t _M_limit_q15 = 0;
+    uint32_t _M_lanes_compared = 0u;
+    /** @brief Total sign-flipped lanes over every snapshot compared. */
+    uint32_t _M_lanes_diverging = 0u;
+    uint32_t _M_worst_snapshot = 0u;
+    uint32_t _M_worst_snapshot_lanes = 0u;
+    /** @brief Worst snapshot's diverging fraction, Q15. */
+    int32_t _M_worst_fraction_q15 = 0;
+    /** @brief Limit the caller supplied, echoed for the log. */
+    int32_t _M_limit_q15 = 0;
 };
 
 static_assert (sizeof (DivergenceReport) == 24u, "the divergence report is six counters and must stay 24 bytes");
@@ -623,76 +623,76 @@ static_assert (sizeof (DivergenceReport) == 24u, "the divergence report is six c
 [[nodiscard]] inline Status
 avg_check_divergence (const int8_t *const average, const SnapshotSet &set, const int32_t limit_q15,
                       DivergenceReport &report) noexcept {
-  report = DivergenceReport{};
-  report._M_limit_q15 = limit_q15;
-  if (average == nullptr || set._M_valid == 0u)
-    return Status::BAD_LAYOUT;
-  if (!simd_aligned (average))
-    return Status::BAD_LAYOUT;
-  if (limit_q15 < 0 || limit_q15 > _S_q15_max)
-    return Status::OUT_OF_RANGE;
-  uint32_t worst_count = 0u;
-  uint32_t worst_index = 0u;
-  for (uint32_t snapshot = 0u; snapshot < set._M_snapshots; ++snapshot) {
-    uint32_t diverging = 0u;
-    for (uint32_t lane = 0u; lane < set._M_count; ++lane) {
-      if (avg_lane_diverges (average[lane], set._M_streams[snapshot][lane]))
-        ++diverging;
+    report = DivergenceReport{};
+    report._M_limit_q15 = limit_q15;
+    if (average == nullptr || set._M_valid == 0u)
+        return Status::BAD_LAYOUT;
+    if (!simd_aligned (average))
+        return Status::BAD_LAYOUT;
+    if (limit_q15 < 0 || limit_q15 > _S_q15_max)
+        return Status::OUT_OF_RANGE;
+    uint32_t worst_count = 0u;
+    uint32_t worst_index = 0u;
+    for (uint32_t snapshot = 0u; snapshot < set._M_snapshots; ++snapshot) {
+        uint32_t diverging = 0u;
+        for (uint32_t lane = 0u; lane < set._M_count; ++lane) {
+            if (avg_lane_diverges (average[lane], set._M_streams[snapshot][lane]))
+                ++diverging;
+        }
+        report._M_lanes_compared += set._M_count;
+        report._M_lanes_diverging += diverging;
+        if (diverging > worst_count) {
+            worst_count = diverging;
+            worst_index = snapshot;
+        }
     }
-    report._M_lanes_compared += set._M_count;
-    report._M_lanes_diverging += diverging;
-    if (diverging > worst_count) {
-      worst_count = diverging;
-      worst_index = snapshot;
-    }
-  }
-  report._M_worst_snapshot = worst_index;
-  report._M_worst_snapshot_lanes = worst_count;
-  /* worst_count <= set._M_count <= 65535, so both operands fit int32 exactly. */
-  report._M_worst_fraction_q15 = ratio_q15 (static_cast<int32_t> (worst_count), static_cast<int32_t> (set._M_count));
-  if (report._M_worst_fraction_q15 > limit_q15)
-    return Status::OUT_OF_RANGE;
-  return Status::OK;
+    report._M_worst_snapshot = worst_index;
+    report._M_worst_snapshot_lanes = worst_count;
+    /* worst_count <= set._M_count <= 65535, so both operands fit int32 exactly. */
+    report._M_worst_fraction_q15 = ratio_q15 (static_cast<int32_t> (worst_count), static_cast<int32_t> (set._M_count));
+    if (report._M_worst_fraction_q15 > limit_q15)
+        return Status::OUT_OF_RANGE;
+    return Status::OK;
 }
 
 /** @brief Count of lanes an averaged set and its source differ in, any amount. */
 [[nodiscard]] inline Status
 avg_code_drift (const int8_t *const average, const int8_t *const source, const uint32_t count, uint32_t &drift_out,
                 int32_t &max_step_out) noexcept {
-  if (average == nullptr || source == nullptr)
-    return Status::BAD_LAYOUT;
-  if (count > _S_avg_max_count)
-    return Status::OUT_OF_RANGE;
-  uint32_t drift = 0u;
-  int32_t maximum = 0;
-  for (uint32_t lane = 0u; lane < count; ++lane) {
-    const int32_t difference =
-        average[lane] > source[lane] ? average[lane] - source[lane] : source[lane] - average[lane];
-    if (difference != 0)
-      ++drift;
-    if (difference > maximum)
-      maximum = difference;
-  }
-  drift_out = drift;
-  max_step_out = maximum;
-  return Status::OK;
+    if (average == nullptr || source == nullptr)
+        return Status::BAD_LAYOUT;
+    if (count > _S_avg_max_count)
+        return Status::OUT_OF_RANGE;
+    uint32_t drift = 0u;
+    int32_t maximum = 0;
+    for (uint32_t lane = 0u; lane < count; ++lane) {
+        const int32_t difference =
+            average[lane] > source[lane] ? average[lane] - source[lane] : source[lane] - average[lane];
+        if (difference != 0)
+            ++drift;
+        if (difference > maximum)
+            maximum = difference;
+    }
+    drift_out = drift;
+    max_step_out = maximum;
+    return Status::OK;
 }
 
 /**
  * @brief What one averaging run did, across a whole parameter set.
  */
 struct AveragingReport {
-  uint32_t _M_tensors = 0u;
-  uint32_t _M_lanes = 0u;
-  /** @brief Snapshots folded in (uniform window size, or the SWA list length). */
-  uint32_t _M_snapshots_used = 0u;
-  uint32_t _M_gate_accepted = 0u;
-  uint32_t _M_gate_rejected = 0u;
-  /** @brief Largest code-step distance between the average and the newest input. */
-  int32_t _M_max_code_drift = 0;
-  uint32_t _M_drifted_lanes = 0u;
-  uint8_t _M_mode = static_cast<uint8_t> (AveragingMode::Uniform);
-  uint8_t _M_pad[3] = {0u, 0u, 0u};
+    uint32_t _M_tensors = 0u;
+    uint32_t _M_lanes = 0u;
+    /** @brief Snapshots folded in (uniform window size, or the SWA list length). */
+    uint32_t _M_snapshots_used = 0u;
+    uint32_t _M_gate_accepted = 0u;
+    uint32_t _M_gate_rejected = 0u;
+    /** @brief Largest code-step distance between the average and the newest input. */
+    int32_t _M_max_code_drift = 0;
+    uint32_t _M_drifted_lanes = 0u;
+    uint8_t _M_mode = static_cast<uint8_t> (AveragingMode::Uniform);
+    uint8_t _M_pad[3] = {0u, 0u, 0u};
 };
 
 static_assert (sizeof (AveragingReport) == 32u, "the averaging report is seven counters plus a mode byte");
@@ -718,27 +718,27 @@ static_assert (sizeof (AveragingReport) == 32u, "the averaging report is seven c
 [[nodiscard]] inline Status
 avg_gate_record (AvgGate &gate, const int32_t *const metrics, const uint32_t count, uint32_t *const indices_out,
                  uint32_t &used_out) noexcept {
-  const Status gate_status = gate.validate ();
-  if (!status_ok (gate_status))
-    return gate_status;
-  used_out = 0u;
-  if (metrics == nullptr || indices_out == nullptr)
-    return Status::BAD_LAYOUT;
-  if (count == 0u || count > _S_avg_max_snapshots)
-    return Status::OUT_OF_RANGE;
-  if (!simd_aligned (metrics) || !simd_aligned (indices_out))
-    return Status::BAD_LAYOUT;
-  for (uint32_t index = 0u; index < count; ++index) {
-    bool accept = false;
-    const Status consider = avg_gate_consider (gate, metrics[index], accept);
-    if (!status_ok (consider))
-      return consider;
-    if (accept) {
-      indices_out[used_out] = index;
-      ++used_out;
+    const Status gate_status = gate.validate ();
+    if (!status_ok (gate_status))
+        return gate_status;
+    used_out = 0u;
+    if (metrics == nullptr || indices_out == nullptr)
+        return Status::BAD_LAYOUT;
+    if (count == 0u || count > _S_avg_max_snapshots)
+        return Status::OUT_OF_RANGE;
+    if (!simd_aligned (metrics) || !simd_aligned (indices_out))
+        return Status::BAD_LAYOUT;
+    for (uint32_t index = 0u; index < count; ++index) {
+        bool accept = false;
+        const Status consider = avg_gate_consider (gate, metrics[index], accept);
+        if (!status_ok (consider))
+            return consider;
+        if (accept) {
+            indices_out[used_out] = index;
+            ++used_out;
+        }
     }
-  }
-  return used_out == 0u ? Status::OUT_OF_RANGE : Status::OK;
+    return used_out == 0u ? Status::OUT_OF_RANGE : Status::OK;
 }
 
 /**
@@ -761,54 +761,54 @@ avg_gate_record (AvgGate &gate, const int32_t *const metrics, const uint32_t cou
 [[nodiscard]] inline Status
 avg_average_set (const SnapshotSet *const sets, const ParamSet &destination, const AveragingMode mode,
                  const uint32_t *const indices, const uint32_t used, AveragingReport &report) noexcept {
-  report = AveragingReport{};
-  report._M_mode = static_cast<uint8_t> (mode);
-  const Status destination_status = destination.validate ();
-  if (!status_ok (destination_status))
-    return destination_status;
-  if (sets == nullptr)
-    return Status::BAD_LAYOUT;
-  if (!simd_aligned (sets))
-    return Status::BAD_LAYOUT;
-  if (mode == AveragingMode::Ema)
-    return Status::UNSUPPORTED;
-  if (mode == AveragingMode::Swa && (indices == nullptr || used == 0u))
-    return Status::BAD_LAYOUT;
-  if (mode == AveragingMode::Uniform && indices != nullptr)
-    return Status::BAD_LAYOUT;
-  const uint32_t tensors = destination._M_tensors;
-  for (uint32_t tensor = 0u; tensor < tensors; ++tensor) {
-    Trainable &param = destination._M_params[tensor];
-    const Status parameter_status = param.validate ();
-    if (!status_ok (parameter_status))
-      return parameter_status;
-    if (sets[tensor]._M_valid == 0u)
-      return Status::BAD_LAYOUT;
-    if (sets[tensor]._M_count != param._M_count)
-      return Status::BAD_LAYOUT;
-    const Status status = mode == AveragingMode::Swa
-                              ? avg_swa (sets[tensor], indices, used, param._M_code)
-                              : avg_uniform (sets[tensor], 0u, sets[tensor]._M_snapshots, param._M_code);
-    if (!status_ok (status))
-      return status;
-    ++report._M_tensors;
-    report._M_lanes += param._M_count;
-    const uint32_t applied = mode == AveragingMode::Swa ? used : sets[tensor]._M_snapshots;
-    if (applied > report._M_snapshots_used)
-      report._M_snapshots_used = applied;
-    /* Drift is measured against the newest snapshot: that is the weight set
-       averaging replaced, so a zero drift means a no-op average. */
-    const int8_t *const newest = sets[tensor]._M_streams[sets[tensor]._M_snapshots - 1u];
-    uint32_t drifted = 0u;
-    int32_t maximum = 0;
-    const Status drift_status = avg_code_drift (param._M_code, newest, param._M_count, drifted, maximum);
-    if (!status_ok (drift_status))
-      return drift_status;
-    report._M_drifted_lanes += drifted;
-    if (maximum > report._M_max_code_drift)
-      report._M_max_code_drift = maximum;
-  }
-  return Status::OK;
+    report = AveragingReport{};
+    report._M_mode = static_cast<uint8_t> (mode);
+    const Status destination_status = destination.validate ();
+    if (!status_ok (destination_status))
+        return destination_status;
+    if (sets == nullptr)
+        return Status::BAD_LAYOUT;
+    if (!simd_aligned (sets))
+        return Status::BAD_LAYOUT;
+    if (mode == AveragingMode::Ema)
+        return Status::UNSUPPORTED;
+    if (mode == AveragingMode::Swa && (indices == nullptr || used == 0u))
+        return Status::BAD_LAYOUT;
+    if (mode == AveragingMode::Uniform && indices != nullptr)
+        return Status::BAD_LAYOUT;
+    const uint32_t tensors = destination._M_tensors;
+    for (uint32_t tensor = 0u; tensor < tensors; ++tensor) {
+        Trainable &param = destination._M_params[tensor];
+        const Status parameter_status = param.validate ();
+        if (!status_ok (parameter_status))
+            return parameter_status;
+        if (sets[tensor]._M_valid == 0u)
+            return Status::BAD_LAYOUT;
+        if (sets[tensor]._M_count != param._M_count)
+            return Status::BAD_LAYOUT;
+        const Status status = mode == AveragingMode::Swa
+                                  ? avg_swa (sets[tensor], indices, used, param._M_code)
+                                  : avg_uniform (sets[tensor], 0u, sets[tensor]._M_snapshots, param._M_code);
+        if (!status_ok (status))
+            return status;
+        ++report._M_tensors;
+        report._M_lanes += param._M_count;
+        const uint32_t applied = mode == AveragingMode::Swa ? used : sets[tensor]._M_snapshots;
+        if (applied > report._M_snapshots_used)
+            report._M_snapshots_used = applied;
+        /* Drift is measured against the newest snapshot: that is the weight set
+           averaging replaced, so a zero drift means a no-op average. */
+        const int8_t *const newest = sets[tensor]._M_streams[sets[tensor]._M_snapshots - 1u];
+        uint32_t drifted = 0u;
+        int32_t maximum = 0;
+        const Status drift_status = avg_code_drift (param._M_code, newest, param._M_count, drifted, maximum);
+        if (!status_ok (drift_status))
+            return drift_status;
+        report._M_drifted_lanes += drifted;
+        if (maximum > report._M_max_code_drift)
+            report._M_max_code_drift = maximum;
+    }
+    return Status::OK;
 }
 
 /**
@@ -827,32 +827,32 @@ avg_average_set (const SnapshotSet *const sets, const ParamSet &destination, con
 avg_gated_average (const SnapshotSet *const sets, const ParamSet &destination, AvgGate &gate,
                    const int32_t *const metrics, const uint32_t metric_count, uint32_t *const index_scratch,
                    AveragingReport &report) noexcept {
-  report = AveragingReport{};
-  report._M_mode = static_cast<uint8_t> (AveragingMode::Swa);
-  const Status destination_status = destination.validate ();
-  if (!status_ok (destination_status))
-    return destination_status;
-  if (sets == nullptr || metrics == nullptr || index_scratch == nullptr)
-    return Status::BAD_LAYOUT;
-  if (!simd_aligned (sets) || !simd_aligned (metrics) || !simd_aligned (index_scratch))
-    return Status::BAD_LAYOUT;
-  if (metric_count == 0u || metric_count > _S_avg_max_snapshots)
-    return Status::OUT_OF_RANGE;
-  for (uint32_t tensor = 0u; tensor < destination._M_tensors; ++tensor)
-    if (sets[tensor]._M_valid == 0u || sets[tensor]._M_snapshots < metric_count)
-      return Status::BAD_LAYOUT;
-  uint32_t used = 0u;
-  const Status record_status = avg_gate_record (gate, metrics, metric_count, index_scratch, used);
-  report._M_gate_accepted = gate._M_accepted;
-  report._M_gate_rejected = gate._M_rejected;
-  if (!status_ok (record_status))
-    return record_status;
-  const Status average_status = avg_average_set (sets, destination, AveragingMode::Swa, index_scratch, used, report);
-  if (status_ok (average_status)) {
+    report = AveragingReport{};
+    report._M_mode = static_cast<uint8_t> (AveragingMode::Swa);
+    const Status destination_status = destination.validate ();
+    if (!status_ok (destination_status))
+        return destination_status;
+    if (sets == nullptr || metrics == nullptr || index_scratch == nullptr)
+        return Status::BAD_LAYOUT;
+    if (!simd_aligned (sets) || !simd_aligned (metrics) || !simd_aligned (index_scratch))
+        return Status::BAD_LAYOUT;
+    if (metric_count == 0u || metric_count > _S_avg_max_snapshots)
+        return Status::OUT_OF_RANGE;
+    for (uint32_t tensor = 0u; tensor < destination._M_tensors; ++tensor)
+        if (sets[tensor]._M_valid == 0u || sets[tensor]._M_snapshots < metric_count)
+            return Status::BAD_LAYOUT;
+    uint32_t used = 0u;
+    const Status record_status = avg_gate_record (gate, metrics, metric_count, index_scratch, used);
     report._M_gate_accepted = gate._M_accepted;
     report._M_gate_rejected = gate._M_rejected;
-  }
-  return average_status;
+    if (!status_ok (record_status))
+        return record_status;
+    const Status average_status = avg_average_set (sets, destination, AveragingMode::Swa, index_scratch, used, report);
+    if (status_ok (average_status)) {
+        report._M_gate_accepted = gate._M_accepted;
+        report._M_gate_rejected = gate._M_rejected;
+    }
+    return average_status;
 }
 
 /**
@@ -867,42 +867,42 @@ avg_gated_average (const SnapshotSet *const sets, const ParamSet &destination, A
 [[nodiscard]] inline Status
 avg_ema_update_set (EmaState *const states, const ParamSet &destination, const int8_t *const *const snapshot,
                     AveragingReport &report) noexcept {
-  report = AveragingReport{};
-  report._M_mode = static_cast<uint8_t> (AveragingMode::Ema);
-  const Status destination_status = destination.validate ();
-  if (!status_ok (destination_status))
-    return destination_status;
-  if (states == nullptr || snapshot == nullptr)
-    return Status::BAD_LAYOUT;
-  if (!simd_aligned (states) || !simd_aligned (snapshot))
-    return Status::BAD_LAYOUT;
-  const uint32_t tensors = destination._M_tensors;
-  for (uint32_t tensor = 0u; tensor < tensors; ++tensor) {
-    const Status state_status = states[tensor].validate ();
-    if (!status_ok (state_status))
-      return state_status;
-    Trainable &param = destination._M_params[tensor];
-    const Status parameter_status = param.validate ();
-    if (!status_ok (parameter_status))
-      return parameter_status;
-    if (snapshot[tensor] == nullptr)
-      return Status::BAD_LAYOUT;
-    if (!simd_aligned (snapshot[tensor]))
-      return Status::BAD_LAYOUT;
-    if (states[tensor]._M_count != param._M_count)
-      return Status::BAD_LAYOUT;
-    const Status step_status = avg_ema_step (states[tensor], snapshot[tensor]);
-    if (!status_ok (step_status))
-      return step_status;
-    const Status read_status = avg_ema_read (states[tensor], param._M_code);
-    if (!status_ok (read_status))
-      return read_status;
-    ++report._M_tensors;
-    report._M_lanes += states[tensor]._M_count;
-    if (states[tensor]._M_updates > report._M_snapshots_used)
-      report._M_snapshots_used = states[tensor]._M_updates;
-  }
-  return Status::OK;
+    report = AveragingReport{};
+    report._M_mode = static_cast<uint8_t> (AveragingMode::Ema);
+    const Status destination_status = destination.validate ();
+    if (!status_ok (destination_status))
+        return destination_status;
+    if (states == nullptr || snapshot == nullptr)
+        return Status::BAD_LAYOUT;
+    if (!simd_aligned (states) || !simd_aligned (snapshot))
+        return Status::BAD_LAYOUT;
+    const uint32_t tensors = destination._M_tensors;
+    for (uint32_t tensor = 0u; tensor < tensors; ++tensor) {
+        const Status state_status = states[tensor].validate ();
+        if (!status_ok (state_status))
+            return state_status;
+        Trainable &param = destination._M_params[tensor];
+        const Status parameter_status = param.validate ();
+        if (!status_ok (parameter_status))
+            return parameter_status;
+        if (snapshot[tensor] == nullptr)
+            return Status::BAD_LAYOUT;
+        if (!simd_aligned (snapshot[tensor]))
+            return Status::BAD_LAYOUT;
+        if (states[tensor]._M_count != param._M_count)
+            return Status::BAD_LAYOUT;
+        const Status step_status = avg_ema_step (states[tensor], snapshot[tensor]);
+        if (!status_ok (step_status))
+            return step_status;
+        const Status read_status = avg_ema_read (states[tensor], param._M_code);
+        if (!status_ok (read_status))
+            return read_status;
+        ++report._M_tensors;
+        report._M_lanes += states[tensor]._M_count;
+        if (states[tensor]._M_updates > report._M_snapshots_used)
+            report._M_snapshots_used = states[tensor]._M_updates;
+    }
+    return Status::OK;
 }
 
 /**
@@ -915,39 +915,39 @@ avg_ema_update_set (EmaState *const states, const ParamSet &destination, const i
  */
 [[nodiscard]] inline Status
 avg_snapshot_codes (const ParamSet &source, int8_t *const *const destination) noexcept {
-  const Status source_status = source.validate ();
-  if (!status_ok (source_status))
-    return source_status;
-  if (destination == nullptr)
-    return Status::BAD_LAYOUT;
-  if (!simd_aligned (destination))
-    return Status::BAD_LAYOUT;
-  for (uint32_t tensor = 0u; tensor < source._M_tensors; ++tensor) {
-    const Trainable &param = source._M_params[tensor];
-    const Status parameter_status = param.validate ();
-    if (!status_ok (parameter_status))
-      return parameter_status;
-    if (destination[tensor] == nullptr)
-      return Status::BAD_LAYOUT;
-    if (!simd_aligned (destination[tensor]))
-      return Status::BAD_LAYOUT;
-    const uint32_t count = param._M_count;
-    for (uint32_t lane = 0u; lane < count; ++lane)
-      destination[tensor][lane] = param._M_code[lane];
-  }
-  return Status::OK;
+    const Status source_status = source.validate ();
+    if (!status_ok (source_status))
+        return source_status;
+    if (destination == nullptr)
+        return Status::BAD_LAYOUT;
+    if (!simd_aligned (destination))
+        return Status::BAD_LAYOUT;
+    for (uint32_t tensor = 0u; tensor < source._M_tensors; ++tensor) {
+        const Trainable &param = source._M_params[tensor];
+        const Status parameter_status = param.validate ();
+        if (!status_ok (parameter_status))
+            return parameter_status;
+        if (destination[tensor] == nullptr)
+            return Status::BAD_LAYOUT;
+        if (!simd_aligned (destination[tensor]))
+            return Status::BAD_LAYOUT;
+        const uint32_t count = param._M_count;
+        for (uint32_t lane = 0u; lane < count; ++lane)
+            destination[tensor][lane] = param._M_code[lane];
+    }
+    return Status::OK;
 }
 
 /** @brief Bytes of caller storage an EMA state over @p count lanes costs. */
 [[nodiscard]] inline constexpr uint32_t
 avg_ema_state_bytes (const uint32_t count) noexcept {
-  return align_up (count * 2u, _S_pool_alignment);
+    return align_up (count * 2u, _S_pool_alignment);
 }
 
 /** @brief Bytes of caller storage a snapshot table of @p snapshots streams costs. */
 [[nodiscard]] inline constexpr uint32_t
 avg_snapshot_table_bytes (const uint32_t snapshots) noexcept {
-  return align_up (snapshots * static_cast<uint32_t> (sizeof (void *)), _S_pool_alignment);
+    return align_up (snapshots * static_cast<uint32_t> (sizeof (void *)), _S_pool_alignment);
 }
 } // namespace zzs::mllee::train
 

@@ -35,8 +35,7 @@
 namespace zzs::kernel::device::driver::wifi::platform::android {
 
 /** @brief Build the Android WiFi HAL vtable. */
-[[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *,
-                              zzs::kernel::Status>
+[[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *, zzs::kernel::Status>
 create_android_wifi_hal (WifiHal &hal_out) noexcept;
 
 /** @} */

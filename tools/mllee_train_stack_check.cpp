@@ -37,8 +37,7 @@
  * deepest stack a step reaches is inside the recorded op's own forward and
  * backward, and those are the frames the gate has to bound.
  */
-namespace
-{
+namespace {
 using namespace zzs::mllee;
 using namespace zzs::mllee::train;
 
@@ -56,8 +55,7 @@ constexpr uint32_t _S_probe_batch = 2u;
  * the same arena path a caller does.
  */
 Status
-probe_forward (StepContext &context)
-{
+probe_forward (StepContext &context) {
     Pool &pool = *context._M_pool;
     Tape &tape = *context._M_tape;
     const Trainable &weight = context._M_params[0];
@@ -72,9 +70,7 @@ probe_forward (StepContext &context)
     int8_t *pred_codes = nullptr;
     int16_t *pred_grad = nullptr;
     int8_t *target_codes = nullptr;
-    if (!status_ok (pool.carve_typed (static_cast<uint32_t> (_S_probe_batch)
-                                          * _S_probe_in_features,
-                                      input_codes)))
+    if (!status_ok (pool.carve_typed (static_cast<uint32_t> (_S_probe_batch) * _S_probe_in_features, input_codes)))
         return Status::ARENA_OVERFLOW;
     if (!status_ok (pool.carve_typed (weight._M_count, input_grad)))
         return Status::ARENA_OVERFLOW;
@@ -85,18 +81,11 @@ probe_forward (StepContext &context)
     if (!status_ok (pool.carve_typed (spec.output_elements (), target_codes)))
         return Status::ARENA_OVERFLOW;
 
-    const Trainable input = Trainable::make (input_codes, nullptr,
-                                             spec.input_shape (),
-                                             Flag::Frozen);
-    Trainable pred = Trainable::make (pred_codes, pred_grad,
-                                      spec.output_shape (),
-                                      Flag::RequiresGrad);
-    const Trainable target = Trainable::make (target_codes, nullptr,
-                                              spec.output_shape (),
-                                              Flag::Frozen);
+    const Trainable input = Trainable::make (input_codes, nullptr, spec.input_shape (), Flag::Frozen);
+    Trainable pred = Trainable::make (pred_codes, pred_grad, spec.output_shape (), Flag::RequiresGrad);
+    const Trainable target = Trainable::make (target_codes, nullptr, spec.output_shape (), Flag::Frozen);
 
-    const Status run = linear_run (tape, spec, input, weight,
-                                   context._M_params[1], pred);
+    const Status run = linear_run (tape, spec, input, weight, context._M_params[1], pred);
     if (!status_ok (run))
         return run;
 
@@ -110,22 +99,17 @@ probe_forward (StepContext &context)
 }
 
 Status
-probe_update (StepContext &context)
-{
-    for (uint32_t p = 0u; p < context._M_param_count; ++p)
-        {
-            const Trainable &param = context._M_params[p];
-            for (uint32_t i = 0u; i < param._M_count; ++i)
-                param.set_code (i, param.code_at (i)
-                                      - q15_to_code (q15_mul (context._M_lr_q15,
-                                                              param.grad_at (i))));
-        }
+probe_update (StepContext &context) {
+    for (uint32_t p = 0u; p < context._M_param_count; ++p) {
+        const Trainable &param = context._M_params[p];
+        for (uint32_t i = 0u; i < param._M_count; ++i)
+            param.set_code (i, param.code_at (i) - q15_to_code (q15_mul (context._M_lr_q15, param.grad_at (i))));
+    }
     return Status::OK;
 }
 
 int32_t
-probe_schedule (const uint32_t)
-{
+probe_schedule (const uint32_t) {
     return _S_q15_one / 16;
 }
 } // namespace
@@ -137,10 +121,8 @@ probe_schedule (const uint32_t)
  *                parameter storage.
  */
 extern "C" int
-mllee_train_worst_step (Trainer &trainer, StepStats &out, const Trainable *params,
-                        const uint32_t param_count)
-{
-    const StepHooks hooks{ probe_forward, probe_schedule, nullptr, probe_update };
+mllee_train_worst_step (Trainer &trainer, StepStats &out, const Trainable *params, const uint32_t param_count) {
+    const StepHooks hooks{probe_forward, probe_schedule, nullptr, probe_update};
     Trainer local (trainer.context (), hooks);
     if (!status_ok (local.configure (params, param_count, _S_probe_batch)))
         return 0;
@@ -151,10 +133,8 @@ mllee_train_worst_step (Trainer &trainer, StepStats &out, const Trainable *param
  * @brief A whole fit run: proves `fit` adds no frame of its own beyond `step`.
  */
 extern "C" int
-mllee_train_worst_fit (Trainer &trainer, FitStats &out, const Trainable *params,
-                       const uint32_t param_count)
-{
-    const StepHooks hooks{ probe_forward, probe_schedule, nullptr, probe_update };
+mllee_train_worst_fit (Trainer &trainer, FitStats &out, const Trainable *params, const uint32_t param_count) {
+    const StepHooks hooks{probe_forward, probe_schedule, nullptr, probe_update};
     Trainer local (trainer.context (), hooks);
     if (!status_ok (local.configure (params, param_count, _S_probe_batch)))
         return 0;

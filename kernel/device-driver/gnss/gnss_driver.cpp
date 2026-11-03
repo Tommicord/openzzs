@@ -20,6 +20,4 @@
 
 #include "kernel/device-driver/gnss/gnss_driver.hpp"
 
-namespace zzs::kernel::device::driver::gnss {
-
-} // namespace
+namespace zzs::kernel::device::driver::gnss {} // namespace zzs::kernel::device::driver::gnss

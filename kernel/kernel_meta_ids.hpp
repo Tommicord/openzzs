@@ -59,7 +59,7 @@ inline constexpr uint32_t _S_feat_plhr_count = 24u;
 /** @brief Index of mag axis `axis` harmonic `harm` on grid `grid` (0=50Hz,1=60Hz). */
 [[nodiscard]] inline constexpr uint32_t
 feat_plhr_index (const uint32_t axis, const uint32_t grid, const uint32_t harm) noexcept {
-  return _S_feat_plhr_start + axis * _S_feat_plhr_per_axis + grid * 4u + harm;
+    return _S_feat_plhr_start + axis * _S_feat_plhr_per_axis + grid * 4u + harm;
 }
 
 /* ---- Vibration feature block (accel) ---- */
@@ -125,93 +125,93 @@ static_assert (_S_feat_plhr_count + _S_feat_vib_count + _S_feat_flicker_count + 
 /** @brief Name of a feature index, for the host-side telemetry boundary. */
 [[nodiscard]] inline zzs::base::SimpleStringView
 feat_name (const uint32_t index) noexcept {
-  switch (index) {
-  /* PLHR mag X */
-  case 0:
-    return "plhr_mag_x_h50_h1";
-  case 1:
-    return "plhr_mag_x_h50_h2";
-  case 2:
-    return "plhr_mag_x_h50_h3";
-  case 3:
-    return "plhr_mag_x_h50_h4";
-  case 4:
-    return "plhr_mag_x_h60_h1";
-  case 5:
-    return "plhr_mag_x_h60_h2";
-  case 6:
-    return "plhr_mag_x_h60_h3";
-  case 7:
-    return "plhr_mag_x_h60_h4";
-  /* PLHR mag Y */
-  case 8:
-    return "plhr_mag_y_h50_h1";
-  case 9:
-    return "plhr_mag_y_h50_h2";
-  case 10:
-    return "plhr_mag_y_h50_h3";
-  case 11:
-    return "plhr_mag_y_h50_h4";
-  case 12:
-    return "plhr_mag_y_h60_h1";
-  case 13:
-    return "plhr_mag_y_h60_h2";
-  case 14:
-    return "plhr_mag_y_h60_h3";
-  case 15:
-    return "plhr_mag_y_h60_h4";
-  /* PLHR mag Z */
-  case 16:
-    return "plhr_mag_z_h50_h1";
-  case 17:
-    return "plhr_mag_z_h50_h2";
-  case 18:
-    return "plhr_mag_z_h50_h3";
-  case 19:
-    return "plhr_mag_z_h50_h4";
-  case 20:
-    return "plhr_mag_z_h60_h1";
-  case 21:
-    return "plhr_mag_z_h60_h2";
-  case 22:
-    return "plhr_mag_z_h60_h3";
-  case 23:
-    return "plhr_mag_z_h60_h4";
-  /* Vibration */
-  case 24:
-    return "vib_accel_rms_xyz";
-  case 25:
-    return "vib_accel_peak_xyz";
-  case 26:
-    return "vib_accel_spectral_centroid";
-  case 27:
-    return "vib_accel_50hz_power";
-  /* Flicker */
-  case 28:
-    return "flicker_light_dc_level";
-  case 29:
-    return "flicker_light_100hz_power";
-  case 30:
-    return "flicker_light_flicker_index";
-  case 31:
-    return "flicker_light_flicker_drop";
-  /* Acoustic */
-  case 32:
-    return "acoustic_sound_100hz_power";
-  case 33:
-    return "acoustic_sound_thd";
-  case 34:
-    return "acoustic_sound_level_db";
-  /* Reserved spectral */
-  case 35:
-    return "spectral_spectral_flatness";
-  case 36:
-    return "spectral_harmonic_to_noise";
-  case 37:
-    return "spectral_freq_drift";
-  default:
-    return "reserved";
-  }
+    switch (index) {
+    /* PLHR mag X */
+    case 0:
+        return "plhr_mag_x_h50_h1";
+    case 1:
+        return "plhr_mag_x_h50_h2";
+    case 2:
+        return "plhr_mag_x_h50_h3";
+    case 3:
+        return "plhr_mag_x_h50_h4";
+    case 4:
+        return "plhr_mag_x_h60_h1";
+    case 5:
+        return "plhr_mag_x_h60_h2";
+    case 6:
+        return "plhr_mag_x_h60_h3";
+    case 7:
+        return "plhr_mag_x_h60_h4";
+    /* PLHR mag Y */
+    case 8:
+        return "plhr_mag_y_h50_h1";
+    case 9:
+        return "plhr_mag_y_h50_h2";
+    case 10:
+        return "plhr_mag_y_h50_h3";
+    case 11:
+        return "plhr_mag_y_h50_h4";
+    case 12:
+        return "plhr_mag_y_h60_h1";
+    case 13:
+        return "plhr_mag_y_h60_h2";
+    case 14:
+        return "plhr_mag_y_h60_h3";
+    case 15:
+        return "plhr_mag_y_h60_h4";
+    /* PLHR mag Z */
+    case 16:
+        return "plhr_mag_z_h50_h1";
+    case 17:
+        return "plhr_mag_z_h50_h2";
+    case 18:
+        return "plhr_mag_z_h50_h3";
+    case 19:
+        return "plhr_mag_z_h50_h4";
+    case 20:
+        return "plhr_mag_z_h60_h1";
+    case 21:
+        return "plhr_mag_z_h60_h2";
+    case 22:
+        return "plhr_mag_z_h60_h3";
+    case 23:
+        return "plhr_mag_z_h60_h4";
+    /* Vibration */
+    case 24:
+        return "vib_accel_rms_xyz";
+    case 25:
+        return "vib_accel_peak_xyz";
+    case 26:
+        return "vib_accel_spectral_centroid";
+    case 27:
+        return "vib_accel_50hz_power";
+    /* Flicker */
+    case 28:
+        return "flicker_light_dc_level";
+    case 29:
+        return "flicker_light_100hz_power";
+    case 30:
+        return "flicker_light_flicker_index";
+    case 31:
+        return "flicker_light_flicker_drop";
+    /* Acoustic */
+    case 32:
+        return "acoustic_sound_100hz_power";
+    case 33:
+        return "acoustic_sound_thd";
+    case 34:
+        return "acoustic_sound_level_db";
+    /* Reserved spectral */
+    case 35:
+        return "spectral_spectral_flatness";
+    case 36:
+        return "spectral_harmonic_to_noise";
+    case 37:
+        return "spectral_freq_drift";
+    default:
+        return "reserved";
+    }
 }
 
 /** @} */

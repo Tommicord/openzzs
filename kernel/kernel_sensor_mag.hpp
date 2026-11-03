@@ -37,16 +37,16 @@ namespace zzs::kernel::sensor::mag {
 
 /** @brief Magnetometer channel ids. */
 enum Axis : uint8_t {
-  X = static_cast<uint8_t> (sensor::Channel::MAG_X),
-  Y = static_cast<uint8_t> (sensor::Channel::MAG_Y),
-  Z = static_cast<uint8_t> (sensor::Channel::MAG_Z),
-  COUNT = 3u,
+    X = static_cast<uint8_t> (sensor::Channel::MAG_X),
+    Y = static_cast<uint8_t> (sensor::Channel::MAG_Y),
+    Z = static_cast<uint8_t> (sensor::Channel::MAG_Z),
+    COUNT = 3u,
 };
 
 /** @brief Magnetometer sample rate (Hz), from the platform HAL table. */
 [[nodiscard]] inline constexpr uint32_t
 rate_hz (void) noexcept {
-  return zzs::kernel::_S_mag_rate_hz;
+    return zzs::kernel::_S_mag_rate_hz;
 }
 
 /** @} */

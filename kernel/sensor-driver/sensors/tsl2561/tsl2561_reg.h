@@ -29,8 +29,7 @@
  * luminosity sensor.  Integer-only; no float.  Lux is computed in Q11.
  * @{
  */
-namespace zzs::kernel::sensor::driver::sensors::tsl2561
-{
+namespace zzs::kernel::sensor::driver::sensors::tsl2561 {
 
 /** @brief I2C address when address pin = 0 (0x29 >> 1 = 0x29, 8-bit 0x52). */
 inline constexpr uint8_t I2cAddrLow = 0x29;
@@ -43,15 +42,15 @@ inline constexpr uint8_t I2cAddrHigh = 0x49;
 
 /** @brief CONTROL register: power on/off. */
 inline constexpr uint8_t RegControl = 0x00;
-inline constexpr uint8_t ControlPowerOn = 0x01;   /* bit 0 */
+inline constexpr uint8_t ControlPowerOn = 0x01; /* bit 0 */
 inline constexpr uint8_t ControlPowerOff = 0x00;
 
 /** @brief TIMING register: gain + integration time. */
 inline constexpr uint8_t RegTiming = 0x01;
 /* TIMING bit fields. */
-inline constexpr uint8_t TimingGainMask = 0x10;   /* bit 4: 0=1x, 1=16x */
-inline constexpr uint8_t TimingGain1x   = 0x00;
-inline constexpr uint8_t TimingGain16x  = 0x10;
+inline constexpr uint8_t TimingGainMask = 0x10; /* bit 4: 0=1x, 1=16x */
+inline constexpr uint8_t TimingGain1x = 0x00;
+inline constexpr uint8_t TimingGain16x = 0x10;
 inline constexpr uint8_t TimingIntegMask = 0x07;  /* bits [2:0] */
 inline constexpr uint8_t TimingInteg13ms = 0x00;  /* 13.7 ms */
 inline constexpr uint8_t TimingInteg101ms = 0x01; /* 101 ms */

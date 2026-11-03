@@ -48,79 +48,79 @@ namespace platform = zzs::kernel::device::driver::gnss::platform;
  * returned by `create_gnss_platform_hal()`); this adapter merely forwards
  * calls to it.  No heap, no copy, no writable statics. */
 class GnssPlatformBusAdapter : public zzs::kernel::device::driver::StreamBusInterface {
-public:
-  /** @brief Construct wrapping a non-owning HAL vtable pointer. */
-  explicit GnssPlatformBusAdapter (const platform::GnssPlatformHal *hal) noexcept : _M_hal (hal) {
-  }
+  public:
+    /** @brief Construct wrapping a non-owning HAL vtable pointer. */
+    explicit GnssPlatformBusAdapter (const platform::GnssPlatformHal *hal) noexcept : _M_hal (hal) {
+    }
 
-  GnssPlatformBusAdapter (const GnssPlatformBusAdapter &) = delete;
-  GnssPlatformBusAdapter &
-  operator= (const GnssPlatformBusAdapter &) = delete;
-  GnssPlatformBusAdapter (GnssPlatformBusAdapter &&) = delete;
-  GnssPlatformBusAdapter &
-  operator= (GnssPlatformBusAdapter &&) = delete;
-  ~GnssPlatformBusAdapter () override = default;
+    GnssPlatformBusAdapter (const GnssPlatformBusAdapter &) = delete;
+    GnssPlatformBusAdapter &
+    operator= (const GnssPlatformBusAdapter &) = delete;
+    GnssPlatformBusAdapter (GnssPlatformBusAdapter &&) = delete;
+    GnssPlatformBusAdapter &
+    operator= (GnssPlatformBusAdapter &&) = delete;
+    ~GnssPlatformBusAdapter () override = default;
 
-  // -- StreamBusInterface --
+    // -- StreamBusInterface --
 
-  [[nodiscard]] zzs::kernel::Status
-  read_bytes (uint8_t *buf, uint16_t max_bytes, uint16_t *filled) noexcept override {
-    if (_M_hal == nullptr || _M_hal->read_bytes == nullptr)
-      return zzs::kernel::Status::INTERNAL;
-    return _M_hal->read_bytes (buf, max_bytes, filled);
-  }
+    [[nodiscard]] zzs::kernel::Status
+    read_bytes (uint8_t *buf, uint16_t max_bytes, uint16_t *filled) noexcept override {
+        if (_M_hal == nullptr || _M_hal->read_bytes == nullptr)
+            return zzs::kernel::Status::INTERNAL;
+        return _M_hal->read_bytes (buf, max_bytes, filled);
+    }
 
-  [[nodiscard]] zzs::kernel::Status
-  write_bytes (const uint8_t *buf, uint16_t len) noexcept override {
-    if (_M_hal == nullptr || _M_hal->write_bytes == nullptr)
-      return zzs::kernel::Status::INTERNAL;
-    return _M_hal->write_bytes (buf, len);
-  }
+    [[nodiscard]] zzs::kernel::Status
+    write_bytes (const uint8_t *buf, uint16_t len) noexcept override {
+        if (_M_hal == nullptr || _M_hal->write_bytes == nullptr)
+            return zzs::kernel::Status::INTERNAL;
+        return _M_hal->write_bytes (buf, len);
+    }
 
-  void
-  delay_ms (uint32_t ms) noexcept override {
-    if (_M_hal != nullptr && _M_hal->delay_ms != nullptr)
-      _M_hal->delay_ms (ms);
-  }
+    void
+    delay_ms (uint32_t ms) noexcept override {
+        if (_M_hal != nullptr && _M_hal->delay_ms != nullptr)
+            _M_hal->delay_ms (ms);
+    }
 
-  [[nodiscard]] zzs::kernel::Status
-  flush_rx () noexcept override {
-    if (_M_hal == nullptr || _M_hal->flush_rx == nullptr)
-      return zzs::kernel::Status::INTERNAL;
-    return _M_hal->flush_rx ();
-  }
+    [[nodiscard]] zzs::kernel::Status
+    flush_rx () noexcept override {
+        if (_M_hal == nullptr || _M_hal->flush_rx == nullptr)
+            return zzs::kernel::Status::INTERNAL;
+        return _M_hal->flush_rx ();
+    }
 
-  [[nodiscard]] bool
-  is_open () const noexcept override {
-    if (_M_hal == nullptr || _M_hal->is_open == nullptr)
-      return false;
-    return _M_hal->is_open ();
-  }
+    [[nodiscard]] bool
+    is_open () const noexcept override {
+        if (_M_hal == nullptr || _M_hal->is_open == nullptr)
+            return false;
+        return _M_hal->is_open ();
+    }
 
-  /** @brief Open the underlying stream. */
-  [[nodiscard]] zzs::kernel::Status
-  open () noexcept {
-    if (_M_hal == nullptr || _M_hal->open == nullptr)
-      return zzs::kernel::Status::INTERNAL;
-    return _M_hal->open ();
-  }
+    /** @brief Open the underlying stream. */
+    [[nodiscard]] zzs::kernel::Status
+    open () noexcept {
+        if (_M_hal == nullptr || _M_hal->open == nullptr)
+            return zzs::kernel::Status::INTERNAL;
+        return _M_hal->open ();
+    }
 
-  /** @brief Close the underlying stream. */
-  [[nodiscard]] zzs::kernel::Status
-  close () noexcept {
-    if (_M_hal == nullptr || _M_hal->close == nullptr)
-      return zzs::kernel::Status::INTERNAL;
-    return _M_hal->close ();
-  }
+    /** @brief Close the underlying stream. */
+    [[nodiscard]] zzs::kernel::Status
+    close () noexcept {
+        if (_M_hal == nullptr || _M_hal->close == nullptr)
+            return zzs::kernel::Status::INTERNAL;
+        return _M_hal->close ();
+    }
 
-  /** @brief Return the wrapped HAL vtable (may be nullptr). */
-  [[nodiscard]] const platform::GnssPlatformHal *
-  hal () const noexcept {
-    return _M_hal;
-  }
+    /** @brief Return the wrapped HAL vtable (may be nullptr). */
+    [[nodiscard]] const platform::GnssPlatformHal *
+    hal () const noexcept {
+        return _M_hal;
+    }
 
-private:
-  const platform::GnssPlatformHal *_M_hal = nullptr;
+  private:
+    const platform::GnssPlatformHal *_M_hal = nullptr;
 };
 
 /** @} */

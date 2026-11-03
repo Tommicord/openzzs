@@ -1,1 +1,177 @@
-core_status.hpp
+/* Copyright(c) 2026 Tommicord
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the “Software”), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE. */
+
+#pragma once
+
+#include <cstdint>
+
+/**
+ * @brief Inlining controls for the RAM-budgeted path.
+ *
+ * Nested calls each cost a register-save frame, so the layer parser and the
+ * op kernels are kept out of line (a flat chain) while the decode primitives
+ * are folded into the codec entry point.
+ */
+#if defined(__GNUC__) || defined(__clang__)
+#define ZZS_MLLEE_NOINLINE __attribute__ ((noinline))
+#define ZZS_MLLEE_INLINE __attribute__ ((always_inline)) inline
+#else
+#define ZZS_MLLEE_NOINLINE
+#define ZZS_MLLEE_INLINE inline
+#endif
+
+/**
+ * @brief Non-aliasing hint for the hot kernel pointer pairs.
+ *
+ * A dot product, an unpack and a saturating add each read one buffer and write
+ * another that provably cannot overlap, but the compiler cannot see that across
+ * a call boundary and so keeps the loads and stores ordered.  GCC/Clang and
+ * MSVC spell the qualifier differently; an unknown compiler gets the empty
+ * expansion and identical semantics.
+ */
+#if defined(__GNUC__) || defined(__clang__)
+#define ZZS_MLLEE_RESTRICT __restrict__
+#else
+#define ZZS_MLLEE_RESTRICT
+#endif
+
+/**
+ * @brief Assert a buffer's alignment where it is aligned by construction.
+ *
+ * The weight LUTs, the activation arena and the staged conv rows are all
+ * `alignas`-qualified, but a kernel taking a caller pointer cannot prove that
+ * to the generator, which is what costs the extra unaligned-load forms.  The
+ * result is `void *`, so the caller casts back to its own element type.
+ */
+#if defined(__GNUC__) || defined(__clang__)
+#define ZZS_MLLEE_ASSUME_ALIGNED(pointer, bytes) __builtin_assume_aligned ((pointer), (bytes))
+#else
+#define ZZS_MLLEE_ASSUME_ALIGNED(pointer, bytes) (pointer)
+#endif
+
+namespace zzs::mllee {
+/**
+ * @brief Result code used by every mllee internal path.
+ *
+ * The core never throws: errors are values.  The public boundary wraps this
+ * code in zzs::base::Maybe<Output, Error>; hot paths return Status directly so
+ * no storage beyond a single byte is needed.
+ */
+struct Error {
+    enum class Kind : uint8_t {
+        OK = 0,
+        TRUNCATED,
+        CORRUPT_STREAM,
+        BAD_MAGIC,
+        BAD_VERSION,
+        BAD_LAYOUT,
+        OUT_OF_RANGE,
+        ARENA_OVERFLOW,
+        UNSUPPORTED,
+        INTERNAL,
+    };
+
+    Error () = delete;
+    explicit constexpr Error (const Kind kind) noexcept : _M_kind (kind) {
+    }
+
+    [[nodiscard]] constexpr Kind
+    kind () const noexcept {
+        return this->_M_kind;
+    }
+
+    [[nodiscard]] constexpr bool
+    is_ok () const noexcept {
+        return this->_M_kind == Kind::OK;
+    }
+
+    [[nodiscard]] constexpr bool
+    operator== (const Error &other) const noexcept {
+        return this->_M_kind == other._M_kind;
+    }
+
+    [[nodiscard]] constexpr explicit
+    operator bool () const noexcept {
+        return this->_M_kind != Kind::OK;
+    }
+
+  private:
+    Kind _M_kind;
+};
+
+using Status = Error::Kind;
+
+[[nodiscard]] constexpr bool
+status_ok (const Status status) noexcept {
+    return status == Status::OK;
+}
+
+/**
+ * @brief CRC-16/CCITT: bit-at-a-time form (polynomial 0x1021, init 0xFFFF).
+ *
+ * The table-driven form needs 512 bytes of .rodata but one load and one xor per
+ * byte; the bit-at-a-time form below needs eight data-dependent tests per byte
+ * but zero .rodata.  CRC runs only over the model blob at load time (once per
+ * inference), so the per-byte cost is bounded and the flash saving is worth it.
+ */
+[[nodiscard]] constexpr uint16_t
+_S_crc16_update (uint16_t crc, const uint8_t byte) noexcept {
+    crc = static_cast<uint16_t> (crc ^ (static_cast<uint16_t> (byte) << 8));
+    for (int bit = 0; bit < 8; ++bit)
+        crc = static_cast<uint16_t> ((crc & 0x8000u) != 0 ? static_cast<uint16_t> ((crc << 1) ^ 0x1021u)
+                                                          : static_cast<uint16_t> (crc << 1));
+    return crc;
+}
+
+[[nodiscard]] constexpr uint16_t
+_S_crc16 (const uint8_t *data, const uint32_t length) noexcept {
+    uint16_t crc = 0xFFFFu;
+    for (uint32_t i = 0; i < length; ++i)
+        crc = _S_crc16_update (crc, data[i]);
+    return crc;
+}
+
+[[nodiscard]] constexpr const char *
+status_name (const Status status) noexcept {
+    switch (status) {
+    case Status::OK:
+        return "ok";
+    case Status::TRUNCATED:
+        return "truncated";
+    case Status::CORRUPT_STREAM:
+        return "corrupt_stream";
+    case Status::BAD_MAGIC:
+        return "bad_magic";
+    case Status::BAD_VERSION:
+        return "bad_version";
+    case Status::BAD_LAYOUT:
+        return "bad_layout";
+    case Status::OUT_OF_RANGE:
+        return "out_of_range";
+    case Status::ARENA_OVERFLOW:
+        return "arena_overflow";
+    case Status::UNSUPPORTED:
+        return "unsupported";
+    case Status::INTERNAL:
+        return "internal";
+    }
+    return "unknown";
+}
+} // namespace zzs::mllee

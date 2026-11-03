@@ -97,10 +97,10 @@
 namespace zzs::mllee::train {
 /** @brief The two affine forms the inference header supports. */
 enum class FakeQuantMode : uint8_t {
-  /** @brief zero point 0, symmetric grid, `qmin == -qmax`. */
-  Symmetric = 0,
-  /** @brief explicit zero point, `qmin = -127`, `qmax = 127` by default. */
-  Asymmetric = 1,
+    /** @brief zero point 0, symmetric grid, `qmin == -qmax`. */
+    Symmetric = 0,
+    /** @brief explicit zero point, `qmin = -127`, `qmax = 127` by default. */
+    Asymmetric = 1,
 };
 
 /** @brief Axis selector for "one grid for the whole tensor". */
@@ -122,104 +122,104 @@ inline constexpr int32_t _S_fq_int32_max = 2147483647;
  * read as `dim(_M_axis)` channel runs and every table has `_M_channels` entries.
  */
 struct FakeQuantParams {
-  /** @brief Code -> Q15 step, one entry per channel.  Must be > 0. */
-  const int32_t *_M_scale_q15 = nullptr;
-  /** @brief Q15 -> code multiplier, one entry per channel.  Must be > 0. */
-  const int32_t *_M_multiplier_q15 = nullptr;
-  /** @brief Zero points; null for the symmetric form. */
-  const int8_t *_M_zero_point = nullptr;
-  int8_t _M_qmin = -127;
-  int8_t _M_qmax = 127;
-  uint8_t _M_mode = static_cast<uint8_t> (FakeQuantMode::Symmetric);
-  uint8_t _M_axis = _S_fq_per_tensor;
-  uint16_t _M_channels = 1u;
+    /** @brief Code -> Q15 step, one entry per channel.  Must be > 0. */
+    const int32_t *_M_scale_q15 = nullptr;
+    /** @brief Q15 -> code multiplier, one entry per channel.  Must be > 0. */
+    const int32_t *_M_multiplier_q15 = nullptr;
+    /** @brief Zero points; null for the symmetric form. */
+    const int8_t *_M_zero_point = nullptr;
+    int8_t _M_qmin = -127;
+    int8_t _M_qmax = 127;
+    uint8_t _M_mode = static_cast<uint8_t> (FakeQuantMode::Symmetric);
+    uint8_t _M_axis = _S_fq_per_tensor;
+    uint16_t _M_channels = 1u;
 
-  [[nodiscard]] static constexpr FakeQuantParams
-  symmetric (const int32_t *const scale_q15, const int32_t *const multiplier_q15) noexcept {
-    FakeQuantParams params;
-    params._M_scale_q15 = scale_q15;
-    params._M_multiplier_q15 = multiplier_q15;
-    return params;
-  }
-
-  [[nodiscard]] static constexpr FakeQuantParams
-  asymmetric (const int32_t *const scale_q15, const int32_t *const multiplier_q15,
-              const int8_t *const zero_point) noexcept {
-    FakeQuantParams params;
-    params._M_scale_q15 = scale_q15;
-    params._M_multiplier_q15 = multiplier_q15;
-    params._M_zero_point = zero_point;
-    params._M_mode = static_cast<uint8_t> (FakeQuantMode::Asymmetric);
-    return params;
-  }
-
-  /** @brief Turn this descriptor into an axis-wise (per-channel) one. */
-  [[nodiscard]] constexpr FakeQuantParams
-  on_axis (const uint8_t axis, const uint16_t channels) const noexcept {
-    FakeQuantParams view = *this;
-    view._M_axis = axis;
-    view._M_channels = channels;
-    return view;
-  }
-
-  [[nodiscard]] constexpr bool
-  per_channel () const noexcept {
-    return this->_M_axis != _S_fq_per_tensor;
-  }
-
-  [[nodiscard]] constexpr uint32_t
-  table_index (const uint32_t channel) const noexcept {
-    return this->per_channel () ? channel : 0u;
-  }
-
-  [[nodiscard]] constexpr int32_t
-  scale_at (const uint32_t channel) const noexcept {
-    return this->_M_scale_q15[this->table_index (channel)];
-  }
-
-  [[nodiscard]] constexpr int32_t
-  multiplier_at (const uint32_t channel) const noexcept {
-    return this->_M_multiplier_q15[this->table_index (channel)];
-  }
-
-  [[nodiscard]] constexpr int32_t
-  zero_point_at (const uint32_t channel) const noexcept {
-    if (this->_M_mode != static_cast<uint8_t> (FakeQuantMode::Asymmetric) || this->_M_zero_point == nullptr)
-      return 0;
-    return this->_M_zero_point[this->table_index (channel)];
-  }
-
-  /** @brief Validate tables, channel count and the clamp range. */
-  [[nodiscard]] constexpr Status
-  validate () const noexcept {
-    if (this->_M_scale_q15 == nullptr || this->_M_multiplier_q15 == nullptr)
-      return Status::BAD_LAYOUT;
-    if (this->_M_channels == 0u || this->_M_channels > _S_fq_max_channels)
-      return Status::OUT_OF_RANGE;
-    if (this->_M_qmin > this->_M_qmax)
-      return Status::BAD_LAYOUT;
-    if (this->_M_mode > static_cast<uint8_t> (FakeQuantMode::Asymmetric))
-      return Status::BAD_LAYOUT;
-    if (this->_M_axis != _S_fq_per_tensor && this->_M_axis >= _S_max_rank)
-      return Status::BAD_LAYOUT;
-    /* int8 cannot exceed 127, so the only out-of-range code here is -128,
-       which the module never emits (see _S_i8_code). */
-    if (this->_M_qmin < -127)
-      return Status::OUT_OF_RANGE;
-    if (this->_M_mode == static_cast<uint8_t> (FakeQuantMode::Symmetric)
-        && (this->_M_qmax <= 0 || this->_M_qmin != -this->_M_qmax))
-      return Status::BAD_LAYOUT;
-    for (uint32_t channel = 0; channel < this->_M_channels; ++channel) {
-      if (this->_M_scale_q15[channel] <= 0 || this->_M_multiplier_q15[channel] <= 0)
-        return Status::OUT_OF_RANGE;
-      /* A signed byte tops out at 127, so the only reachable violation
-         is the -128 code the module never emits. */
-      if (this->_M_mode == static_cast<uint8_t> (FakeQuantMode::Asymmetric) && this->_M_zero_point != nullptr
-          && static_cast<int> (this->_M_zero_point[channel]) < -127)
-        return Status::OUT_OF_RANGE;
+    [[nodiscard]] static constexpr FakeQuantParams
+    symmetric (const int32_t *const scale_q15, const int32_t *const multiplier_q15) noexcept {
+        FakeQuantParams params;
+        params._M_scale_q15 = scale_q15;
+        params._M_multiplier_q15 = multiplier_q15;
+        return params;
     }
-    return Status::OK;
-  }
+
+    [[nodiscard]] static constexpr FakeQuantParams
+    asymmetric (const int32_t *const scale_q15, const int32_t *const multiplier_q15,
+                const int8_t *const zero_point) noexcept {
+        FakeQuantParams params;
+        params._M_scale_q15 = scale_q15;
+        params._M_multiplier_q15 = multiplier_q15;
+        params._M_zero_point = zero_point;
+        params._M_mode = static_cast<uint8_t> (FakeQuantMode::Asymmetric);
+        return params;
+    }
+
+    /** @brief Turn this descriptor into an axis-wise (per-channel) one. */
+    [[nodiscard]] constexpr FakeQuantParams
+    on_axis (const uint8_t axis, const uint16_t channels) const noexcept {
+        FakeQuantParams view = *this;
+        view._M_axis = axis;
+        view._M_channels = channels;
+        return view;
+    }
+
+    [[nodiscard]] constexpr bool
+    per_channel () const noexcept {
+        return this->_M_axis != _S_fq_per_tensor;
+    }
+
+    [[nodiscard]] constexpr uint32_t
+    table_index (const uint32_t channel) const noexcept {
+        return this->per_channel () ? channel : 0u;
+    }
+
+    [[nodiscard]] constexpr int32_t
+    scale_at (const uint32_t channel) const noexcept {
+        return this->_M_scale_q15[this->table_index (channel)];
+    }
+
+    [[nodiscard]] constexpr int32_t
+    multiplier_at (const uint32_t channel) const noexcept {
+        return this->_M_multiplier_q15[this->table_index (channel)];
+    }
+
+    [[nodiscard]] constexpr int32_t
+    zero_point_at (const uint32_t channel) const noexcept {
+        if (this->_M_mode != static_cast<uint8_t> (FakeQuantMode::Asymmetric) || this->_M_zero_point == nullptr)
+            return 0;
+        return this->_M_zero_point[this->table_index (channel)];
+    }
+
+    /** @brief Validate tables, channel count and the clamp range. */
+    [[nodiscard]] constexpr Status
+    validate () const noexcept {
+        if (this->_M_scale_q15 == nullptr || this->_M_multiplier_q15 == nullptr)
+            return Status::BAD_LAYOUT;
+        if (this->_M_channels == 0u || this->_M_channels > _S_fq_max_channels)
+            return Status::OUT_OF_RANGE;
+        if (this->_M_qmin > this->_M_qmax)
+            return Status::BAD_LAYOUT;
+        if (this->_M_mode > static_cast<uint8_t> (FakeQuantMode::Asymmetric))
+            return Status::BAD_LAYOUT;
+        if (this->_M_axis != _S_fq_per_tensor && this->_M_axis >= _S_max_rank)
+            return Status::BAD_LAYOUT;
+        /* int8 cannot exceed 127, so the only out-of-range code here is -128,
+           which the module never emits (see _S_i8_code). */
+        if (this->_M_qmin < -127)
+            return Status::OUT_OF_RANGE;
+        if (this->_M_mode == static_cast<uint8_t> (FakeQuantMode::Symmetric)
+            && (this->_M_qmax <= 0 || this->_M_qmin != -this->_M_qmax))
+            return Status::BAD_LAYOUT;
+        for (uint32_t channel = 0; channel < this->_M_channels; ++channel) {
+            if (this->_M_scale_q15[channel] <= 0 || this->_M_multiplier_q15[channel] <= 0)
+                return Status::OUT_OF_RANGE;
+            /* A signed byte tops out at 127, so the only reachable violation
+               is the -128 code the module never emits. */
+            if (this->_M_mode == static_cast<uint8_t> (FakeQuantMode::Asymmetric) && this->_M_zero_point != nullptr
+                && static_cast<int> (this->_M_zero_point[channel]) < -127)
+                return Status::OUT_OF_RANGE;
+        }
+        return Status::OK;
+    }
 };
 
 static_assert (sizeof (FakeQuantParams) <= (sizeof (void *) == 4u ? 24u : 40u),
@@ -236,23 +236,23 @@ static_assert (sizeof (FakeQuantParams) <= (sizeof (void *) == 4u ? 24u : 40u),
  * `base = block * _M_group + channel * _M_run` and needs no per-element branch.
  */
 struct FakeQuantLayout {
-  uint32_t _M_run = 0u;
-  uint32_t _M_group = 0u;
-  uint32_t _M_outer = 1u;
-  uint32_t _M_count = 0u;
-  uint16_t _M_channels = 1u;
-  uint8_t _M_axis = _S_fq_per_tensor;
-  uint8_t _M_valid = 0u;
+    uint32_t _M_run = 0u;
+    uint32_t _M_group = 0u;
+    uint32_t _M_outer = 1u;
+    uint32_t _M_count = 0u;
+    uint16_t _M_channels = 1u;
+    uint8_t _M_axis = _S_fq_per_tensor;
+    uint8_t _M_valid = 0u;
 
-  [[nodiscard]] constexpr bool
-  per_channel () const noexcept {
-    return this->_M_axis != _S_fq_per_tensor;
-  }
+    [[nodiscard]] constexpr bool
+    per_channel () const noexcept {
+        return this->_M_axis != _S_fq_per_tensor;
+    }
 
-  [[nodiscard]] constexpr uint32_t
-  base (const uint32_t channel, const uint32_t block) const noexcept {
-    return block * this->_M_group + channel * this->_M_run;
-  }
+    [[nodiscard]] constexpr uint32_t
+    base (const uint32_t channel, const uint32_t block) const noexcept {
+        return block * this->_M_group + channel * this->_M_run;
+    }
 };
 
 static_assert (sizeof (FakeQuantLayout) == 20u, "fake-quant layout must stay 20 bytes on both targets");
@@ -260,107 +260,107 @@ static_assert (sizeof (FakeQuantLayout) == 20u, "fake-quant layout must stay 20 
 /** @brief Derive the run layout of @p params from a validated shape. */
 [[nodiscard]] inline constexpr Status
 fake_quant_layout (const Shape &shape, const FakeQuantParams &params, FakeQuantLayout &out) noexcept {
-  const Status shape_status = shape.validate ();
-  if (!status_ok (shape_status))
-    return shape_status;
-  FakeQuantParams checked = params;
-  const Status params_status = checked.validate ();
-  if (!status_ok (params_status))
-    return params_status;
+    const Status shape_status = shape.validate ();
+    if (!status_ok (shape_status))
+        return shape_status;
+    FakeQuantParams checked = params;
+    const Status params_status = checked.validate ();
+    if (!status_ok (params_status))
+        return params_status;
 
-  FakeQuantLayout layout;
-  layout._M_axis = params._M_axis;
-  layout._M_channels = params._M_channels;
-  layout._M_count = shape.elements ();
-  if (!params.per_channel ()) {
-    layout._M_run = layout._M_count;
-    layout._M_group = layout._M_count;
-    layout._M_outer = 1u;
-  } else {
-    if (params._M_axis >= shape._M_rank)
-      return Status::BAD_LAYOUT;
-    if (shape._M_dims[params._M_axis] != params._M_channels)
-      return Status::BAD_LAYOUT;
-    layout._M_run = shape.stride (params._M_axis);
-    layout._M_group = layout._M_run * params._M_channels;
-    if (layout._M_group == 0u || layout._M_count % layout._M_group != 0u)
-      return Status::BAD_LAYOUT;
-    layout._M_outer = layout._M_count / layout._M_group;
-  }
-  if (layout._M_run == 0u)
-    return Status::BAD_LAYOUT;
-  layout._M_valid = 1u;
-  out = layout;
-  return Status::OK;
+    FakeQuantLayout layout;
+    layout._M_axis = params._M_axis;
+    layout._M_channels = params._M_channels;
+    layout._M_count = shape.elements ();
+    if (!params.per_channel ()) {
+        layout._M_run = layout._M_count;
+        layout._M_group = layout._M_count;
+        layout._M_outer = 1u;
+    } else {
+        if (params._M_axis >= shape._M_rank)
+            return Status::BAD_LAYOUT;
+        if (shape._M_dims[params._M_axis] != params._M_channels)
+            return Status::BAD_LAYOUT;
+        layout._M_run = shape.stride (params._M_axis);
+        layout._M_group = layout._M_run * params._M_channels;
+        if (layout._M_group == 0u || layout._M_count % layout._M_group != 0u)
+            return Status::BAD_LAYOUT;
+        layout._M_outer = layout._M_count / layout._M_group;
+    }
+    if (layout._M_run == 0u)
+        return Status::BAD_LAYOUT;
+    layout._M_valid = 1u;
+    out = layout;
+    return Status::OK;
 }
 
 /** @brief Layout of a flat element count with a per-channel split (no Shape). */
 [[nodiscard]] inline constexpr Status
 fake_quant_layout_flat (const uint32_t count, const uint32_t channels, FakeQuantLayout &out) noexcept {
-  if (count == 0u || channels == 0u || channels > _S_fq_max_channels || count % channels != 0u)
-    return Status::BAD_LAYOUT;
-  FakeQuantLayout layout;
-  layout._M_run = count / channels;
-  layout._M_group = count;
-  layout._M_outer = 1u;
-  layout._M_count = count;
-  layout._M_channels = static_cast<uint16_t> (channels);
-  /* A flat split is channel-major: channel c owns the contiguous run
-     [c * run, (c + 1) * run), which the shared base formula reproduces with
-     one outer block. */
-  layout._M_axis = 0u;
-  layout._M_valid = 1u;
-  out = layout;
-  return Status::OK;
+    if (count == 0u || channels == 0u || channels > _S_fq_max_channels || count % channels != 0u)
+        return Status::BAD_LAYOUT;
+    FakeQuantLayout layout;
+    layout._M_run = count / channels;
+    layout._M_group = count;
+    layout._M_outer = 1u;
+    layout._M_count = count;
+    layout._M_channels = static_cast<uint16_t> (channels);
+    /* A flat split is channel-major: channel c owns the contiguous run
+       [c * run, (c + 1) * run), which the shared base formula reproduces with
+       one outer block. */
+    layout._M_axis = 0u;
+    layout._M_valid = 1u;
+    out = layout;
+    return Status::OK;
 }
 
 /** @brief Smallest positive scale whose grid reaches @p abs_max_q15 unclipped. */
 [[nodiscard]] inline constexpr int32_t
 fq_symmetric_scale (const int32_t abs_max_q15) noexcept {
-  if (abs_max_q15 <= 0)
-    return _S_code_to_q15_scale;
-  const int64_t widened = (static_cast<int64_t> (abs_max_q15) + 126) / 127;
-  if (widened > _S_q15_max)
-    return _S_q15_max;
-  return widened < 1 ? 1 : static_cast<int32_t> (widened);
+    if (abs_max_q15 <= 0)
+        return _S_code_to_q15_scale;
+    const int64_t widened = (static_cast<int64_t> (abs_max_q15) + 126) / 127;
+    if (widened > _S_q15_max)
+        return _S_q15_max;
+    return widened < 1 ? 1 : static_cast<int32_t> (widened);
 }
 
 /** @brief The reciprocal Q15 multiplier of a code scale: round(2^15 / scale). */
 [[nodiscard]] inline constexpr int32_t
 fq_multiplier_from_scale (const int32_t scale_q15) noexcept {
-  if (scale_q15 <= 0)
-    return 0;
-  const int64_t numerator = static_cast<int64_t> (_S_q15_one) * _S_q15_one;
-  const int64_t rounded = (numerator + scale_q15 / 2) / scale_q15;
-  return static_cast<int32_t> (rounded > _S_fq_int32_max ? _S_fq_int32_max : rounded);
+    if (scale_q15 <= 0)
+        return 0;
+    const int64_t numerator = static_cast<int64_t> (_S_q15_one) * _S_q15_one;
+    const int64_t rounded = (numerator + scale_q15 / 2) / scale_q15;
+    return static_cast<int32_t> (rounded > _S_fq_int32_max ? _S_fq_int32_max : rounded);
 }
 
 /** @brief Floor division by a positive divisor (never implementation-defined). */
 [[nodiscard]] inline constexpr int64_t
 fq_floor_div (const int64_t numerator, const int64_t positive_denominator) noexcept {
-  const int64_t quotient = numerator / positive_denominator;
-  if (numerator % positive_denominator != 0 && numerator < 0)
-    return quotient - 1;
-  return quotient;
+    const int64_t quotient = numerator / positive_denominator;
+    if (numerator % positive_denominator != 0 && numerator < 0)
+        return quotient - 1;
+    return quotient;
 }
 
 /** @brief Ceil division by a positive divisor. */
 [[nodiscard]] inline constexpr int64_t
 fq_ceil_div (const int64_t numerator, const int64_t positive_denominator) noexcept {
-  const int64_t quotient = numerator / positive_denominator;
-  if (numerator % positive_denominator != 0 && numerator > 0)
-    return quotient + 1;
-  return quotient;
+    const int64_t quotient = numerator / positive_denominator;
+    if (numerator % positive_denominator != 0 && numerator > 0)
+        return quotient + 1;
+    return quotient;
 }
 
 /** @brief Saturate an int64 to the int32 span, so a bound comparison is exact. */
 [[nodiscard]] inline constexpr int32_t
 fq_narrow_i32_sat (const int64_t value) noexcept {
-  if (value > _S_fq_int32_max)
-    return _S_fq_int32_max;
-  if (value < _S_fq_int32_min)
-    return _S_fq_int32_min;
-  return static_cast<int32_t> (value);
+    if (value > _S_fq_int32_max)
+        return _S_fq_int32_max;
+    if (value < _S_fq_int32_min)
+        return _S_fq_int32_min;
+    return static_cast<int32_t> (value);
 }
 
 /**
@@ -377,14 +377,14 @@ fq_narrow_i32_sat (const int64_t value) noexcept {
  * per-element clip mask.
  */
 struct ClipWindow {
-  int32_t _M_low = _S_fq_int32_min;
-  int32_t _M_high = _S_fq_int32_max;
-  int32_t _M_code_low = 0;
-  int32_t _M_code_high = 0;
-  int8_t _M_qmin = -127;
-  int8_t _M_qmax = 127;
-  uint8_t _M_valid = 0u;
-  uint8_t _M_pad = 0u;
+    int32_t _M_low = _S_fq_int32_min;
+    int32_t _M_high = _S_fq_int32_max;
+    int32_t _M_code_low = 0;
+    int32_t _M_code_high = 0;
+    int8_t _M_qmin = -127;
+    int8_t _M_qmax = 127;
+    uint8_t _M_valid = 0u;
+    uint8_t _M_pad = 0u;
 };
 
 static_assert (sizeof (ClipWindow) == 20u, "clip window must stay 20 bytes on both targets");
@@ -392,50 +392,50 @@ static_assert (sizeof (ClipWindow) == 20u, "clip window must stay 20 bytes on bo
 /** @brief Build the exact clip window of one channel. */
 [[nodiscard]] inline constexpr ClipWindow
 clip_window_of (const int32_t multiplier_q15, const int32_t zero_point, const int8_t qmin, const int8_t qmax) noexcept {
-  ClipWindow window;
-  window._M_qmin = qmin;
-  window._M_qmax = qmax;
-  if (multiplier_q15 <= 0)
+    ClipWindow window;
+    window._M_qmin = qmin;
+    window._M_qmax = qmax;
+    if (multiplier_q15 <= 0)
+        return window;
+    const int64_t half = static_cast<int64_t> (_S_q15_one) >> 1;
+    const int64_t low_level = static_cast<int64_t> (qmin) - zero_point;
+    const int64_t high_level = static_cast<int64_t> (qmax) - zero_point;
+    const int64_t low = fq_ceil_div (low_level * _S_q15_one - half, multiplier_q15);
+    const int64_t high = fq_floor_div ((high_level + 1) * _S_q15_one - half - 1, multiplier_q15);
+    window._M_low = fq_narrow_i32_sat (low);
+    window._M_high = fq_narrow_i32_sat (high);
+    window._M_code_low = static_cast<int32_t> (low_level);
+    window._M_code_high = static_cast<int32_t> (high_level);
+    window._M_valid = 1u;
     return window;
-  const int64_t half = static_cast<int64_t> (_S_q15_one) >> 1;
-  const int64_t low_level = static_cast<int64_t> (qmin) - zero_point;
-  const int64_t high_level = static_cast<int64_t> (qmax) - zero_point;
-  const int64_t low = fq_ceil_div (low_level * _S_q15_one - half, multiplier_q15);
-  const int64_t high = fq_floor_div ((high_level + 1) * _S_q15_one - half - 1, multiplier_q15);
-  window._M_low = fq_narrow_i32_sat (low);
-  window._M_high = fq_narrow_i32_sat (high);
-  window._M_code_low = static_cast<int32_t> (low_level);
-  window._M_code_high = static_cast<int32_t> (high_level);
-  window._M_valid = 1u;
-  return window;
 }
 
 /** @brief Clip windows for every channel into caller-owned storage. */
 [[nodiscard]] inline constexpr Status
 fake_quant_clip_windows (const FakeQuantParams &params, ClipWindow *const out, const uint32_t capacity) noexcept {
-  const Status status = params.validate ();
-  if (!status_ok (status))
-    return status;
-  if (out == nullptr)
-    return Status::BAD_LAYOUT;
-  if (capacity < params._M_channels)
-    return Status::ARENA_OVERFLOW;
-  for (uint32_t channel = 0; channel < params._M_channels; ++channel)
-    out[channel] =
-        clip_window_of (params.multiplier_at (channel), params.zero_point_at (channel), params._M_qmin, params._M_qmax);
-  return Status::OK;
+    const Status status = params.validate ();
+    if (!status_ok (status))
+        return status;
+    if (out == nullptr)
+        return Status::BAD_LAYOUT;
+    if (capacity < params._M_channels)
+        return Status::ARENA_OVERFLOW;
+    for (uint32_t channel = 0; channel < params._M_channels; ++channel)
+        out[channel] = clip_window_of (params.multiplier_at (channel), params.zero_point_at (channel), params._M_qmin,
+                                       params._M_qmax);
+    return Status::OK;
 }
 
 /** @brief The code a Q15 value maps to *before* the clamp (may exceed int8). */
 [[nodiscard]] inline constexpr int32_t
 fq_pre_clamp_code (const int32_t value_q15, const int32_t multiplier_q15, const int32_t zero_point) noexcept {
-  return _S_round_shift (static_cast<int64_t> (value_q15) * multiplier_q15, _S_grad_frac_bits) + zero_point;
+    return _S_round_shift (static_cast<int64_t> (value_q15) * multiplier_q15, _S_grad_frac_bits) + zero_point;
 }
 
 /** @brief The dequantized Q15 value of a code on a channel's grid. */
 [[nodiscard]] inline constexpr int32_t
 fq_dequantize_q15 (const int32_t code, const int32_t scale_q15, const int32_t zero_point) noexcept {
-  return q15_clamp ((code - zero_point) * scale_q15);
+    return q15_clamp ((code - zero_point) * scale_q15);
 }
 
 /**
@@ -446,9 +446,9 @@ fq_dequantize_q15 (const int32_t code, const int32_t scale_q15, const int32_t ze
 [[nodiscard]] inline constexpr int32_t
 fq_dequantized_value (const int32_t value_q15, const int32_t scale_q15, const int32_t multiplier_q15,
                       const int32_t zero_point, const int8_t qmin, const int8_t qmax, bool &clipped) noexcept {
-  const int32_t raw = fq_pre_clamp_code (value_q15, multiplier_q15, zero_point);
-  clipped = raw < static_cast<int32_t> (qmin) || raw > static_cast<int32_t> (qmax);
-  return fq_dequantize_q15 (_S_clamp_i8 (raw), scale_q15, zero_point);
+    const int32_t raw = fq_pre_clamp_code (value_q15, multiplier_q15, zero_point);
+    clipped = raw < static_cast<int32_t> (qmin) || raw > static_cast<int32_t> (qmax);
+    return fq_dequantize_q15 (_S_clamp_i8 (raw), scale_q15, zero_point);
 }
 
 /**
@@ -461,40 +461,40 @@ fq_dequantized_value (const int32_t value_q15, const int32_t scale_q15, const in
 [[nodiscard]] inline Status
 fake_quant_forward (const int16_t *const values_q15, int8_t *const codes, int16_t *const dequantized,
                     const FakeQuantParams &params, const FakeQuantLayout &layout, uint32_t &clipped_lanes) noexcept {
-  const Status status = params.validate ();
-  if (!status_ok (status))
-    return status;
-  if (values_q15 == nullptr || (codes == nullptr && dequantized == nullptr))
-    return Status::BAD_LAYOUT;
-  if (layout._M_valid == 0u || layout._M_channels != params._M_channels)
-    return Status::BAD_LAYOUT;
-  if (!simd_aligned (values_q15) || (codes != nullptr && !simd_aligned (codes))
-      || (dequantized != nullptr && !simd_aligned (dequantized)))
-    return Status::BAD_LAYOUT;
+    const Status status = params.validate ();
+    if (!status_ok (status))
+        return status;
+    if (values_q15 == nullptr || (codes == nullptr && dequantized == nullptr))
+        return Status::BAD_LAYOUT;
+    if (layout._M_valid == 0u || layout._M_channels != params._M_channels)
+        return Status::BAD_LAYOUT;
+    if (!simd_aligned (values_q15) || (codes != nullptr && !simd_aligned (codes))
+        || (dequantized != nullptr && !simd_aligned (dequantized)))
+        return Status::BAD_LAYOUT;
 
-  for (uint32_t channel = 0; channel < params._M_channels; ++channel) {
-    /* Hoisted: the grid and both clamp bounds for this channel. */
-    const int32_t multiplier = params.multiplier_at (channel);
-    const int32_t scale = params.scale_at (channel);
-    const int32_t zero_point = params.zero_point_at (channel);
-    const int32_t low_level = static_cast<int32_t> (params._M_qmin) - zero_point;
-    const int32_t high_level = static_cast<int32_t> (params._M_qmax) - zero_point;
-    for (uint32_t block = 0; block < layout._M_outer; ++block) {
-      const uint32_t base = layout.base (channel, block);
-      for (uint32_t i = 0; i < layout._M_run; ++i) {
-        const uint32_t index = base + i;
-        const int32_t raw = fq_pre_clamp_code (values_q15[index], multiplier, zero_point);
-        if (raw < low_level || raw > high_level)
-          ++clipped_lanes;
-        const int8_t code = _S_i8_code (raw);
-        if (codes != nullptr)
-          codes[index] = code;
-        if (dequantized != nullptr)
-          dequantized[index] = q15_to_i16_sat (fq_dequantize_q15 (code, scale, zero_point));
-      }
+    for (uint32_t channel = 0; channel < params._M_channels; ++channel) {
+        /* Hoisted: the grid and both clamp bounds for this channel. */
+        const int32_t multiplier = params.multiplier_at (channel);
+        const int32_t scale = params.scale_at (channel);
+        const int32_t zero_point = params.zero_point_at (channel);
+        const int32_t low_level = static_cast<int32_t> (params._M_qmin) - zero_point;
+        const int32_t high_level = static_cast<int32_t> (params._M_qmax) - zero_point;
+        for (uint32_t block = 0; block < layout._M_outer; ++block) {
+            const uint32_t base = layout.base (channel, block);
+            for (uint32_t i = 0; i < layout._M_run; ++i) {
+                const uint32_t index = base + i;
+                const int32_t raw = fq_pre_clamp_code (values_q15[index], multiplier, zero_point);
+                if (raw < low_level || raw > high_level)
+                    ++clipped_lanes;
+                const int8_t code = _S_i8_code (raw);
+                if (codes != nullptr)
+                    codes[index] = code;
+                if (dequantized != nullptr)
+                    dequantized[index] = q15_to_i16_sat (fq_dequantize_q15 (code, scale, zero_point));
+            }
+        }
     }
-  }
-  return Status::OK;
+    return Status::OK;
 }
 
 /**
@@ -511,27 +511,28 @@ fake_quant_forward (const int16_t *const values_q15, int8_t *const codes, int16_
 fake_quant_backward_ste (const int16_t *const values_q15, const int16_t *const grad_out, int16_t *const grad_in,
                          const ClipWindow *const windows, const FakeQuantParams &params,
                          const FakeQuantLayout &layout) noexcept {
-  if (values_q15 == nullptr || grad_out == nullptr || grad_in == nullptr || windows == nullptr || layout._M_valid == 0u)
-    return 0u;
-  if (layout._M_channels != params._M_channels)
-    return 0u;
-  uint32_t zeroed = 0u;
-  for (uint32_t channel = 0; channel < layout._M_channels; ++channel) {
-    const int32_t low = windows[channel]._M_low;
-    const int32_t high = windows[channel]._M_high;
-    for (uint32_t block = 0; block < layout._M_outer; ++block) {
-      const uint32_t base = layout.base (channel, block);
-      for (uint32_t i = 0; i < layout._M_run; ++i) {
-        const uint32_t index = base + i;
-        const int32_t value = values_q15[index];
-        const bool keep = value >= low && value <= high;
-        grad_in[index] = keep ? grad_out[index] : 0;
-        if (!keep)
-          ++zeroed;
-      }
+    if (values_q15 == nullptr || grad_out == nullptr || grad_in == nullptr || windows == nullptr
+        || layout._M_valid == 0u)
+        return 0u;
+    if (layout._M_channels != params._M_channels)
+        return 0u;
+    uint32_t zeroed = 0u;
+    for (uint32_t channel = 0; channel < layout._M_channels; ++channel) {
+        const int32_t low = windows[channel]._M_low;
+        const int32_t high = windows[channel]._M_high;
+        for (uint32_t block = 0; block < layout._M_outer; ++block) {
+            const uint32_t base = layout.base (channel, block);
+            for (uint32_t i = 0; i < layout._M_run; ++i) {
+                const uint32_t index = base + i;
+                const int32_t value = values_q15[index];
+                const bool keep = value >= low && value <= high;
+                grad_in[index] = keep ? grad_out[index] : 0;
+                if (!keep)
+                    ++zeroed;
+            }
+        }
     }
-  }
-  return zeroed;
+    return zeroed;
 }
 
 /**
@@ -548,31 +549,31 @@ fake_quant_backward_ste_accumulate (const int16_t *const values_q15, const int16
                                     int16_t *const grad_in, int16_t *const scratch, const uint32_t scratch_count,
                                     const ClipWindow *const windows, const FakeQuantParams &params,
                                     const FakeQuantLayout &layout, uint32_t &zeroed, uint32_t &saturated) noexcept {
-  if (values_q15 == nullptr || grad_out == nullptr || grad_in == nullptr || scratch == nullptr || windows == nullptr
-      || layout._M_valid == 0u)
-    return Status::BAD_LAYOUT;
-  if (scratch_count < layout._M_count || layout._M_channels != params._M_channels)
-    return Status::ARENA_OVERFLOW;
-  if (!simd_aligned (values_q15) || !simd_aligned (grad_out) || !simd_aligned (grad_in) || !simd_aligned (scratch))
-    return Status::BAD_LAYOUT;
-  zeroed = 0u;
-  saturated = 0u;
-  for (uint32_t channel = 0; channel < layout._M_channels; ++channel) {
-    const int32_t low = windows[channel]._M_low;
-    const int32_t high = windows[channel]._M_high;
-    for (uint32_t block = 0; block < layout._M_outer; ++block) {
-      const uint32_t base = layout.base (channel, block);
-      for (uint32_t i = 0; i < layout._M_run; ++i) {
-        const uint32_t index = base + i;
-        const bool keep = values_q15[index] >= low && values_q15[index] <= high;
-        scratch[base + i] = keep ? grad_out[index] : 0;
-        if (!keep)
-          ++zeroed;
-      }
+    if (values_q15 == nullptr || grad_out == nullptr || grad_in == nullptr || scratch == nullptr || windows == nullptr
+        || layout._M_valid == 0u)
+        return Status::BAD_LAYOUT;
+    if (scratch_count < layout._M_count || layout._M_channels != params._M_channels)
+        return Status::ARENA_OVERFLOW;
+    if (!simd_aligned (values_q15) || !simd_aligned (grad_out) || !simd_aligned (grad_in) || !simd_aligned (scratch))
+        return Status::BAD_LAYOUT;
+    zeroed = 0u;
+    saturated = 0u;
+    for (uint32_t channel = 0; channel < layout._M_channels; ++channel) {
+        const int32_t low = windows[channel]._M_low;
+        const int32_t high = windows[channel]._M_high;
+        for (uint32_t block = 0; block < layout._M_outer; ++block) {
+            const uint32_t base = layout.base (channel, block);
+            for (uint32_t i = 0; i < layout._M_run; ++i) {
+                const uint32_t index = base + i;
+                const bool keep = values_q15[index] >= low && values_q15[index] <= high;
+                scratch[base + i] = keep ? grad_out[index] : 0;
+                if (!keep)
+                    ++zeroed;
+            }
+        }
     }
-  }
-  saturated = add_lanes (grad_in, scratch, layout._M_count);
-  return Status::OK;
+    saturated = add_lanes (grad_in, scratch, layout._M_count);
+    return Status::OK;
 }
 
 /**
@@ -584,13 +585,13 @@ fake_quant_backward_ste_accumulate (const int16_t *const values_q15, const int16
  * a long observation cannot wrap before it clamps.
  */
 struct MinMaxAccumulator {
-  int32_t _M_min_q15 = 0;
-  int32_t _M_max_q15 = 0;
-  int32_t _M_abs_max_q15 = 0;
-  int32_t _M_sum_q15 = 0;
-  uint16_t _M_count = 0u;
-  uint8_t _M_seeded = 0u;
-  uint8_t _M_pad = 0u;
+    int32_t _M_min_q15 = 0;
+    int32_t _M_max_q15 = 0;
+    int32_t _M_abs_max_q15 = 0;
+    int32_t _M_sum_q15 = 0;
+    uint16_t _M_count = 0u;
+    uint8_t _M_seeded = 0u;
+    uint8_t _M_pad = 0u;
 };
 
 static_assert (sizeof (MinMaxAccumulator) == 20u, "min/max accumulator must stay 20 bytes on both targets");
@@ -598,120 +599,120 @@ static_assert (sizeof (MinMaxAccumulator) == 20u, "min/max accumulator must stay
 /** @brief Reset an accumulator array (one entry per channel). */
 inline constexpr void
 min_max_reset (MinMaxAccumulator *const accumulators, const uint32_t count) noexcept {
-  if (accumulators == nullptr)
-    return;
-  for (uint32_t i = 0; i < count; ++i)
-    accumulators[i] = MinMaxAccumulator{};
+    if (accumulators == nullptr)
+        return;
+    for (uint32_t i = 0; i < count; ++i)
+        accumulators[i] = MinMaxAccumulator{};
 }
 
 /** @brief Saturating accumulate of one int64 total into a Q15 field. */
 constexpr void
 accumulate_saturating (int32_t &field, const int64_t delta) noexcept {
-  field = clamp_sum_q15 (static_cast<int64_t> (field) + delta);
+    field = clamp_sum_q15 (static_cast<int64_t> (field) + delta);
 }
 
 /** @brief Observe one Q15 lane stream into a channel's accumulator. */
 inline void
 observe_lanes (MinMaxAccumulator &accumulator, const int16_t *const values_q15, const uint32_t count) noexcept {
-  if (values_q15 == nullptr || count == 0u)
-    return;
-  int32_t low = values_q15[0];
-  int32_t high = values_q15[0];
-  int64_t abs_total = 0;
-  for (uint32_t i = 0; i < count; ++i) {
-    const int32_t value = values_q15[i];
-    if (value < low)
-      low = value;
-    if (value > high)
-      high = value;
-    abs_total += value < 0 ? -static_cast<int64_t> (value) : value;
-  }
-  if (accumulator._M_seeded == 0u) {
-    accumulator._M_min_q15 = low;
-    accumulator._M_max_q15 = high;
-    accumulator._M_seeded = 1u;
-  } else {
-    if (low < accumulator._M_min_q15)
-      accumulator._M_min_q15 = low;
-    if (high > accumulator._M_max_q15)
-      accumulator._M_max_q15 = high;
-  }
-  /* The extreme of a batch is always one of the two ends of its range, so the
-     saturating L1 accumulator above is the only second pass this needs. */
-  const int32_t batch_abs = high > -low ? high : -low;
-  if (batch_abs > accumulator._M_abs_max_q15)
-    accumulator._M_abs_max_q15 = batch_abs;
-  accumulate_saturating (accumulator._M_sum_q15, abs_total);
-  accumulator._M_count =
-      static_cast<uint16_t> (accumulator._M_count > 0xFFFFu - count ? 0xFFFFu : accumulator._M_count + count);
+    if (values_q15 == nullptr || count == 0u)
+        return;
+    int32_t low = values_q15[0];
+    int32_t high = values_q15[0];
+    int64_t abs_total = 0;
+    for (uint32_t i = 0; i < count; ++i) {
+        const int32_t value = values_q15[i];
+        if (value < low)
+            low = value;
+        if (value > high)
+            high = value;
+        abs_total += value < 0 ? -static_cast<int64_t> (value) : value;
+    }
+    if (accumulator._M_seeded == 0u) {
+        accumulator._M_min_q15 = low;
+        accumulator._M_max_q15 = high;
+        accumulator._M_seeded = 1u;
+    } else {
+        if (low < accumulator._M_min_q15)
+            accumulator._M_min_q15 = low;
+        if (high > accumulator._M_max_q15)
+            accumulator._M_max_q15 = high;
+    }
+    /* The extreme of a batch is always one of the two ends of its range, so the
+       saturating L1 accumulator above is the only second pass this needs. */
+    const int32_t batch_abs = high > -low ? high : -low;
+    if (batch_abs > accumulator._M_abs_max_q15)
+        accumulator._M_abs_max_q15 = batch_abs;
+    accumulate_saturating (accumulator._M_sum_q15, abs_total);
+    accumulator._M_count =
+        static_cast<uint16_t> (accumulator._M_count > 0xFFFFu - count ? 0xFFFFu : accumulator._M_count + count);
 }
 
 /** @brief Observe an int8 code stream (identity grid, `code_to_q15`). */
 inline void
 observe_codes (MinMaxAccumulator &accumulator, const int8_t *const codes, const uint32_t count) noexcept {
-  if (codes == nullptr || count == 0u)
-    return;
-  int32_t low = code_to_q15 (codes[0]);
-  int32_t high = code_to_q15 (codes[0]);
-  int64_t abs_total = 0;
-  for (uint32_t i = 0; i < count; ++i) {
-    const int32_t value = code_to_q15 (codes[i]);
-    if (value < low)
-      low = value;
-    if (value > high)
-      high = value;
-    abs_total += value < 0 ? -static_cast<int64_t> (value) : value;
-  }
-  if (accumulator._M_seeded == 0u) {
-    accumulator._M_min_q15 = low;
-    accumulator._M_max_q15 = high;
-    accumulator._M_seeded = 1u;
-  } else {
-    if (low < accumulator._M_min_q15)
-      accumulator._M_min_q15 = low;
-    if (high > accumulator._M_max_q15)
-      accumulator._M_max_q15 = high;
-  }
-  const int32_t batch_abs = high > -low ? high : -low;
-  if (batch_abs > accumulator._M_abs_max_q15)
-    accumulator._M_abs_max_q15 = batch_abs;
-  accumulate_saturating (accumulator._M_sum_q15, abs_total);
-  accumulator._M_count =
-      static_cast<uint16_t> (accumulator._M_count > 0xFFFFu - count ? 0xFFFFu : accumulator._M_count + count);
+    if (codes == nullptr || count == 0u)
+        return;
+    int32_t low = code_to_q15 (codes[0]);
+    int32_t high = code_to_q15 (codes[0]);
+    int64_t abs_total = 0;
+    for (uint32_t i = 0; i < count; ++i) {
+        const int32_t value = code_to_q15 (codes[i]);
+        if (value < low)
+            low = value;
+        if (value > high)
+            high = value;
+        abs_total += value < 0 ? -static_cast<int64_t> (value) : value;
+    }
+    if (accumulator._M_seeded == 0u) {
+        accumulator._M_min_q15 = low;
+        accumulator._M_max_q15 = high;
+        accumulator._M_seeded = 1u;
+    } else {
+        if (low < accumulator._M_min_q15)
+            accumulator._M_min_q15 = low;
+        if (high > accumulator._M_max_q15)
+            accumulator._M_max_q15 = high;
+    }
+    const int32_t batch_abs = high > -low ? high : -low;
+    if (batch_abs > accumulator._M_abs_max_q15)
+        accumulator._M_abs_max_q15 = batch_abs;
+    accumulate_saturating (accumulator._M_sum_q15, abs_total);
+    accumulator._M_count =
+        static_cast<uint16_t> (accumulator._M_count > 0xFFFFu - count ? 0xFFFFu : accumulator._M_count + count);
 }
 
 /** @brief Observe a whole tensor channel by channel through the run layout. */
 [[nodiscard]] inline Status
 observe_lanes_axiswise (MinMaxAccumulator *const accumulators, const int16_t *const values_q15,
                         const FakeQuantLayout &layout) noexcept {
-  if (accumulators == nullptr || values_q15 == nullptr || layout._M_valid == 0u)
-    return Status::BAD_LAYOUT;
-  if (layout._M_channels > _S_fq_max_channels)
-    return Status::OUT_OF_RANGE;
-  for (uint32_t channel = 0; channel < layout._M_channels; ++channel)
-    for (uint32_t block = 0; block < layout._M_outer; ++block)
-      observe_lanes (accumulators[channel], values_q15 + layout.base (channel, block), layout._M_run);
-  return Status::OK;
+    if (accumulators == nullptr || values_q15 == nullptr || layout._M_valid == 0u)
+        return Status::BAD_LAYOUT;
+    if (layout._M_channels > _S_fq_max_channels)
+        return Status::OUT_OF_RANGE;
+    for (uint32_t channel = 0; channel < layout._M_channels; ++channel)
+        for (uint32_t block = 0; block < layout._M_outer; ++block)
+            observe_lanes (accumulators[channel], values_q15 + layout.base (channel, block), layout._M_run);
+    return Status::OK;
 }
 
 /** @brief Observe a whole tensor of codes channel by channel. */
 [[nodiscard]] inline Status
 observe_codes_axiswise (MinMaxAccumulator *const accumulators, const int8_t *const codes,
                         const FakeQuantLayout &layout) noexcept {
-  if (accumulators == nullptr || codes == nullptr || layout._M_valid == 0u)
-    return Status::BAD_LAYOUT;
-  if (layout._M_channels > _S_fq_max_channels)
-    return Status::OUT_OF_RANGE;
-  for (uint32_t channel = 0; channel < layout._M_channels; ++channel)
-    for (uint32_t block = 0; block < layout._M_outer; ++block)
-      observe_codes (accumulators[channel], codes + layout.base (channel, block), layout._M_run);
-  return Status::OK;
+    if (accumulators == nullptr || codes == nullptr || layout._M_valid == 0u)
+        return Status::BAD_LAYOUT;
+    if (layout._M_channels > _S_fq_max_channels)
+        return Status::OUT_OF_RANGE;
+    for (uint32_t channel = 0; channel < layout._M_channels; ++channel)
+        for (uint32_t block = 0; block < layout._M_outer; ++block)
+            observe_codes (accumulators[channel], codes + layout.base (channel, block), layout._M_run);
+    return Status::OK;
 }
 
 /** @brief Symmetric scale that covers an observed range (nothing clips). */
 [[nodiscard]] inline constexpr int32_t
 scale_from_observed (const MinMaxAccumulator &observed) noexcept {
-  return fq_symmetric_scale (observed._M_abs_max_q15);
+    return fq_symmetric_scale (observed._M_abs_max_q15);
 }
 
 /**
@@ -723,21 +724,21 @@ scale_from_observed (const MinMaxAccumulator &observed) noexcept {
  */
 [[nodiscard]] inline constexpr Status
 scale_zero_from_observed (const MinMaxAccumulator &observed, int32_t &scale_q15, int8_t &zero_point) noexcept {
-  const int64_t span = static_cast<int64_t> (observed._M_max_q15) - static_cast<int64_t> (observed._M_min_q15);
-  if (span <= 0) {
-    scale_q15 = _S_code_to_q15_scale;
-    zero_point = 0;
+    const int64_t span = static_cast<int64_t> (observed._M_max_q15) - static_cast<int64_t> (observed._M_min_q15);
+    if (span <= 0) {
+        scale_q15 = _S_code_to_q15_scale;
+        zero_point = 0;
+        return Status::OK;
+    }
+    const int64_t scaled = fq_ceil_div (span, 254);
+    if (scaled < 1 || scaled > _S_q15_max)
+        return Status::OUT_OF_RANGE;
+    scale_q15 = static_cast<int32_t> (scaled);
+    const int32_t multiplier = fq_multiplier_from_scale (scale_q15);
+    const int32_t raw =
+        -127 - _S_round_shift (static_cast<int64_t> (observed._M_min_q15) * multiplier, _S_grad_frac_bits);
+    zero_point = static_cast<int8_t> (raw < -127 ? -127 : (raw > 127 ? 127 : raw));
     return Status::OK;
-  }
-  const int64_t scaled = fq_ceil_div (span, 254);
-  if (scaled < 1 || scaled > _S_q15_max)
-    return Status::OUT_OF_RANGE;
-  scale_q15 = static_cast<int32_t> (scaled);
-  const int32_t multiplier = fq_multiplier_from_scale (scale_q15);
-  const int32_t raw =
-      -127 - _S_round_shift (static_cast<int64_t> (observed._M_min_q15) * multiplier, _S_grad_frac_bits);
-  zero_point = static_cast<int8_t> (raw < -127 ? -127 : (raw > 127 ? 127 : raw));
-  return Status::OK;
 }
 
 /**
@@ -761,64 +762,65 @@ scale_zero_from_observed (const MinMaxAccumulator &observed, int32_t &scale_q15,
 narrow_clip_range (const FakeQuantParams &params, const MinMaxAccumulator *const observed,
                    const uint32_t observed_capacity, const int32_t keep_fraction_bp, int32_t *const out_scale_q15,
                    int32_t *const out_multiplier_q15, int8_t *const out_qmin, int8_t *const out_qmax) noexcept {
-  const Status status = params.validate ();
-  if (!status_ok (status))
-    return status;
-  if (observed == nullptr || out_scale_q15 == nullptr || out_multiplier_q15 == nullptr || out_qmin == nullptr
-      || out_qmax == nullptr)
-    return Status::BAD_LAYOUT;
-  if (observed_capacity < params._M_channels)
-    return Status::ARENA_OVERFLOW;
-  if (keep_fraction_bp < 1 || keep_fraction_bp > 10000)
-    return Status::OUT_OF_RANGE;
-  const bool symmetric = params._M_mode == static_cast<uint8_t> (FakeQuantMode::Symmetric);
-  for (uint32_t channel = 0; channel < params._M_channels; ++channel) {
-    const MinMaxAccumulator &stats = observed[channel];
-    const int32_t current_scale = params.scale_at (channel);
-    int32_t wanted = current_scale;
-    if (symmetric) {
-      const int64_t bounded = fq_floor_div (static_cast<int64_t> (stats._M_abs_max_q15) * keep_fraction_bp, 10000);
-      wanted = fq_symmetric_scale (fq_narrow_i32_sat (bounded));
-    } else {
-      const int64_t span = static_cast<int64_t> (stats._M_max_q15) - static_cast<int64_t> (stats._M_min_q15);
-      if (span > 0)
-        wanted = static_cast<int32_t> (fq_ceil_div (span * keep_fraction_bp, 254LL * 10000));
+    const Status status = params.validate ();
+    if (!status_ok (status))
+        return status;
+    if (observed == nullptr || out_scale_q15 == nullptr || out_multiplier_q15 == nullptr || out_qmin == nullptr
+        || out_qmax == nullptr)
+        return Status::BAD_LAYOUT;
+    if (observed_capacity < params._M_channels)
+        return Status::ARENA_OVERFLOW;
+    if (keep_fraction_bp < 1 || keep_fraction_bp > 10000)
+        return Status::OUT_OF_RANGE;
+    const bool symmetric = params._M_mode == static_cast<uint8_t> (FakeQuantMode::Symmetric);
+    for (uint32_t channel = 0; channel < params._M_channels; ++channel) {
+        const MinMaxAccumulator &stats = observed[channel];
+        const int32_t current_scale = params.scale_at (channel);
+        int32_t wanted = current_scale;
+        if (symmetric) {
+            const int64_t bounded =
+                fq_floor_div (static_cast<int64_t> (stats._M_abs_max_q15) * keep_fraction_bp, 10000);
+            wanted = fq_symmetric_scale (fq_narrow_i32_sat (bounded));
+        } else {
+            const int64_t span = static_cast<int64_t> (stats._M_max_q15) - static_cast<int64_t> (stats._M_min_q15);
+            if (span > 0)
+                wanted = static_cast<int32_t> (fq_ceil_div (span * keep_fraction_bp, 254LL * 10000));
+        }
+        if (wanted < 1)
+            wanted = 1;
+        const int32_t scale = wanted > current_scale ? current_scale : wanted;
+        out_scale_q15[channel] = scale;
+        out_multiplier_q15[channel] = fq_multiplier_from_scale (scale);
+        if (out_multiplier_q15[channel] <= 0)
+            return Status::OUT_OF_RANGE;
+        if (symmetric) {
+            const int32_t reached = _S_round_shift (
+                static_cast<int64_t> (stats._M_abs_max_q15) * out_multiplier_q15[channel], _S_grad_frac_bits);
+            const int8_t bound = static_cast<int8_t> (reached < 1 ? 1 : (reached > 127 ? 127 : reached));
+            out_qmin[channel] = static_cast<int8_t> (-bound);
+            out_qmax[channel] = bound;
+        } else {
+            out_qmin[channel] = -127;
+            out_qmax[channel] = 127;
+        }
     }
-    if (wanted < 1)
-      wanted = 1;
-    const int32_t scale = wanted > current_scale ? current_scale : wanted;
-    out_scale_q15[channel] = scale;
-    out_multiplier_q15[channel] = fq_multiplier_from_scale (scale);
-    if (out_multiplier_q15[channel] <= 0)
-      return Status::OUT_OF_RANGE;
-    if (symmetric) {
-      const int32_t reached =
-          _S_round_shift (static_cast<int64_t> (stats._M_abs_max_q15) * out_multiplier_q15[channel], _S_grad_frac_bits);
-      const int8_t bound = static_cast<int8_t> (reached < 1 ? 1 : (reached > 127 ? 127 : reached));
-      out_qmin[channel] = static_cast<int8_t> (-bound);
-      out_qmax[channel] = bound;
-    } else {
-      out_qmin[channel] = -127;
-      out_qmax[channel] = 127;
-    }
-  }
-  return Status::OK;
+    return Status::OK;
 }
 
 /** @brief Recompute the reciprocal multiplier table of a scale table. */
 [[nodiscard]] inline constexpr Status
 refresh_multiplier_table (const int32_t *const scale_q15, int32_t *const multiplier_q15,
                           const uint32_t channels) noexcept {
-  if (scale_q15 == nullptr || multiplier_q15 == nullptr)
-    return Status::BAD_LAYOUT;
-  if (channels == 0u || channels > _S_fq_max_channels)
-    return Status::OUT_OF_RANGE;
-  for (uint32_t channel = 0; channel < channels; ++channel) {
-    multiplier_q15[channel] = fq_multiplier_from_scale (scale_q15[channel]);
-    if (multiplier_q15[channel] <= 0)
-      return Status::OUT_OF_RANGE;
-  }
-  return Status::OK;
+    if (scale_q15 == nullptr || multiplier_q15 == nullptr)
+        return Status::BAD_LAYOUT;
+    if (channels == 0u || channels > _S_fq_max_channels)
+        return Status::OUT_OF_RANGE;
+    for (uint32_t channel = 0; channel < channels; ++channel) {
+        multiplier_q15[channel] = fq_multiplier_from_scale (scale_q15[channel]);
+        if (multiplier_q15[channel] <= 0)
+            return Status::OUT_OF_RANGE;
+    }
+    return Status::OK;
 }
 
 /**
@@ -839,32 +841,33 @@ refresh_multiplier_table (const int32_t *const scale_q15, int32_t *const multipl
 learnable_scale_backward (const int16_t *const values_q15, const int8_t *const codes, const int16_t *const grad_out,
                           int16_t *const grad_scale_q15, const FakeQuantParams &params,
                           const FakeQuantLayout &layout) noexcept {
-  const Status status = params.validate ();
-  if (!status_ok (status))
-    return status;
-  if (values_q15 == nullptr || codes == nullptr || grad_out == nullptr || grad_scale_q15 == nullptr
-      || layout._M_valid == 0u)
-    return Status::BAD_LAYOUT;
-  if (layout._M_channels != params._M_channels)
-    return Status::BAD_LAYOUT;
-  if (!simd_aligned (values_q15) || !simd_aligned (grad_out) || !simd_aligned (grad_scale_q15) || !simd_aligned (codes))
-    return Status::BAD_LAYOUT;
+    const Status status = params.validate ();
+    if (!status_ok (status))
+        return status;
+    if (values_q15 == nullptr || codes == nullptr || grad_out == nullptr || grad_scale_q15 == nullptr
+        || layout._M_valid == 0u)
+        return Status::BAD_LAYOUT;
+    if (layout._M_channels != params._M_channels)
+        return Status::BAD_LAYOUT;
+    if (!simd_aligned (values_q15) || !simd_aligned (grad_out) || !simd_aligned (grad_scale_q15)
+        || !simd_aligned (codes))
+        return Status::BAD_LAYOUT;
 
-  for (uint32_t channel = 0; channel < params._M_channels; ++channel) {
-    const int32_t scale = params.scale_at (channel);
-    const int32_t zero_point = params.zero_point_at (channel);
-    int64_t total_q30 = 0;
-    for (uint32_t block = 0; block < layout._M_outer; ++block) {
-      const uint32_t base = layout.base (channel, block);
-      for (uint32_t i = 0; i < layout._M_run; ++i) {
-        const uint32_t index = base + i;
-        const int32_t dequantized = fq_dequantize_q15 (codes[index], scale, zero_point);
-        total_q30 += static_cast<int64_t> (grad_out[index]) * (values_q15[index] - dequantized);
-      }
+    for (uint32_t channel = 0; channel < params._M_channels; ++channel) {
+        const int32_t scale = params.scale_at (channel);
+        const int32_t zero_point = params.zero_point_at (channel);
+        int64_t total_q30 = 0;
+        for (uint32_t block = 0; block < layout._M_outer; ++block) {
+            const uint32_t base = layout.base (channel, block);
+            for (uint32_t i = 0; i < layout._M_run; ++i) {
+                const uint32_t index = base + i;
+                const int32_t dequantized = fq_dequantize_q15 (codes[index], scale, zero_point);
+                total_q30 += static_cast<int64_t> (grad_out[index]) * (values_q15[index] - dequantized);
+            }
+        }
+        grad_scale_q15[channel] = q15_to_i16_sat (narrow_sum_q15 (total_q30));
     }
-    grad_scale_q15[channel] = q15_to_i16_sat (narrow_sum_q15 (total_q30));
-  }
-  return Status::OK;
+    return Status::OK;
 }
 
 /**
@@ -883,61 +886,61 @@ learnable_scale_backward_dot (const int16_t *const values_q15, const int8_t *con
                               int16_t *const grad_scale_q15, const FakeQuantParams &params,
                               const FakeQuantLayout &layout, int16_t *const scratch,
                               const uint32_t scratch_capacity) noexcept {
-  const Status status = params.validate ();
-  if (!status_ok (status))
-    return status;
-  if (values_q15 == nullptr || codes == nullptr || grad_out == nullptr || grad_scale_q15 == nullptr
-      || scratch == nullptr || layout._M_valid == 0u)
-    return Status::BAD_LAYOUT;
-  if (scratch_capacity < layout._M_count)
-    return Status::ARENA_OVERFLOW;
-  if (!simd_aligned (scratch) || !simd_aligned (grad_out) || !simd_aligned (values_q15))
-    return Status::BAD_LAYOUT;
-  for (uint32_t channel = 0; channel < params._M_channels; ++channel) {
-    const int32_t scale = params.scale_at (channel);
-    const int32_t zero_point = params.zero_point_at (channel);
-    /* code * scale == (code * 258) * (2^15 * scale / 258) / 2^15 */
-    const int32_t grid_step =
-        fq_narrow_i32_sat (fq_ceil_div (static_cast<int64_t> (_S_q15_one) * scale, _S_code_to_q15_scale));
-    const int32_t offset = zero_point * scale;
-    for (uint32_t block = 0; block < layout._M_outer; ++block) {
-      const uint32_t base = layout.base (channel, block);
-      train_simd::codes_to_q15 (codes + base, scratch + base, layout._M_run);
-      scale_lanes (scratch + base, grid_step, layout._M_run);
-      for (uint32_t i = 0; i < layout._M_run; ++i)
-        scratch[base + i] = q15_to_i16_sat (values_q15[base + i] - scratch[base + i] + offset);
+    const Status status = params.validate ();
+    if (!status_ok (status))
+        return status;
+    if (values_q15 == nullptr || codes == nullptr || grad_out == nullptr || grad_scale_q15 == nullptr
+        || scratch == nullptr || layout._M_valid == 0u)
+        return Status::BAD_LAYOUT;
+    if (scratch_capacity < layout._M_count)
+        return Status::ARENA_OVERFLOW;
+    if (!simd_aligned (scratch) || !simd_aligned (grad_out) || !simd_aligned (values_q15))
+        return Status::BAD_LAYOUT;
+    for (uint32_t channel = 0; channel < params._M_channels; ++channel) {
+        const int32_t scale = params.scale_at (channel);
+        const int32_t zero_point = params.zero_point_at (channel);
+        /* code * scale == (code * 258) * (2^15 * scale / 258) / 2^15 */
+        const int32_t grid_step =
+            fq_narrow_i32_sat (fq_ceil_div (static_cast<int64_t> (_S_q15_one) * scale, _S_code_to_q15_scale));
+        const int32_t offset = zero_point * scale;
+        for (uint32_t block = 0; block < layout._M_outer; ++block) {
+            const uint32_t base = layout.base (channel, block);
+            train_simd::codes_to_q15 (codes + base, scratch + base, layout._M_run);
+            scale_lanes (scratch + base, grid_step, layout._M_run);
+            for (uint32_t i = 0; i < layout._M_run; ++i)
+                scratch[base + i] = q15_to_i16_sat (values_q15[base + i] - scratch[base + i] + offset);
+        }
     }
-  }
-  for (uint32_t channel = 0; channel < params._M_channels; ++channel) {
-    int64_t total_q30 = 0;
-    for (uint32_t block = 0; block < layout._M_outer; ++block) {
-      const uint32_t base = layout.base (channel, block);
-      /* `dot_lanes` returns the Q15-narrowed sum of this run (a run
-         of 32767-unit lanes still fits int32), so re-widening it and
-         narrowing the merged total keeps the result a single
-         saturating step away from the fused form. */
-      total_q30 += static_cast<int64_t> (dot_lanes (grad_out + base, scratch + base, layout._M_run))
-                   << _S_grad_frac_bits;
+    for (uint32_t channel = 0; channel < params._M_channels; ++channel) {
+        int64_t total_q30 = 0;
+        for (uint32_t block = 0; block < layout._M_outer; ++block) {
+            const uint32_t base = layout.base (channel, block);
+            /* `dot_lanes` returns the Q15-narrowed sum of this run (a run
+               of 32767-unit lanes still fits int32), so re-widening it and
+               narrowing the merged total keeps the result a single
+               saturating step away from the fused form. */
+            total_q30 += static_cast<int64_t> (dot_lanes (grad_out + base, scratch + base, layout._M_run))
+                         << _S_grad_frac_bits;
+        }
+        grad_scale_q15[channel] = q15_to_i16_sat (narrow_sum_q15 (total_q30));
     }
-    grad_scale_q15[channel] = q15_to_i16_sat (narrow_sum_q15 (total_q30));
-  }
-  return Status::OK;
+    return Status::OK;
 }
 
 /** @brief Apply one scale gradient: a saturating Q15 step on every channel grid. */
 [[nodiscard]] inline Status
 learnable_scale_step (int32_t *const scale_q15, const int16_t *const grad_scale_q15, const uint32_t channels,
                       const int32_t lr_q15) noexcept {
-  if (scale_q15 == nullptr || grad_scale_q15 == nullptr)
-    return Status::BAD_LAYOUT;
-  if (channels == 0u || channels > _S_fq_max_channels)
-    return Status::OUT_OF_RANGE;
-  for (uint32_t channel = 0; channel < channels; ++channel) {
-    const int32_t delta = q15_mul (-grad_scale_q15[channel], lr_q15);
-    const int64_t next = static_cast<int64_t> (scale_q15[channel]) + delta;
-    scale_q15[channel] = static_cast<int32_t> (next < 1 ? 1 : (next > _S_q15_max ? _S_q15_max : next));
-  }
-  return Status::OK;
+    if (scale_q15 == nullptr || grad_scale_q15 == nullptr)
+        return Status::BAD_LAYOUT;
+    if (channels == 0u || channels > _S_fq_max_channels)
+        return Status::OUT_OF_RANGE;
+    for (uint32_t channel = 0; channel < channels; ++channel) {
+        const int32_t delta = q15_mul (-grad_scale_q15[channel], lr_q15);
+        const int64_t next = static_cast<int64_t> (scale_q15[channel]) + delta;
+        scale_q15[channel] = static_cast<int32_t> (next < 1 ? 1 : (next > _S_q15_max ? _S_q15_max : next));
+    }
+    return Status::OK;
 }
 
 /**
@@ -949,59 +952,59 @@ learnable_scale_step (int32_t *const scale_q15, const int16_t *const grad_scale_
  * strictly aligned int32 stream and `as_window` unpacks without a type pun.
  */
 struct alignas (4) ClipWindowLane {
-  int32_t _M_words[6];
+    int32_t _M_words[6];
 
-  [[nodiscard]] ClipWindow
-  as_window () const noexcept {
-    ClipWindow window;
-    window._M_low = this->_M_words[0];
-    window._M_high = this->_M_words[1];
-    window._M_code_low = this->_M_words[2];
-    window._M_code_high = this->_M_words[3];
-    window._M_qmin = this->qmin ();
-    window._M_qmax = this->qmax ();
-    window._M_valid = this->_M_words[5] != 0 ? 1u : 0u;
-    window._M_pad = 0u;
-    return window;
-  }
+    [[nodiscard]] ClipWindow
+    as_window () const noexcept {
+        ClipWindow window;
+        window._M_low = this->_M_words[0];
+        window._M_high = this->_M_words[1];
+        window._M_code_low = this->_M_words[2];
+        window._M_code_high = this->_M_words[3];
+        window._M_qmin = this->qmin ();
+        window._M_qmax = this->qmax ();
+        window._M_valid = this->_M_words[5] != 0 ? 1u : 0u;
+        window._M_pad = 0u;
+        return window;
+    }
 
-  void
-  set_window (const ClipWindow &window) noexcept {
-    this->_M_words[0] = window._M_low;
-    this->_M_words[1] = window._M_high;
-    this->_M_words[2] = window._M_code_low;
-    this->_M_words[3] = window._M_code_high;
-    this->_M_words[4] = static_cast<int32_t> (static_cast<uint8_t> (window._M_qmin))
-                        | (static_cast<int32_t> (static_cast<uint8_t> (window._M_qmax)) << 8);
-    this->_M_words[5] = window._M_valid;
-  }
+    void
+    set_window (const ClipWindow &window) noexcept {
+        this->_M_words[0] = window._M_low;
+        this->_M_words[1] = window._M_high;
+        this->_M_words[2] = window._M_code_low;
+        this->_M_words[3] = window._M_code_high;
+        this->_M_words[4] = static_cast<int32_t> (static_cast<uint8_t> (window._M_qmin))
+                            | (static_cast<int32_t> (static_cast<uint8_t> (window._M_qmax)) << 8);
+        this->_M_words[5] = window._M_valid;
+    }
 
-  [[nodiscard]] int8_t
-  qmin () const noexcept {
-    return static_cast<int8_t> (this->_M_words[4] & 0xFF);
-  }
+    [[nodiscard]] int8_t
+    qmin () const noexcept {
+        return static_cast<int8_t> (this->_M_words[4] & 0xFF);
+    }
 
-  [[nodiscard]] int8_t
-  qmax () const noexcept {
-    return static_cast<int8_t> ((this->_M_words[4] >> 8) & 0xFF);
-  }
+    [[nodiscard]] int8_t
+    qmax () const noexcept {
+        return static_cast<int8_t> ((this->_M_words[4] >> 8) & 0xFF);
+    }
 
-  [[nodiscard]] bool
-  valid () const noexcept {
-    return this->_M_words[5] != 0;
-  }
+    [[nodiscard]] bool
+    valid () const noexcept {
+        return this->_M_words[5] != 0;
+    }
 };
 
 static_assert (sizeof (ClipWindowLane) == 24u, "clip window lane must stay 24 bytes on both targets");
 
 /** @brief Saved layout of a recorded fake-quant node. */
 struct alignas (4) FakeQuantNodeState {
-  uint32_t _M_run = 0u;
-  uint32_t _M_group = 0u;
-  uint32_t _M_outer = 0u;
-  uint32_t _M_count = 0u;
-  uint32_t _M_channels = 0u;
-  uint32_t _M_pad = 0u;
+    uint32_t _M_run = 0u;
+    uint32_t _M_group = 0u;
+    uint32_t _M_outer = 0u;
+    uint32_t _M_count = 0u;
+    uint32_t _M_channels = 0u;
+    uint32_t _M_pad = 0u;
 };
 
 static_assert (sizeof (FakeQuantNodeState) == 24u, "fake-quant node state must stay 24 bytes");
@@ -1009,29 +1012,29 @@ static_assert (sizeof (FakeQuantNodeState) == 24u, "fake-quant node state must s
 /** @brief Fill a node state from a layout. */
 inline constexpr void
 fake_quant_node_state_set (FakeQuantNodeState &state, const FakeQuantLayout &layout) noexcept {
-  state._M_run = layout._M_run;
-  state._M_group = layout._M_group;
-  state._M_outer = layout._M_outer;
-  state._M_count = layout._M_count;
-  state._M_channels = layout._M_channels;
-  state._M_pad = 0u;
+    state._M_run = layout._M_run;
+    state._M_group = layout._M_group;
+    state._M_outer = layout._M_outer;
+    state._M_count = layout._M_count;
+    state._M_channels = layout._M_channels;
+    state._M_pad = 0u;
 }
 
 /** @brief Rebuild the run layout of a recorded node from its saved state. */
 [[nodiscard]] inline constexpr Status
 fake_quant_node_layout (const FakeQuantNodeState &state, FakeQuantLayout &out) noexcept {
-  FakeQuantLayout layout;
-  layout._M_run = state._M_run;
-  layout._M_group = state._M_group;
-  layout._M_outer = state._M_outer;
-  layout._M_count = state._M_count;
-  if (state._M_channels > 0xFFFFu || state._M_run == 0u || state._M_count == 0u)
-    return Status::BAD_LAYOUT;
-  layout._M_channels = static_cast<uint16_t> (state._M_channels);
-  layout._M_axis = state._M_channels == 1u ? _S_fq_per_tensor : 0u;
-  layout._M_valid = 1u;
-  out = layout;
-  return Status::OK;
+    FakeQuantLayout layout;
+    layout._M_run = state._M_run;
+    layout._M_group = state._M_group;
+    layout._M_outer = state._M_outer;
+    layout._M_count = state._M_count;
+    if (state._M_channels > 0xFFFFu || state._M_run == 0u || state._M_count == 0u)
+        return Status::BAD_LAYOUT;
+    layout._M_channels = static_cast<uint16_t> (state._M_channels);
+    layout._M_axis = state._M_channels == 1u ? _S_fq_per_tensor : 0u;
+    layout._M_valid = 1u;
+    out = layout;
+    return Status::OK;
 }
 
 /**
@@ -1045,48 +1048,48 @@ fake_quant_node_layout (const FakeQuantNodeState &state, FakeQuantLayout &out) n
  */
 [[nodiscard]] inline Status
 fake_quant_backward (const Trainable &output, const Trainable &grad_output, GradContext &context) noexcept {
-  if (context._M_operand_count < 1u || context._M_saved_count < 3u)
-    return Status::BAD_LAYOUT;
-  if (output._M_grad == nullptr || grad_output._M_grad == nullptr)
-    return Status::BAD_LAYOUT;
-  const Trainable &input = context._M_operands[0];
-  if (input._M_grad == nullptr)
-    return Status::OK;
-  if (input._M_count != output._M_count)
-    return Status::BAD_LAYOUT;
+    if (context._M_operand_count < 1u || context._M_saved_count < 3u)
+        return Status::BAD_LAYOUT;
+    if (output._M_grad == nullptr || grad_output._M_grad == nullptr)
+        return Status::BAD_LAYOUT;
+    const Trainable &input = context._M_operands[0];
+    if (input._M_grad == nullptr)
+        return Status::OK;
+    if (input._M_count != output._M_count)
+        return Status::BAD_LAYOUT;
 
-  const int16_t *const values = context.saved_as<int16_t> (0);
-  const ClipWindowLane *const windows = context.saved_as<ClipWindowLane> (1);
-  const FakeQuantNodeState *const state = context.saved_as<FakeQuantNodeState> (2);
-  if (values == nullptr || windows == nullptr || state == nullptr)
-    return Status::BAD_LAYOUT;
-  FakeQuantLayout layout;
-  const Status layout_status = fake_quant_node_layout (*state, layout);
-  if (!status_ok (layout_status))
-    return layout_status;
-  if (layout._M_count != output._M_count)
-    return Status::BAD_LAYOUT;
+    const int16_t *const values = context.saved_as<int16_t> (0);
+    const ClipWindowLane *const windows = context.saved_as<ClipWindowLane> (1);
+    const FakeQuantNodeState *const state = context.saved_as<FakeQuantNodeState> (2);
+    if (values == nullptr || windows == nullptr || state == nullptr)
+        return Status::BAD_LAYOUT;
+    FakeQuantLayout layout;
+    const Status layout_status = fake_quant_node_layout (*state, layout);
+    if (!status_ok (layout_status))
+        return layout_status;
+    if (layout._M_count != output._M_count)
+        return Status::BAD_LAYOUT;
 
-  const int16_t *const grad_out = grad_output._M_grad;
-  for (uint32_t channel = 0; channel < layout._M_channels; ++channel) {
-    const int32_t low = windows[channel]._M_words[0];
-    const int32_t high = windows[channel]._M_words[1];
-    if (windows[channel]._M_words[5] == 0)
-      return Status::BAD_LAYOUT;
-    for (uint32_t block = 0; block < layout._M_outer; ++block) {
-      const uint32_t base = layout.base (channel, block);
-      for (uint32_t i = 0; i < layout._M_run; ++i) {
-        const uint32_t index = base + i;
-        const int32_t value = values[index];
-        /* Straight through, clipped lanes excluded. */
-        if (value < low || value > high)
-          continue;
-        if (input.add_grad (index, grad_out[index]))
-          ++context._M_saturation_events;
-      }
+    const int16_t *const grad_out = grad_output._M_grad;
+    for (uint32_t channel = 0; channel < layout._M_channels; ++channel) {
+        const int32_t low = windows[channel]._M_words[0];
+        const int32_t high = windows[channel]._M_words[1];
+        if (windows[channel]._M_words[5] == 0)
+            return Status::BAD_LAYOUT;
+        for (uint32_t block = 0; block < layout._M_outer; ++block) {
+            const uint32_t base = layout.base (channel, block);
+            for (uint32_t i = 0; i < layout._M_run; ++i) {
+                const uint32_t index = base + i;
+                const int32_t value = values[index];
+                /* Straight through, clipped lanes excluded. */
+                if (value < low || value > high)
+                    continue;
+                if (input.add_grad (index, grad_out[index]))
+                    ++context._M_saturation_events;
+            }
+        }
     }
-  }
-  return Status::OK;
+    return Status::OK;
 }
 
 /**
@@ -1103,46 +1106,46 @@ fake_quant_backward (const Trainable &output, const Trainable &grad_output, Grad
 [[nodiscard]] inline Status
 record_fake_quant (Tape &tape, const Trainable &input, const Trainable &output, const int16_t *const forward_values,
                    const FakeQuantParams &params, const FakeQuantLayout &layout, const uint32_t op_id = 0u) noexcept {
-  const Status params_status = params.validate ();
-  if (!status_ok (params_status))
-    return params_status;
-  const Status input_status = input.validate ();
-  const Status output_status = output.validate ();
-  if (!status_ok (input_status) || !status_ok (output_status))
-    return Status::BAD_LAYOUT;
-  if (forward_values == nullptr || output._M_grad == nullptr)
-    return Status::BAD_LAYOUT;
-  if (input._M_count != output._M_count)
-    return Status::BAD_LAYOUT;
-  if (layout._M_valid == 0u || layout._M_channels != params._M_channels || layout._M_count != output._M_count)
-    return Status::BAD_LAYOUT;
-  if (!simd_aligned (forward_values))
-    return Status::BAD_LAYOUT;
+    const Status params_status = params.validate ();
+    if (!status_ok (params_status))
+        return params_status;
+    const Status input_status = input.validate ();
+    const Status output_status = output.validate ();
+    if (!status_ok (input_status) || !status_ok (output_status))
+        return Status::BAD_LAYOUT;
+    if (forward_values == nullptr || output._M_grad == nullptr)
+        return Status::BAD_LAYOUT;
+    if (input._M_count != output._M_count)
+        return Status::BAD_LAYOUT;
+    if (layout._M_valid == 0u || layout._M_channels != params._M_channels || layout._M_count != output._M_count)
+        return Status::BAD_LAYOUT;
+    if (!simd_aligned (forward_values))
+        return Status::BAD_LAYOUT;
 
-  Saved values_handle;
-  const Status values_status = tape.save_copy (forward_values, output._M_count, values_handle);
-  if (!status_ok (values_status))
-    return values_status;
+    Saved values_handle;
+    const Status values_status = tape.save_copy (forward_values, output._M_count, values_handle);
+    if (!status_ok (values_status))
+        return values_status;
 
-  Saved window_handle;
-  ClipWindowLane *windows = nullptr;
-  const Status windows_status = tape.save (params._M_channels, window_handle, windows);
-  if (!status_ok (windows_status))
-    return windows_status;
-  for (uint32_t channel = 0; channel < params._M_channels; ++channel)
-    windows[channel].set_window (clip_window_of (params.multiplier_at (channel), params.zero_point_at (channel),
-                                                 params._M_qmin, params._M_qmax));
+    Saved window_handle;
+    ClipWindowLane *windows = nullptr;
+    const Status windows_status = tape.save (params._M_channels, window_handle, windows);
+    if (!status_ok (windows_status))
+        return windows_status;
+    for (uint32_t channel = 0; channel < params._M_channels; ++channel)
+        windows[channel].set_window (clip_window_of (params.multiplier_at (channel), params.zero_point_at (channel),
+                                                     params._M_qmin, params._M_qmax));
 
-  Saved state_handle;
-  FakeQuantNodeState *state = nullptr;
-  const Status state_status = tape.save (1u, state_handle, state);
-  if (!status_ok (state_status))
-    return state_status;
-  fake_quant_node_state_set (*state, layout);
+    Saved state_handle;
+    FakeQuantNodeState *state = nullptr;
+    const Status state_status = tape.save (1u, state_handle, state);
+    if (!status_ok (state_status))
+        return state_status;
+    fake_quant_node_state_set (*state, layout);
 
-  Trainable operand_views[1] = {input};
-  const Saved saved[3] = {values_handle, window_handle, state_handle};
-  return tape.record (fake_quant_backward, op_id, output, operand_views, 1u, saved, 3u);
+    Trainable operand_views[1] = {input};
+    const Saved saved[3] = {values_handle, window_handle, state_handle};
+    return tape.record (fake_quant_backward, op_id, output, operand_views, 1u, saved, 3u);
 }
 } // namespace zzs::mllee::train
 

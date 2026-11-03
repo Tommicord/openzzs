@@ -35,8 +35,7 @@
 namespace zzs::kernel::device::driver::wifi::platform::stm32::f7 {
 
 /** @brief Build the STM32F7 WiFi HAL vtable. */
-[[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *,
-                              zzs::kernel::Status>
+[[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *, zzs::kernel::Status>
 create_stm32f7_wifi_hal (WifiHal &hal_out) noexcept;
 
 /** @} */

@@ -45,45 +45,45 @@ inline constexpr char NmeaEndLf = '\n';
 /** @brief Compute the NMEA XOR checksum over `[first, last)`. */
 [[nodiscard]] inline uint8_t
 nmea_checksum (const char *first, const char *last) noexcept {
-  uint8_t x = 0u;
-  while (first != last) {
-    x = static_cast<uint8_t> (x ^ static_cast<uint8_t> (*first));
-    ++first;
-  }
-  return x;
+    uint8_t x = 0u;
+    while (first != last) {
+        x = static_cast<uint8_t> (x ^ static_cast<uint8_t> (*first));
+        ++first;
+    }
+    return x;
 }
 
 /** @brief Compute the NMEA XOR checksum over a fixed buffer of `len` bytes. */
 [[nodiscard]] inline uint8_t
 nmea_checksum_buf (const uint8_t *buf, uint16_t len) noexcept {
-  uint8_t x = 0u;
-  for (uint16_t i = 0u; i < len; ++i)
-    x = static_cast<uint8_t> (x ^ buf[i]);
-  return x;
+    uint8_t x = 0u;
+    for (uint16_t i = 0u; i < len; ++i)
+        x = static_cast<uint8_t> (x ^ buf[i]);
+    return x;
 }
 
 /** @brief Convert a hex nibble char to its value, or 0xff when invalid. */
 [[nodiscard]] inline uint8_t
 hex_nibble (char c) noexcept {
-  if (c >= '0' && c <= '9')
-    return static_cast<uint8_t> (c - '0');
-  if (c >= 'A' && c <= 'F')
-    return static_cast<uint8_t> (c - 'A' + 10u);
-  if (c >= 'a' && c <= 'f')
-    return static_cast<uint8_t> (c - 'a' + 10u);
-  return 0xffu;
+    if (c >= '0' && c <= '9')
+        return static_cast<uint8_t> (c - '0');
+    if (c >= 'A' && c <= 'F')
+        return static_cast<uint8_t> (c - 'A' + 10u);
+    if (c >= 'a' && c <= 'f')
+        return static_cast<uint8_t> (c - 'a' + 10u);
+    return 0xffu;
 }
 
 /** @brief Parse two hex digits starting at `p` into `*out`; returns true on
  *         success. */
 [[nodiscard]] inline bool
 parse_hex2 (const char *p, uint8_t &out) noexcept {
-  uint8_t hi = hex_nibble (p[0]);
-  uint8_t lo = hex_nibble (p[1]);
-  if (hi == 0xffu || lo == 0xffu)
-    return false;
-  out = static_cast<uint8_t> ((hi << 4) | lo);
-  return true;
+    uint8_t hi = hex_nibble (p[0]);
+    uint8_t lo = hex_nibble (p[1]);
+    if (hi == 0xffu || lo == 0xffu)
+        return false;
+    out = static_cast<uint8_t> ((hi << 4) | lo);
+    return true;
 }
 
 /** @} */

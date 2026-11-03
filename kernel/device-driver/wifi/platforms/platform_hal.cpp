@@ -20,6 +20,4 @@
 
 #include "kernel/device-driver/wifi/platforms/platform_hal.hpp"
 
-namespace zzs::kernel::device::driver::wifi::platform {
-
-} // namespace zzs::kernel::device::driver::wifi::platform
+namespace zzs::kernel::device::driver::wifi::platform {} // namespace zzs::kernel::device::driver::wifi::platform

@@ -113,21 +113,22 @@ using zzs::mllee::_S_round_shift;
 /** @brief Round-half-up arithmetic shift of an int32 by a runtime-independent count. */
 [[nodiscard]] inline constexpr int32_t
 asr_round (const int32_t value, const uint32_t shift) noexcept {
-  if (shift == 0u)
-    return value;
-  return static_cast<int32_t> ((static_cast<int64_t> (value) + (static_cast<int64_t> (1) << (shift - 1u))) >> shift);
+    if (shift == 0u)
+        return value;
+    return static_cast<int32_t> ((static_cast<int64_t> (value) + (static_cast<int64_t> (1) << (shift - 1u))) >> shift);
 }
 
 /** @brief Truncating arithmetic shift; the lane kernels use the same floor so tiers agree. */
 [[nodiscard]] inline constexpr int32_t
 asr_floor (const int32_t value, const uint32_t shift) noexcept {
-  return value >> shift;
+    return value >> shift;
 }
 
 /** @brief Saturating clamp into the sample format. */
 [[nodiscard]] inline constexpr int16_t
 clamp_q15 (const int32_t value) noexcept {
-  return static_cast<int16_t> (value > _S_sample_max ? _S_sample_max : (value < _S_sample_min ? _S_sample_min : value));
+    return static_cast<int16_t> (value > _S_sample_max ? _S_sample_max
+                                                       : (value < _S_sample_min ? _S_sample_min : value));
 }
 
 /**
@@ -140,31 +141,31 @@ clamp_q15 (const int32_t value) noexcept {
  */
 [[nodiscard]] inline constexpr int32_t
 q15_mul (const int32_t lhs, const int32_t rhs) noexcept {
-  return clamp_q15 (_S_round_shift (static_cast<int64_t> (lhs) * rhs, _S_state_frac_bits));
+    return clamp_q15 (_S_round_shift (static_cast<int64_t> (lhs) * rhs, _S_state_frac_bits));
 }
 
 /** @brief Q15 x Q15 -> Q15 without the clamp, for an accumulator that keeps headroom. */
 [[nodiscard]] inline constexpr int32_t
 q15_mul_wide (const int32_t lhs, const int32_t rhs) noexcept {
-  return _S_round_shift (static_cast<int64_t> (lhs) * rhs, _S_state_frac_bits);
+    return _S_round_shift (static_cast<int64_t> (lhs) * rhs, _S_state_frac_bits);
 }
 
 /** @brief Saturating Q15 add and difference of two Q15 values. */
 [[nodiscard]] inline constexpr int32_t
 q15_add_sat (const int32_t lhs, const int32_t rhs) noexcept {
-  const int64_t sum = static_cast<int64_t> (lhs) + rhs;
-  return static_cast<int32_t> (sum > _S_sample_max ? _S_sample_max : (sum < _S_sample_min ? _S_sample_min : sum));
+    const int64_t sum = static_cast<int64_t> (lhs) + rhs;
+    return static_cast<int32_t> (sum > _S_sample_max ? _S_sample_max : (sum < _S_sample_min ? _S_sample_min : sum));
 }
 
 [[nodiscard]] inline constexpr int32_t
 q15_sub_sat (const int32_t lhs, const int32_t rhs) noexcept {
-  return q15_add_sat (lhs, -rhs);
+    return q15_add_sat (lhs, -rhs);
 }
 
 /** @brief Q15 absolute value that cannot alias its own negative. */
 [[nodiscard]] inline constexpr int32_t
 q15_abs (const int32_t value) noexcept {
-  return value >= 0 ? value : -value;
+    return value >= 0 ? value : -value;
 }
 
 /**
@@ -181,36 +182,36 @@ q15_abs (const int32_t value) noexcept {
  */
 [[nodiscard]] inline constexpr int16_t
 coeff_2cos_mul_q7 (const int16_t cosine_q15, const int16_t state_q7) noexcept {
-  const int32_t product = static_cast<int32_t> (cosine_q15) * state_q7;
-  const int32_t rounded = (product + (1 << (_S_coeff_frac_bits - 1u))) >> _S_coeff_frac_bits;
-  const int32_t doubled = rounded << _S_coeff_double_shift;
-  return static_cast<int16_t> (doubled > _S_sample_max ? _S_sample_max
-                                                       : (doubled < _S_sample_min ? _S_sample_min : doubled));
+    const int32_t product = static_cast<int32_t> (cosine_q15) * state_q7;
+    const int32_t rounded = (product + (1 << (_S_coeff_frac_bits - 1u))) >> _S_coeff_frac_bits;
+    const int32_t doubled = rounded << _S_coeff_double_shift;
+    return static_cast<int16_t> (doubled > _S_sample_max ? _S_sample_max
+                                                         : (doubled < _S_sample_min ? _S_sample_min : doubled));
 }
 
 /** @brief One resonator step: s0 = 2*cos*s1 - s2 + x, all in Q7, saturating. */
 [[nodiscard]] inline constexpr int16_t
 resonator_step (const int16_t cosine_q15, const int16_t state_q7, const int16_t previous_q7,
                 const int16_t input_q7) noexcept {
-  /* Saturating rather than wrapping: a resonator that overflows should clip
-     its bin, not produce a state of the opposite sign two clocks later.  The
-     lane kernels use the hardware saturating add/sub, so both paths agree. */
-  const int32_t fed = static_cast<int32_t> (coeff_2cos_mul_q7 (cosine_q15, state_q7)) - previous_q7 + input_q7;
-  return fed > _S_sample_max
-             ? static_cast<int16_t> (_S_sample_max)
-             : (fed < _S_sample_min ? static_cast<int16_t> (_S_sample_min) : static_cast<int16_t> (fed));
+    /* Saturating rather than wrapping: a resonator that overflows should clip
+       its bin, not produce a state of the opposite sign two clocks later.  The
+       lane kernels use the hardware saturating add/sub, so both paths agree. */
+    const int32_t fed = static_cast<int32_t> (coeff_2cos_mul_q7 (cosine_q15, state_q7)) - previous_q7 + input_q7;
+    return fed > _S_sample_max
+               ? static_cast<int16_t> (_S_sample_max)
+               : (fed < _S_sample_min ? static_cast<int16_t> (_S_sample_min) : static_cast<int16_t> (fed));
 }
 
 /** @brief Q15 sample to the Q7 scale a resonator accumulates at. */
 [[nodiscard]] inline constexpr int16_t
 to_resonator_q7 (const int32_t sample_q15) noexcept {
-  return static_cast<int16_t> (_S_round_shift (sample_q15, _S_resonator_input_shift));
+    return static_cast<int16_t> (_S_round_shift (sample_q15, _S_resonator_input_shift));
 }
 
 /** @brief Q7 resonator value back to the wire format. */
 [[nodiscard]] inline constexpr int32_t
 from_resonator_q7 (const int32_t value_q7) noexcept {
-  return value_q7 << _S_resonator_input_shift;
+    return value_q7 << _S_resonator_input_shift;
 }
 
 /**
@@ -225,16 +226,17 @@ from_resonator_q7 (const int32_t value_q7) noexcept {
  */
 [[nodiscard]] inline constexpr uint32_t
 resonator_power (const int16_t state_q7, const int16_t previous_q7, const int16_t cosine_q15) noexcept {
-  const int64_t direct = static_cast<int64_t> (state_q7) * state_q7 + static_cast<int64_t> (previous_q7) * previous_q7;
-  const int64_t cross = static_cast<int64_t> (coeff_2cos_mul_q7 (cosine_q15, state_q7)) * previous_q7;
-  const int64_t power = direct - cross;
-  return power > 0 ? static_cast<uint32_t> (power) : 0u;
+    const int64_t direct =
+        static_cast<int64_t> (state_q7) * state_q7 + static_cast<int64_t> (previous_q7) * previous_q7;
+    const int64_t cross = static_cast<int64_t> (coeff_2cos_mul_q7 (cosine_q15, state_q7)) * previous_q7;
+    const int64_t power = direct - cross;
+    return power > 0 ? static_cast<uint32_t> (power) : 0u;
 }
 
 /** @brief Magnitude of a Q14 power as Q7, via the inference core's integer square root. */
 [[nodiscard]] inline constexpr int32_t
 magnitude_q7 (const uint32_t power_q14) noexcept {
-  return static_cast<int32_t> (zzs::mllee::_S_isqrt (power_q14));
+    return static_cast<int32_t> (zzs::mllee::_S_isqrt (power_q14));
 }
 
 /**
@@ -246,10 +248,11 @@ magnitude_q7 (const uint32_t power_q14) noexcept {
  */
 [[nodiscard]] inline constexpr int32_t
 ratio_q15 (const int64_t numerator, const int64_t denominator) noexcept {
-  if (denominator == 0)
-    return 0;
-  const int64_t scaled = (numerator << _S_state_frac_bits) / denominator;
-  return static_cast<int32_t> (scaled > _S_sample_max ? _S_sample_max : (scaled < -_S_q15_one ? -_S_q15_one : scaled));
+    if (denominator == 0)
+        return 0;
+    const int64_t scaled = (numerator << _S_state_frac_bits) / denominator;
+    return static_cast<int32_t> (scaled > _S_sample_max ? _S_sample_max
+                                                        : (scaled < -_S_q15_one ? -_S_q15_one : scaled));
 }
 
 /**
@@ -268,23 +271,23 @@ ratio_q15 (const int64_t numerator, const int64_t denominator) noexcept {
  */
 [[nodiscard]] inline constexpr int32_t
 log2_q15 (const uint32_t value) noexcept {
-  if (value == 0u)
-    return -32768; /* the documented floor, one full octave below any real level */
-  const uint32_t exponent = zzs::mllee::_S_log2_u32 (value);
-  /* m = value / 2^exponent in Q15, so m lands in [32768, 65536) either way. */
-  uint32_t work = exponent >= _S_state_frac_bits ? value >> (exponent - _S_state_frac_bits)
-                                                 : value << (_S_state_frac_bits - exponent);
-  int32_t fraction = 0;
-  for (uint32_t bit = 15u; bit-- > 0u;) {
-    /* work is Q15 in [1, 2): square it (Q30 -> Q15) and fold the octave. */
-    const uint32_t squared = static_cast<uint32_t> ((static_cast<uint64_t> (work) * work) >> _S_state_frac_bits);
-    if (squared >= (2u << _S_state_frac_bits)) {
-      work = squared >> 1;
-      fraction |= static_cast<int32_t> (1) << bit;
-    } else
-      work = squared;
-  }
-  return (static_cast<int32_t> (exponent) << _S_state_frac_bits) + fraction;
+    if (value == 0u)
+        return -32768; /* the documented floor, one full octave below any real level */
+    const uint32_t exponent = zzs::mllee::_S_log2_u32 (value);
+    /* m = value / 2^exponent in Q15, so m lands in [32768, 65536) either way. */
+    uint32_t work = exponent >= _S_state_frac_bits ? value >> (exponent - _S_state_frac_bits)
+                                                   : value << (_S_state_frac_bits - exponent);
+    int32_t fraction = 0;
+    for (uint32_t bit = 15u; bit-- > 0u;) {
+        /* work is Q15 in [1, 2): square it (Q30 -> Q15) and fold the octave. */
+        const uint32_t squared = static_cast<uint32_t> ((static_cast<uint64_t> (work) * work) >> _S_state_frac_bits);
+        if (squared >= (2u << _S_state_frac_bits)) {
+            work = squared >> 1;
+            fraction |= static_cast<int32_t> (1) << bit;
+        } else
+            work = squared;
+    }
+    return (static_cast<int32_t> (exponent) << _S_state_frac_bits) + fraction;
 }
 
 /** @brief 10 * log10(2) in Q13, the only constant the dB path needs. */
@@ -301,9 +304,9 @@ inline constexpr int32_t _S_ten_log10_two_q13 = 24663;
  */
 [[nodiscard]] inline constexpr uint32_t
 full_scale_power_q14 (const uint32_t window_samples) noexcept {
-  const int32_t amplitude_q7 = to_resonator_q7 (_S_sample_max);
-  const int64_t state_q7 = (static_cast<int64_t> (amplitude_q7) * window_samples) / 2;
-  return static_cast<uint32_t> (state_q7 * state_q7 * 2);
+    const int32_t amplitude_q7 = to_resonator_q7 (_S_sample_max);
+    const int64_t state_q7 = (static_cast<int64_t> (amplitude_q7) * window_samples) / 2;
+    return static_cast<uint32_t> (state_q7 * state_q7 * 2);
 }
 
 /**
@@ -314,12 +317,12 @@ full_scale_power_q14 (const uint32_t window_samples) noexcept {
  * time and every level feature it later emits is two multiplies away.
  */
 struct _S_LevelReference {
-  int32_t _M_log2_power_q15;
+    int32_t _M_log2_power_q15;
 };
 
 [[nodiscard]] inline constexpr _S_LevelReference
 level_reference_of (const uint32_t window_samples) noexcept {
-  return _S_LevelReference{log2_q15 (full_scale_power_q14 (window_samples))};
+    return _S_LevelReference{log2_q15 (full_scale_power_q14 (window_samples))};
 }
 
 /**
@@ -331,11 +334,11 @@ level_reference_of (const uint32_t window_samples) noexcept {
  */
 [[nodiscard]] inline constexpr int32_t
 db_q8 (const uint32_t power_q14, const _S_LevelReference reference) noexcept {
-  if (power_q14 == 0u)
-    return -32768;
-  const int32_t delta = log2_q15 (power_q14) - reference._M_log2_power_q15;
-  const int64_t scaled = static_cast<int64_t> (delta) * _S_ten_log10_two_q13;
-  return static_cast<int32_t> (scaled >> (_S_state_frac_bits + _S_coeff_frac_bits - 8u));
+    if (power_q14 == 0u)
+        return -32768;
+    const int32_t delta = log2_q15 (power_q14) - reference._M_log2_power_q15;
+    const int64_t scaled = static_cast<int64_t> (delta) * _S_ten_log10_two_q13;
+    return static_cast<int32_t> (scaled >> (_S_state_frac_bits + _S_coeff_frac_bits - 8u));
 }
 
 /**
@@ -367,33 +370,33 @@ inline constexpr uint32_t _S_turn_unit_frac_bits = 8u;
  */
 [[nodiscard]] inline constexpr int32_t
 sin_q15_fractional (uint32_t unit_fixed) noexcept {
-  /* One turn is 128 units and 256 sub-units, which is 2^15 -- a mask, not a
-     modulo, and the reason the fraction width is eight and not ten. */
-  constexpr uint32_t scale = 1u << _S_turn_unit_frac_bits;
-  constexpr uint32_t turn_mask = (_S_turn_units << _S_turn_unit_frac_bits) - 1u;
-  unit_fixed &= turn_mask;
-  const uint32_t units = unit_fixed >> _S_turn_unit_frac_bits;
-  const uint32_t remainder = unit_fixed & (scale - 1u);
-  const uint32_t quadrant = units >> 5u;
-  const uint32_t index = units & 31u;
+    /* One turn is 128 units and 256 sub-units, which is 2^15 -- a mask, not a
+       modulo, and the reason the fraction width is eight and not ten. */
+    constexpr uint32_t scale = 1u << _S_turn_unit_frac_bits;
+    constexpr uint32_t turn_mask = (_S_turn_units << _S_turn_unit_frac_bits) - 1u;
+    unit_fixed &= turn_mask;
+    const uint32_t units = unit_fixed >> _S_turn_unit_frac_bits;
+    const uint32_t remainder = unit_fixed & (scale - 1u);
+    const uint32_t quadrant = units >> 5u;
+    const uint32_t index = units & 31u;
 
-  int32_t low;
-  int32_t high;
-  if (quadrant <= 1u) {
-    /* First and second quadrant: read the table forward or mirrored. */
-    low = quadrant == 0u ? zzs::mllee::_S_sin_table[index] : zzs::mllee::_S_sin_table[32u - index];
-    high = quadrant == 0u ? zzs::mllee::_S_sin_table[index + 1u] : zzs::mllee::_S_sin_table[31u - index];
-  } else {
-    low = quadrant == 2u ? -zzs::mllee::_S_sin_table[index] : -zzs::mllee::_S_sin_table[32u - index];
-    high = quadrant == 2u ? -zzs::mllee::_S_sin_table[index + 1u] : -zzs::mllee::_S_sin_table[31u - index];
-  }
-  return low + (static_cast<int32_t> ((high - low) * static_cast<int32_t> (remainder)) >> _S_turn_unit_frac_bits);
+    int32_t low;
+    int32_t high;
+    if (quadrant <= 1u) {
+        /* First and second quadrant: read the table forward or mirrored. */
+        low = quadrant == 0u ? zzs::mllee::_S_sin_table[index] : zzs::mllee::_S_sin_table[32u - index];
+        high = quadrant == 0u ? zzs::mllee::_S_sin_table[index + 1u] : zzs::mllee::_S_sin_table[31u - index];
+    } else {
+        low = quadrant == 2u ? -zzs::mllee::_S_sin_table[index] : -zzs::mllee::_S_sin_table[32u - index];
+        high = quadrant == 2u ? -zzs::mllee::_S_sin_table[index + 1u] : -zzs::mllee::_S_sin_table[31u - index];
+    }
+    return low + (static_cast<int32_t> ((high - low) * static_cast<int32_t> (remainder)) >> _S_turn_unit_frac_bits);
 }
 
 /** @brief cos from the same table: a quarter turn (32 units) ahead of the sine. */
 [[nodiscard]] inline constexpr int32_t
 cos_q15_fractional (const uint32_t unit_fixed) noexcept {
-  return sin_q15_fractional (unit_fixed + (32u << _S_turn_unit_frac_bits));
+    return sin_q15_fractional (unit_fixed + (32u << _S_turn_unit_frac_bits));
 }
 
 /**
@@ -411,7 +414,7 @@ cos_q15_fractional (const uint32_t unit_fixed) noexcept {
  */
 [[nodiscard]] inline constexpr int16_t
 coeff_cos_q15 (const uint32_t unit_fixed) noexcept {
-  return static_cast<int16_t> (cos_q15_fractional (unit_fixed));
+    return static_cast<int16_t> (cos_q15_fractional (unit_fixed));
 }
 
 /**
@@ -424,16 +427,16 @@ coeff_cos_q15 (const uint32_t unit_fixed) noexcept {
  */
 [[nodiscard]] inline constexpr uint32_t
 unit_fixed_of_ratio (const uint32_t frequency_hz, const uint32_t sample_rate_hz) noexcept {
-  if (sample_rate_hz == 0u)
-    return 0u;
-  const uint64_t numerator = static_cast<uint64_t> (frequency_hz) * _S_turn_units << _S_turn_unit_frac_bits;
-  return static_cast<uint32_t> (numerator / sample_rate_hz);
+    if (sample_rate_hz == 0u)
+        return 0u;
+    const uint64_t numerator = static_cast<uint64_t> (frequency_hz) * _S_turn_units << _S_turn_unit_frac_bits;
+    return static_cast<uint32_t> (numerator / sample_rate_hz);
 }
 
 /** @brief Coefficient of the bin at `frequency_hz` for a channel at `sample_rate_hz`. */
 [[nodiscard]] inline constexpr int16_t
 coeff_cos_q15_of_hz (const uint32_t frequency_hz, const uint32_t sample_rate_hz) noexcept {
-  return coeff_cos_q15 (unit_fixed_of_ratio (frequency_hz, sample_rate_hz));
+    return coeff_cos_q15 (unit_fixed_of_ratio (frequency_hz, sample_rate_hz));
 }
 /** @} */
 
@@ -448,28 +451,28 @@ coeff_cos_q15_of_hz (const uint32_t frequency_hz, const uint32_t sample_rate_hz)
  * denominator.
  */
 struct _S_WindowDivide {
-  zzs::mllee::_S_Div32 _M_reciprocal;
-  uint32_t _M_shift;
+    zzs::mllee::_S_Div32 _M_reciprocal;
+    uint32_t _M_shift;
 };
 
 [[nodiscard]] inline constexpr _S_WindowDivide
 window_divide (const uint32_t window, const uint32_t extra_shift) noexcept {
-  return _S_WindowDivide{zzs::mllee::_S_div32_make (window == 0u ? 1u : window), extra_shift};
+    return _S_WindowDivide{zzs::mllee::_S_div32_make (window == 0u ? 1u : window), extra_shift};
 }
 
 /** @brief `(sum >> extra_shift) / window` for a reciprocal built above. */
 [[nodiscard]] inline constexpr uint32_t
 window_mean_u32 (const uint64_t sum, const _S_WindowDivide divide) noexcept {
-  const uint32_t scaled = static_cast<uint32_t> (sum >> divide._M_shift);
-  return zzs::mllee::_S_div32_u (scaled, divide._M_reciprocal);
+    const uint32_t scaled = static_cast<uint32_t> (sum >> divide._M_shift);
+    return zzs::mllee::_S_div32_u (scaled, divide._M_reciprocal);
 }
 
 /** @brief Signed form of the same division, truncating toward zero. */
 [[nodiscard]] inline constexpr int32_t
 window_mean_i32 (const int64_t sum, const _S_WindowDivide divide) noexcept {
-  const int32_t scaled = static_cast<int32_t> (sum >> divide._M_shift);
-  if (scaled >= 0)
-    return static_cast<int32_t> (zzs::mllee::_S_div32_u (static_cast<uint32_t> (scaled), divide._M_reciprocal));
-  return -static_cast<int32_t> (zzs::mllee::_S_div32_u (0u - static_cast<uint32_t> (scaled), divide._M_reciprocal));
+    const int32_t scaled = static_cast<int32_t> (sum >> divide._M_shift);
+    if (scaled >= 0)
+        return static_cast<int32_t> (zzs::mllee::_S_div32_u (static_cast<uint32_t> (scaled), divide._M_reciprocal));
+    return -static_cast<int32_t> (zzs::mllee::_S_div32_u (0u - static_cast<uint32_t> (scaled), divide._M_reciprocal));
 }
 } // namespace zzs::kernel::fx

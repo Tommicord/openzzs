@@ -46,39 +46,39 @@ namespace {
 /** @brief Radio-control hook: reset (portable functional stub). */
 [[nodiscard]] zzs::kernel::Status
 _S_reset () noexcept {
-  return zzs::kernel::Status::UNSUPPORTED;
+    return zzs::kernel::Status::UNSUPPORTED;
 }
 
 /** @brief Radio-control hook: set channel (validated). */
 [[nodiscard]] zzs::kernel::Status
 _S_set_channel (uint8_t channel) noexcept {
-  (void) channel;
+    (void) channel;
 
-  return zzs::kernel::Status::UNSUPPORTED;
+    return zzs::kernel::Status::UNSUPPORTED;
 }
 
 /** @brief Radio-control hook: set country (validated). */
 [[nodiscard]] zzs::kernel::Status
 _S_set_country (const char cc[2]) noexcept {
-  (void) cc;
+    (void) cc;
 
-  return zzs::kernel::Status::UNSUPPORTED;
+    return zzs::kernel::Status::UNSUPPORTED;
 }
 
 /** @brief Radio-control hook: MAC address (returns all-zeros; the real HAL
  *         reads the factory-programmed MAC from the WiFi module NVRAM). */
 [[nodiscard]] zzs::kernel::Status
 _S_mac_addr (uint8_t mac[6]) noexcept {
-  (void) mac;
+    (void) mac;
 
-  return zzs::kernel::Status::UNSUPPORTED;
+    return zzs::kernel::Status::UNSUPPORTED;
 }
 
 /** @brief Radio-control hook: delay (portable stub; replaced by
  *         k_msleep() on the real platform). */
 void
 _S_delay_ms (uint32_t ms) noexcept {
-  (void) ms;
+    (void) ms;
 }
 
 } // namespace
@@ -86,20 +86,20 @@ _S_delay_ms (uint32_t ms) noexcept {
 [[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *, zzs::kernel::Status>
 create_zephyr_wifi_hal (WifiHal &hal_out) noexcept {
 #if defined(CONFIG_ZEPHYR)
-  /* Real implementation: configure a Zephyr device stream (UART/SPI) for a
-   * WiFi module. */
-  (void) hal_out;
-  return zzs::kernel::Status::UNSUPPORTED;
+    /* Real implementation: configure a Zephyr device stream (UART/SPI) for a
+     * WiFi module. */
+    (void) hal_out;
+    return zzs::kernel::Status::UNSUPPORTED;
 #else
-  /* Portable functional fallback: populate the radio-control vtable with
-   * validated hooks.  No bus is created (the application supplies its own
-   * stream bus over the Zephyr device stream). */
-  hal_out._M_reset = &_S_reset;
-  hal_out._M_set_channel = &_S_set_channel;
-  hal_out._M_set_country = &_S_set_country;
-  hal_out._M_mac_addr = &_S_mac_addr;
-  hal_out._M_delay_ms = &_S_delay_ms;
-  return zzs::kernel::Status::UNSUPPORTED;
+    /* Portable functional fallback: populate the radio-control vtable with
+     * validated hooks.  No bus is created (the application supplies its own
+     * stream bus over the Zephyr device stream). */
+    hal_out._M_reset = &_S_reset;
+    hal_out._M_set_channel = &_S_set_channel;
+    hal_out._M_set_country = &_S_set_country;
+    hal_out._M_mac_addr = &_S_mac_addr;
+    hal_out._M_delay_ms = &_S_delay_ms;
+    return zzs::kernel::Status::UNSUPPORTED;
 #endif
 }
 

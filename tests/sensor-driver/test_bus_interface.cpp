@@ -19,37 +19,32 @@
  * @brief Unit tests for the bus interface using a mock backend.
  */
 
-#include <catch2/catch_test_macros.hpp>
-
-#include <cstdint>
-
 #include "kernel/sensor-driver/bus/bus_interface.hpp"
-
 #include "test_mock_bus.hpp"
 
-namespace
-{
+#include <catch2/catch_test_macros.hpp>
+#include <cstdint>
+
+namespace {
 using namespace zzs::kernel::sensor::driver::bus;
 using zzs::kernel::Status;
 } // namespace
 
-TEST_CASE ("write_reg / read_reg round-trip", "[sensor-driver][bus][round-trip]")
-{
+TEST_CASE ("write_reg / read_reg round-trip", "[sensor-driver][bus][round-trip]") {
     test::MockBus bus;
     bus.set_initialized (true);
 
-    uint8_t write_buf[3] = { 0xAA, 0xBB, 0xCC };
+    uint8_t write_buf[3] = {0xAA, 0xBB, 0xCC};
     REQUIRE (bus.write_reg (0x10, write_buf, 3u) == Status::OK);
 
-    uint8_t read_buf[3] = { 0, 0, 0 };
+    uint8_t read_buf[3] = {0, 0, 0};
     REQUIRE (bus.read_reg (0x10, read_buf, 3u) == Status::OK);
     REQUIRE (read_buf[0] == 0xAA);
     REQUIRE (read_buf[1] == 0xBB);
     REQUIRE (read_buf[2] == 0xCC);
 }
 
-TEST_CASE ("Register update is read-modify-write", "[sensor-driver][bus][update]")
-{
+TEST_CASE ("Register update is read-modify-write", "[sensor-driver][bus][update]") {
     test::MockBus bus;
     bus.set_initialized (true);
     bus.set_reg (0x20, 0b00001111);
@@ -71,8 +66,7 @@ TEST_CASE ("Register update is read-modify-write", "[sensor-driver][bus][update]
     REQUIRE (back == 0b10101100);
 }
 
-TEST_CASE ("I2C start/stop conditions via assembly are mocked", "[sensor-driver][bus][i2c]")
-{
+TEST_CASE ("I2C start/stop conditions via assembly are mocked", "[sensor-driver][bus][i2c]") {
     /* The mock bus has no real I2C; verify the interface methods exist and
      * delay_ms is exercised (start/stop timing is a no-op in the mock). */
     test::MockBus bus;
@@ -82,8 +76,7 @@ TEST_CASE ("I2C start/stop conditions via assembly are mocked", "[sensor-driver]
     REQUIRE (bus.delay_total_ms () == 5u);
 }
 
-TEST_CASE ("SPI transfer byte is mocked", "[sensor-driver][bus][spi]")
-{
+TEST_CASE ("SPI transfer byte is mocked", "[sensor-driver][bus][spi]") {
     test::MockBus bus;
     bus.set_initialized (true);
 
@@ -95,8 +88,7 @@ TEST_CASE ("SPI transfer byte is mocked", "[sensor-driver][bus][spi]")
     REQUIRE (rx == 0x5A);
 }
 
-TEST_CASE ("7-bit vs 10-bit addressing", "[sensor-driver][bus][addressing]")
-{
+TEST_CASE ("7-bit vs 10-bit addressing", "[sensor-driver][bus][addressing]") {
     /* Mock bus is address-agnostic; verify registers at low and high indices. */
     test::MockBus bus;
     bus.set_initialized (true);
@@ -116,9 +108,7 @@ TEST_CASE ("7-bit vs 10-bit addressing", "[sensor-driver][bus][addressing]")
     REQUIRE (read_high == 0x02);
 }
 
-TEST_CASE ("Error handling: NULL buffer, zero length, bus not initialized",
-           "[sensor-driver][bus][error]")
-{
+TEST_CASE ("Error handling: NULL buffer, zero length, bus not initialized", "[sensor-driver][bus][error]") {
     test::MockBus bus;
 
     /* Not initialized -> INTERNAL. */
@@ -134,8 +124,7 @@ TEST_CASE ("Error handling: NULL buffer, zero length, bus not initialized",
     REQUIRE (bus.read_reg (0x00, &data, 0u) == Status::OUT_OF_RANGE);
 }
 
-TEST_CASE ("Delay function", "[sensor-driver][bus][delay]")
-{
+TEST_CASE ("Delay function", "[sensor-driver][bus][delay]") {
     test::MockBus bus;
     bus.delay_ms (0u);
     REQUIRE (bus.delay_calls () == 1u);

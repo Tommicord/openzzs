@@ -112,98 +112,98 @@ inline constexpr uint32_t _S_embed_unused = 3u;
  * configuration from the tape: no capture, no writable static.
  */
 struct EmbedSpec {
-  /** @brief Output rows: tokens for a lookup, bags for a bag. */
-  uint16_t _M_rows = 0u;
-  /** @brief Index count: equal to @p _M_rows unless the layer is a bag. */
-  uint16_t _M_tokens = 0u;
-  /** @brief Table rows, i.e. the vocabulary size. */
-  uint16_t _M_vocab = 0u;
-  /** @brief Codes per table row. */
-  uint16_t _M_dim = 0u;
-  /** @brief Token id that gathers a zero row and collects no gradient; -1 = off. */
-  int16_t _M_padding_index = -1;
-  /** @brief Non-zero when the id stream is a bag list with offsets. */
-  uint8_t _M_bag = 0u;
-  /** @brief Bags only: divide the routed gradient by the list length. */
-  uint8_t _M_scale_grads = 1u;
-  /** @brief Op id recorded on the tape. */
-  uint32_t _M_op_id = 0u;
+    /** @brief Output rows: tokens for a lookup, bags for a bag. */
+    uint16_t _M_rows = 0u;
+    /** @brief Index count: equal to @p _M_rows unless the layer is a bag. */
+    uint16_t _M_tokens = 0u;
+    /** @brief Table rows, i.e. the vocabulary size. */
+    uint16_t _M_vocab = 0u;
+    /** @brief Codes per table row. */
+    uint16_t _M_dim = 0u;
+    /** @brief Token id that gathers a zero row and collects no gradient; -1 = off. */
+    int16_t _M_padding_index = -1;
+    /** @brief Non-zero when the id stream is a bag list with offsets. */
+    uint8_t _M_bag = 0u;
+    /** @brief Bags only: divide the routed gradient by the list length. */
+    uint8_t _M_scale_grads = 1u;
+    /** @brief Op id recorded on the tape. */
+    uint32_t _M_op_id = 0u;
 
-  [[nodiscard]] constexpr bool
-  is_bag () const noexcept {
-    return this->_M_bag != 0u;
-  }
+    [[nodiscard]] constexpr bool
+    is_bag () const noexcept {
+        return this->_M_bag != 0u;
+    }
 
-  /** @brief True when a padding index is configured. */
-  [[nodiscard]] constexpr bool
-  has_padding () const noexcept {
-    return this->_M_padding_index >= 0;
-  }
+    /** @brief True when a padding index is configured. */
+    [[nodiscard]] constexpr bool
+    has_padding () const noexcept {
+        return this->_M_padding_index >= 0;
+    }
 
-  /** @brief Codes the table holds. */
-  [[nodiscard]] constexpr uint32_t
-  table_elements () const noexcept {
-    return static_cast<uint32_t> (this->_M_vocab) * this->_M_dim;
-  }
+    /** @brief Codes the table holds. */
+    [[nodiscard]] constexpr uint32_t
+    table_elements () const noexcept {
+        return static_cast<uint32_t> (this->_M_vocab) * this->_M_dim;
+    }
 
-  /** @brief Codes the output holds. */
-  [[nodiscard]] constexpr uint32_t
-  output_elements () const noexcept {
-    return static_cast<uint32_t> (this->_M_rows) * this->_M_dim;
-  }
+    /** @brief Codes the output holds. */
+    [[nodiscard]] constexpr uint32_t
+    output_elements () const noexcept {
+        return static_cast<uint32_t> (this->_M_rows) * this->_M_dim;
+    }
 
-  /** @brief Ids the layer reads: @p _M_rows for a lookup, @p _M_tokens for a bag. */
-  [[nodiscard]] constexpr uint32_t
-  index_count () const noexcept {
-    return this->is_bag () ? this->_M_tokens : this->_M_rows;
-  }
+    /** @brief Ids the layer reads: @p _M_rows for a lookup, @p _M_tokens for a bag. */
+    [[nodiscard]] constexpr uint32_t
+    index_count () const noexcept {
+        return this->is_bag () ? this->_M_tokens : this->_M_rows;
+    }
 
-  /** @brief Pool bytes one recorded layer needs, per the file header table. */
-  [[nodiscard]] constexpr uint32_t
-  bytes () const noexcept {
-    const uint32_t index = align_up (2u * this->index_count (), _S_pool_alignment);
-    const uint32_t offsets =
-        this->is_bag () ? align_up (2u * (static_cast<uint32_t> (this->_M_rows) + 1u), _S_pool_alignment) : 0u;
-    return index + offsets + align_up (static_cast<uint32_t> (sizeof (EmbedSpec)), _S_pool_alignment);
-  }
+    /** @brief Pool bytes one recorded layer needs, per the file header table. */
+    [[nodiscard]] constexpr uint32_t
+    bytes () const noexcept {
+        const uint32_t index = align_up (2u * this->index_count (), _S_pool_alignment);
+        const uint32_t offsets =
+            this->is_bag () ? align_up (2u * (static_cast<uint32_t> (this->_M_rows) + 1u), _S_pool_alignment) : 0u;
+        return index + offsets + align_up (static_cast<uint32_t> (sizeof (EmbedSpec)), _S_pool_alignment);
+    }
 
-  [[nodiscard]] constexpr Shape
-  output_shape () const noexcept {
-    return Shape::matrix (this->_M_rows, this->_M_dim);
-  }
+    [[nodiscard]] constexpr Shape
+    output_shape () const noexcept {
+        return Shape::matrix (this->_M_rows, this->_M_dim);
+    }
 
-  [[nodiscard]] constexpr Shape
-  table_shape () const noexcept {
-    return Shape::matrix (this->_M_vocab, this->_M_dim);
-  }
+    [[nodiscard]] constexpr Shape
+    table_shape () const noexcept {
+        return Shape::matrix (this->_M_vocab, this->_M_dim);
+    }
 
-  /**
-   * @brief Check the geometry and the padding rule.
-   *
-   * A zero-length output row count is not a valid layer (the module has no
-   * empty-tensor path, exactly like `Shape::validate`), and an index count a
-   * `uint16` id stream cannot describe is OUT_OF_RANGE.
-   *
-   * @return BAD_LAYOUT for a zero vocabulary, dimension or row count, a lookup
-   *         whose token count disagrees with its row count (the two are equal by
-   *         construction, so a mismatch is a caller bug), or a padding id at or
-   *         above the vocabulary; OUT_OF_RANGE for a table or output the runtime
-   *         cannot address.
-   */
-  [[nodiscard]] constexpr Status
-  validate () const noexcept {
-    if (this->_M_rows == 0u || this->_M_vocab == 0u || this->_M_dim == 0u)
-      return Status::BAD_LAYOUT;
-    if (!this->is_bag () && this->_M_tokens != this->_M_rows)
-      return Status::BAD_LAYOUT;
-    if (this->has_padding () && static_cast<uint32_t> (this->_M_padding_index) >= this->_M_vocab)
-      return Status::BAD_LAYOUT;
-    const uint32_t table = this->table_elements ();
-    const uint32_t output = this->output_elements ();
-    if (table > _S_max_elements || output > _S_max_elements)
-      return Status::OUT_OF_RANGE;
-    return Status::OK;
-  }
+    /**
+     * @brief Check the geometry and the padding rule.
+     *
+     * A zero-length output row count is not a valid layer (the module has no
+     * empty-tensor path, exactly like `Shape::validate`), and an index count a
+     * `uint16` id stream cannot describe is OUT_OF_RANGE.
+     *
+     * @return BAD_LAYOUT for a zero vocabulary, dimension or row count, a lookup
+     *         whose token count disagrees with its row count (the two are equal by
+     *         construction, so a mismatch is a caller bug), or a padding id at or
+     *         above the vocabulary; OUT_OF_RANGE for a table or output the runtime
+     *         cannot address.
+     */
+    [[nodiscard]] constexpr Status
+    validate () const noexcept {
+        if (this->_M_rows == 0u || this->_M_vocab == 0u || this->_M_dim == 0u)
+            return Status::BAD_LAYOUT;
+        if (!this->is_bag () && this->_M_tokens != this->_M_rows)
+            return Status::BAD_LAYOUT;
+        if (this->has_padding () && static_cast<uint32_t> (this->_M_padding_index) >= this->_M_vocab)
+            return Status::BAD_LAYOUT;
+        const uint32_t table = this->table_elements ();
+        const uint32_t output = this->output_elements ();
+        if (table > _S_max_elements || output > _S_max_elements)
+            return Status::OUT_OF_RANGE;
+        return Status::OK;
+    }
 };
 
 static_assert (sizeof (EmbedSpec) == 16u, "a saved embedding spec is four pool words");
@@ -219,23 +219,23 @@ static_assert (sizeof (EmbedSpec) == 16u, "a saved embedding spec is four pool w
  */
 [[nodiscard]] inline Status
 embedding_check_ids (const EmbedSpec &spec, const uint16_t *const index, const uint16_t *const offsets) noexcept {
-  if (index == nullptr)
-    return Status::BAD_LAYOUT;
-  const uint32_t count = spec.index_count ();
-  for (uint32_t row = 0; row < count; ++row)
-    if (index[row] >= spec._M_vocab)
-      return Status::OUT_OF_RANGE;
-  if (offsets == nullptr)
+    if (index == nullptr)
+        return Status::BAD_LAYOUT;
+    const uint32_t count = spec.index_count ();
+    for (uint32_t row = 0; row < count; ++row)
+        if (index[row] >= spec._M_vocab)
+            return Status::OUT_OF_RANGE;
+    if (offsets == nullptr)
+        return Status::OK;
+    if (offsets[0] != 0u)
+        return Status::BAD_LAYOUT;
+    for (uint32_t bag = 0; bag < spec._M_rows; ++bag) {
+        const uint32_t begin = offsets[bag];
+        const uint32_t end = offsets[bag + 1u];
+        if (end < begin || end > spec._M_tokens)
+            return Status::BAD_LAYOUT;
+    }
     return Status::OK;
-  if (offsets[0] != 0u)
-    return Status::BAD_LAYOUT;
-  for (uint32_t bag = 0; bag < spec._M_rows; ++bag) {
-    const uint32_t begin = offsets[bag];
-    const uint32_t end = offsets[bag + 1u];
-    if (end < begin || end > spec._M_tokens)
-      return Status::BAD_LAYOUT;
-  }
-  return Status::OK;
 }
 
 /**
@@ -252,54 +252,54 @@ embedding_check_ids (const EmbedSpec &spec, const uint16_t *const index, const u
 [[nodiscard]] inline Status
 embedding_forward (const EmbedSpec &spec, const uint16_t *const index, const uint16_t *const offsets,
                    const Trainable &table, Trainable &output) noexcept {
-  const Status status = spec.validate ();
-  if (!status_ok (status))
-    return status;
-  if (table._M_code == nullptr || output._M_code == nullptr)
-    return Status::BAD_LAYOUT;
-  if (table._M_count != spec.table_elements () || output._M_count != spec.output_elements ())
-    return Status::BAD_LAYOUT;
-  const bool bag = spec.is_bag ();
-  if (bag != (offsets != nullptr))
-    return Status::BAD_LAYOUT;
-  const Status ids = embedding_check_ids (spec, index, offsets);
-  if (!status_ok (ids))
-    return ids;
+    const Status status = spec.validate ();
+    if (!status_ok (status))
+        return status;
+    if (table._M_code == nullptr || output._M_code == nullptr)
+        return Status::BAD_LAYOUT;
+    if (table._M_count != spec.table_elements () || output._M_count != spec.output_elements ())
+        return Status::BAD_LAYOUT;
+    const bool bag = spec.is_bag ();
+    if (bag != (offsets != nullptr))
+        return Status::BAD_LAYOUT;
+    const Status ids = embedding_check_ids (spec, index, offsets);
+    if (!status_ok (ids))
+        return ids;
 
-  const uint32_t dim = spec._M_dim;
-  if (!bag) {
-    gather_rows (table._M_code, dim, index, spec._M_rows, output._M_code);
-    if (spec.has_padding ())
-      for (uint32_t row = 0; row < spec._M_rows; ++row)
-        if (index[row] == static_cast<uint16_t> (spec._M_padding_index))
-          for (uint32_t column = 0; column < dim; ++column)
-            output._M_code[row * dim + column] = 0;
+    const uint32_t dim = spec._M_dim;
+    if (!bag) {
+        gather_rows (table._M_code, dim, index, spec._M_rows, output._M_code);
+        if (spec.has_padding ())
+            for (uint32_t row = 0; row < spec._M_rows; ++row)
+                if (index[row] == static_cast<uint16_t> (spec._M_padding_index))
+                    for (uint32_t column = 0; column < dim; ++column)
+                        output._M_code[row * dim + column] = 0;
+        output.zero_grad ();
+        return Status::OK;
+    }
+    for (uint32_t row = 0; row < spec._M_rows; ++row) {
+        const uint32_t begin = offsets[row];
+        const uint32_t end = offsets[row + 1u];
+        const uint32_t length = end - begin;
+        int8_t *const destination = output._M_code + row * dim;
+        if (length == 0u) {
+            for (uint32_t column = 0; column < dim; ++column)
+                destination[column] = 0;
+            continue;
+        }
+        for (uint32_t column = 0; column < dim; ++column) {
+            int32_t total = 0;
+            for (uint32_t token = begin; token < end; ++token) {
+                const uint16_t id = index[token];
+                if (spec.has_padding () && id == static_cast<uint16_t> (spec._M_padding_index))
+                    continue;
+                total += table._M_code[id * dim + column];
+            }
+            destination[column] = _S_i8_code (div_round (total, static_cast<int32_t> (length)));
+        }
+    }
     output.zero_grad ();
     return Status::OK;
-  }
-  for (uint32_t row = 0; row < spec._M_rows; ++row) {
-    const uint32_t begin = offsets[row];
-    const uint32_t end = offsets[row + 1u];
-    const uint32_t length = end - begin;
-    int8_t *const destination = output._M_code + row * dim;
-    if (length == 0u) {
-      for (uint32_t column = 0; column < dim; ++column)
-        destination[column] = 0;
-      continue;
-    }
-    for (uint32_t column = 0; column < dim; ++column) {
-      int32_t total = 0;
-      for (uint32_t token = begin; token < end; ++token) {
-        const uint16_t id = index[token];
-        if (spec.has_padding () && id == static_cast<uint16_t> (spec._M_padding_index))
-          continue;
-        total += table._M_code[id * dim + column];
-      }
-      destination[column] = _S_i8_code (div_round (total, static_cast<int32_t> (length)));
-    }
-  }
-  output.zero_grad ();
-  return Status::OK;
 }
 
 /**
@@ -314,66 +314,67 @@ embedding_forward (const EmbedSpec &spec, const uint16_t *const index, const uin
  */
 [[nodiscard]] inline Status
 embedding_backward (const Trainable &output, const Trainable &grad_output, GradContext &context) noexcept {
-  const EmbedSpec *const slot = context.saved_as<EmbedSpec> (_S_embed_spec);
-  if (slot == nullptr)
-    return Status::BAD_LAYOUT;
-  const EmbedSpec spec = *slot;
-  const Status status = spec.validate ();
-  if (!status_ok (status))
-    return status;
-  if (context._M_operands == nullptr || context._M_operand_count < 1u)
-    return Status::BAD_LAYOUT;
-  const Trainable &table = context._M_operands[0];
-  if (output._M_count != spec.output_elements () || table._M_count != spec.table_elements ())
-    return Status::BAD_LAYOUT;
-  if (grad_output._M_grad == nullptr)
-    return Status::BAD_LAYOUT;
-  if (table._M_grad == nullptr)
-    return Status::OK;
-  const uint16_t *const index = context.saved_as<uint16_t> (_S_embed_index);
-  if (index == nullptr)
-    return Status::BAD_LAYOUT;
-  const uint16_t *const offsets = spec.is_bag () ? context.saved_as<uint16_t> (_S_embed_offsets) : nullptr;
-  if (spec.is_bag () && offsets == nullptr)
-    return Status::BAD_LAYOUT;
+    const EmbedSpec *const slot = context.saved_as<EmbedSpec> (_S_embed_spec);
+    if (slot == nullptr)
+        return Status::BAD_LAYOUT;
+    const EmbedSpec spec = *slot;
+    const Status status = spec.validate ();
+    if (!status_ok (status))
+        return status;
+    if (context._M_operands == nullptr || context._M_operand_count < 1u)
+        return Status::BAD_LAYOUT;
+    const Trainable &table = context._M_operands[0];
+    if (output._M_count != spec.output_elements () || table._M_count != spec.table_elements ())
+        return Status::BAD_LAYOUT;
+    if (grad_output._M_grad == nullptr)
+        return Status::BAD_LAYOUT;
+    if (table._M_grad == nullptr)
+        return Status::OK;
+    const uint16_t *const index = context.saved_as<uint16_t> (_S_embed_index);
+    if (index == nullptr)
+        return Status::BAD_LAYOUT;
+    const uint16_t *const offsets = spec.is_bag () ? context.saved_as<uint16_t> (_S_embed_offsets) : nullptr;
+    if (spec.is_bag () && offsets == nullptr)
+        return Status::BAD_LAYOUT;
 
-  const uint32_t dim = spec._M_dim;
-  const int32_t padding = spec.has_padding () ? static_cast<int32_t> (spec._M_padding_index) : -1;
-  uint32_t saturated = 0u;
-  if (!spec.is_bag ()) {
+    const uint32_t dim = spec._M_dim;
+    const int32_t padding = spec.has_padding () ? static_cast<int32_t> (spec._M_padding_index) : -1;
+    uint32_t saturated = 0u;
+    if (!spec.is_bag ()) {
+        for (uint32_t row = 0; row < spec._M_rows; ++row) {
+            const uint32_t id = index[row];
+            if (static_cast<int32_t> (id) == padding)
+                continue;
+            saturated += add_lanes (table._M_grad + id * dim, grad_output._M_grad + row * dim, dim);
+        }
+        context._M_saturation_events += saturated;
+        return Status::OK;
+    }
     for (uint32_t row = 0; row < spec._M_rows; ++row) {
-      const uint32_t id = index[row];
-      if (static_cast<int32_t> (id) == padding)
-        continue;
-      saturated += add_lanes (table._M_grad + id * dim, grad_output._M_grad + row * dim, dim);
+        const uint32_t begin = offsets[row];
+        const uint32_t end = offsets[row + 1u];
+        const uint32_t length = end - begin;
+        if (length == 0u)
+            continue;
+        const int16_t *const grad_row = grad_output._M_grad + row * dim;
+        for (uint32_t token = begin; token < end; ++token) {
+            const uint32_t id = index[token];
+            if (static_cast<int32_t> (id) == padding)
+                continue;
+            const uint32_t base = id * dim;
+            for (uint32_t column = 0; column < dim; ++column) {
+                const int32_t lane = spec._M_scale_grads != 0u
+                                         ? div_round (grad_row[column], static_cast<int32_t> (length))
+                                         : grad_row[column];
+                if (lane == 0)
+                    continue;
+                if (table.add_grad (base + column, lane))
+                    ++saturated;
+            }
+        }
     }
     context._M_saturation_events += saturated;
     return Status::OK;
-  }
-  for (uint32_t row = 0; row < spec._M_rows; ++row) {
-    const uint32_t begin = offsets[row];
-    const uint32_t end = offsets[row + 1u];
-    const uint32_t length = end - begin;
-    if (length == 0u)
-      continue;
-    const int16_t *const grad_row = grad_output._M_grad + row * dim;
-    for (uint32_t token = begin; token < end; ++token) {
-      const uint32_t id = index[token];
-      if (static_cast<int32_t> (id) == padding)
-        continue;
-      const uint32_t base = id * dim;
-      for (uint32_t column = 0; column < dim; ++column) {
-        const int32_t lane =
-            spec._M_scale_grads != 0u ? div_round (grad_row[column], static_cast<int32_t> (length)) : grad_row[column];
-        if (lane == 0)
-          continue;
-        if (table.add_grad (base + column, lane))
-          ++saturated;
-      }
-    }
-  }
-  context._M_saturation_events += saturated;
-  return Status::OK;
 }
 
 /**
@@ -391,52 +392,53 @@ embedding_backward (const Trainable &output, const Trainable &grad_output, GradC
 [[nodiscard]] inline Status
 embedding_run (Tape &tape, const EmbedSpec &spec, const uint16_t *const index, const uint16_t *const offsets,
                const Trainable &table, Trainable &output) noexcept {
-  const Status status = spec.validate ();
-  if (!status_ok (status))
-    return status;
-  if (index == nullptr || spec.is_bag () != (offsets != nullptr))
-    return Status::BAD_LAYOUT;
-  if (table._M_count != spec.table_elements () || output._M_count != spec.output_elements ())
-    return Status::BAD_LAYOUT;
-  const Status ids = embedding_check_ids (spec, index, offsets);
-  if (!status_ok (ids))
-    return ids;
+    const Status status = spec.validate ();
+    if (!status_ok (status))
+        return status;
+    if (index == nullptr || spec.is_bag () != (offsets != nullptr))
+        return Status::BAD_LAYOUT;
+    if (table._M_count != spec.table_elements () || output._M_count != spec.output_elements ())
+        return Status::BAD_LAYOUT;
+    const Status ids = embedding_check_ids (spec, index, offsets);
+    if (!status_ok (ids))
+        return ids;
 
-  Saved slots[_S_max_operands];
-  Trainable operands[_S_max_operands];
-  slots[_S_embed_unused] = Saved{};
-  {
-    EmbedSpec *saved_spec = nullptr;
-    const Status save = tape.save (1u, slots[_S_embed_spec], saved_spec);
-    if (!status_ok (save))
-      return save;
-    *saved_spec = spec;
-  }
-  {
-    uint16_t *saved_index = nullptr;
-    const Status save = tape.save (spec.index_count (), slots[_S_embed_index], saved_index);
-    if (!status_ok (save))
-      return save;
-    for (uint32_t row = 0; row < spec.index_count (); ++row)
-      saved_index[row] = index[row];
-  }
-  if (spec.is_bag ()) {
-    uint16_t *saved_offsets = nullptr;
-    const Status save = tape.save (static_cast<uint32_t> (spec._M_rows) + 1u, slots[_S_embed_offsets], saved_offsets);
-    if (!status_ok (save))
-      return save;
-    for (uint32_t row = 0; row <= spec._M_rows; ++row)
-      saved_offsets[row] = offsets[row];
-  }
+    Saved slots[_S_max_operands];
+    Trainable operands[_S_max_operands];
+    slots[_S_embed_unused] = Saved{};
+    {
+        EmbedSpec *saved_spec = nullptr;
+        const Status save = tape.save (1u, slots[_S_embed_spec], saved_spec);
+        if (!status_ok (save))
+            return save;
+        *saved_spec = spec;
+    }
+    {
+        uint16_t *saved_index = nullptr;
+        const Status save = tape.save (spec.index_count (), slots[_S_embed_index], saved_index);
+        if (!status_ok (save))
+            return save;
+        for (uint32_t row = 0; row < spec.index_count (); ++row)
+            saved_index[row] = index[row];
+    }
+    if (spec.is_bag ()) {
+        uint16_t *saved_offsets = nullptr;
+        const Status save =
+            tape.save (static_cast<uint32_t> (spec._M_rows) + 1u, slots[_S_embed_offsets], saved_offsets);
+        if (!status_ok (save))
+            return save;
+        for (uint32_t row = 0; row <= spec._M_rows; ++row)
+            saved_offsets[row] = offsets[row];
+    }
 
-  const Status forward = embedding_forward (spec, index, offsets, table, output);
-  if (!status_ok (forward))
-    return forward;
+    const Status forward = embedding_forward (spec, index, offsets, table, output);
+    if (!status_ok (forward))
+        return forward;
 
-  operands[0] = table;
-  for (uint32_t index_slot = 1u; index_slot < _S_max_operands; ++index_slot)
-    operands[index_slot] = Trainable{};
-  return tape.record (embedding_backward, spec._M_op_id, output, operands, 1u, slots, _S_max_operands);
+    operands[0] = table;
+    for (uint32_t index_slot = 1u; index_slot < _S_max_operands; ++index_slot)
+        operands[index_slot] = Trainable{};
+    return tape.record (embedding_backward, spec._M_op_id, output, operands, 1u, slots, _S_max_operands);
 }
 
 /**
@@ -454,28 +456,28 @@ embedding_run (Tape &tape, const EmbedSpec &spec, const uint16_t *const index, c
  */
 [[nodiscard]] inline constexpr Status
 tied (const Trainable &owner, const Shape shape, Trainable &alias) noexcept {
-  if (owner._M_code == nullptr || owner._M_grad == nullptr)
-    return Status::BAD_LAYOUT;
-  const Status shape_status = shape.validate ();
-  if (!status_ok (shape_status))
-    return shape_status;
-  if (shape.elements () != owner._M_count)
-    return Status::BAD_LAYOUT;
-  alias = owner;
-  alias._M_shape = shape;
-  alias._M_flags = owner._M_flags | Flag::RequiresGrad;
-  return Status::OK;
+    if (owner._M_code == nullptr || owner._M_grad == nullptr)
+        return Status::BAD_LAYOUT;
+    const Status shape_status = shape.validate ();
+    if (!status_ok (shape_status))
+        return shape_status;
+    if (shape.elements () != owner._M_count)
+        return Status::BAD_LAYOUT;
+    alias = owner;
+    alias._M_shape = shape;
+    alias._M_flags = owner._M_flags | Flag::RequiresGrad;
+    return Status::OK;
 }
 
 /** @brief True when the two views accumulate into one gradient buffer. */
 [[nodiscard]] inline constexpr bool
 grad_shared (const Trainable &first, const Trainable &second) noexcept {
-  return first._M_grad != nullptr && first._M_grad == second._M_grad;
+    return first._M_grad != nullptr && first._M_grad == second._M_grad;
 }
 
 /** @brief True when the two views read one code buffer as well as one grad buffer. */
 [[nodiscard]] inline constexpr bool
 fully_tied (const Trainable &first, const Trainable &second) noexcept {
-  return grad_shared (first, second) && first._M_code == second._M_code;
+    return grad_shared (first, second) && first._M_code == second._M_code;
 }
 } // namespace zzs::mllee::train

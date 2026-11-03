@@ -37,25 +37,25 @@ namespace zzs::mllee::onnx {
  * non-recursive, so a hostile stream cannot exhaust the stack with groups.
  */
 struct Scope {
-  uint32_t _M_end = 0;
+    uint32_t _M_end = 0;
 };
 
 [[nodiscard]] inline OnnxError
 open_scope (Stream &stream, const uint32_t limit, Scope &scope) noexcept {
-  uint32_t length = 0;
-  const OnnxError error = read_length (stream, limit, length);
-  if (error)
-    return error;
-  const uint32_t start = stream.position ();
-  if (length > limit - start)
-    return OnnxError (OnnxCode::TRUNCATED, start);
-  scope._M_end = start + length;
-  return OnnxError::ok ();
+    uint32_t length = 0;
+    const OnnxError error = read_length (stream, limit, length);
+    if (error)
+        return error;
+    const uint32_t start = stream.position ();
+    if (length > limit - start)
+        return OnnxError (OnnxCode::TRUNCATED, start);
+    scope._M_end = start + length;
+    return OnnxError::ok ();
 }
 
 [[nodiscard]] inline bool
 scope_done (const Stream &stream, const Scope &scope) noexcept {
-  return stream.position () >= scope._M_end;
+    return stream.position () >= scope._M_end;
 }
 
 /**
@@ -67,20 +67,20 @@ scope_done (const Stream &stream, const Scope &scope) noexcept {
  */
 [[nodiscard]] inline OnnxError
 close_scope (Stream &stream, const Scope &scope) noexcept {
-  const uint32_t here = stream.position ();
-  if (here > scope._M_end)
-    return OnnxError (OnnxCode::TRUNCATED, here);
-  if (here == scope._M_end)
-    return OnnxError::ok ();
-  return stream.skip (scope._M_end, scope._M_end - here);
+    const uint32_t here = stream.position ();
+    if (here > scope._M_end)
+        return OnnxError (OnnxCode::TRUNCATED, here);
+    if (here == scope._M_end)
+        return OnnxError::ok ();
+    return stream.skip (scope._M_end, scope._M_end - here);
 }
 
 /** @brief Require an exact end position (used by packed numeric fields). */
 [[nodiscard]] inline OnnxError
 require_scope_end (const Stream &stream, const Scope &scope) noexcept {
-  const uint32_t here = stream.position ();
-  if (here != scope._M_end)
-    return OnnxError (OnnxCode::BAD_FIELD, here);
-  return OnnxError::ok ();
+    const uint32_t here = stream.position ();
+    if (here != scope._M_end)
+        return OnnxError (OnnxCode::BAD_FIELD, here);
+    return OnnxError::ok ();
 }
 } // namespace zzs::mllee::onnx

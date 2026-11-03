@@ -29,8 +29,7 @@
  * magnetometer.  Integer-only; no float.
  * @{
  */
-namespace zzs::kernel::sensor::driver::sensors::lis3mdl
-{
+namespace zzs::kernel::sensor::driver::sensors::lis3mdl {
 
 /** @brief WHO_AM_I register address. */
 inline constexpr uint8_t RegWhoAmI = 0x0F;
@@ -41,36 +40,36 @@ inline constexpr uint8_t WhoAmIValue = 0x3D;
 /** @brief CTRL_REG1: ODR/Mode, temp enable, self-test. */
 inline constexpr uint8_t RegCtrlReg1 = 0x20;
 /* CTRL_REG1 bit fields. */
-inline constexpr uint8_t CtrlReg1TempEn = 0x01;     /* bit 0  temperature sensor enable */
-inline constexpr uint8_t CtrlReg1OmMask  = 0x7E;    /* bits [6:1] operating mode/ODR */
-inline constexpr uint8_t CtrlReg1St      = 0x80;    /* bit 7  self-test enable */
+inline constexpr uint8_t CtrlReg1TempEn = 0x01; /* bit 0  temperature sensor enable */
+inline constexpr uint8_t CtrlReg1OmMask = 0x7E; /* bits [6:1] operating mode/ODR */
+inline constexpr uint8_t CtrlReg1St = 0x80;     /* bit 7  self-test enable */
 
 /** @brief CTRL_REG2: full-scale, soft reset, reboot. */
 inline constexpr uint8_t RegCtrlReg2 = 0x21;
 /* CTRL_REG2 bit fields. */
-inline constexpr uint8_t CtrlReg2FsMask   = 0x30;   /* bits [5:4] full-scale */
-inline constexpr uint8_t CtrlReg2Fs4Gauss = 0x00;   /* ±4 gauss (default) */
-inline constexpr uint8_t CtrlReg2Fs8Gauss = 0x10;   /* ±8 gauss */
-inline constexpr uint8_t CtrlReg2Fs12Gauss = 0x20;  /* ±12 gauss */
-inline constexpr uint8_t CtrlReg2Fs16Gauss = 0x30;  /* ±16 gauss */
-inline constexpr uint8_t CtrlReg2SoftRst  = 0x08;   /* bit 3  software reset */
-inline constexpr uint8_t CtrlReg2Reboot   = 0x10;   /* bit 4  reboot memory */
+inline constexpr uint8_t CtrlReg2FsMask = 0x30;    /* bits [5:4] full-scale */
+inline constexpr uint8_t CtrlReg2Fs4Gauss = 0x00;  /* ±4 gauss (default) */
+inline constexpr uint8_t CtrlReg2Fs8Gauss = 0x10;  /* ±8 gauss */
+inline constexpr uint8_t CtrlReg2Fs12Gauss = 0x20; /* ±12 gauss */
+inline constexpr uint8_t CtrlReg2Fs16Gauss = 0x30; /* ±16 gauss */
+inline constexpr uint8_t CtrlReg2SoftRst = 0x08;   /* bit 3  software reset */
+inline constexpr uint8_t CtrlReg2Reboot = 0x10;    /* bit 4  reboot memory */
 
 /** @brief CTRL_REG3: operating mode, SPI mode. */
 inline constexpr uint8_t RegCtrlReg3 = 0x22;
 /* CTRL_REG3 bit fields. */
-inline constexpr uint8_t CtrlReg3MdMask   = 0x03;   /* bits [1:0] operating mode */
-inline constexpr uint8_t CtrlReg3MdCont   = 0x00;   /* continuous conversion mode */
-inline constexpr uint8_t CtrlReg3MdSingle = 0x01;   /* single conversion mode */
-inline constexpr uint8_t CtrlReg3MdPwrDn  = 0x02;   /* power-down */
-inline constexpr uint8_t CtrlReg3Sim      = 0x20;   /* bit 5 SPI serial interface mode */
+inline constexpr uint8_t CtrlReg3MdMask = 0x03;   /* bits [1:0] operating mode */
+inline constexpr uint8_t CtrlReg3MdCont = 0x00;   /* continuous conversion mode */
+inline constexpr uint8_t CtrlReg3MdSingle = 0x01; /* single conversion mode */
+inline constexpr uint8_t CtrlReg3MdPwrDn = 0x02;  /* power-down */
+inline constexpr uint8_t CtrlReg3Sim = 0x20;      /* bit 5 SPI serial interface mode */
 
 /** @brief STATUS_REG: data ready flags. */
 inline constexpr uint8_t RegStatusReg = 0x27;
 /* STATUS_REG bit fields. */
-inline constexpr uint8_t StatusXda = 0x01;   /* bit 0 X data available */
-inline constexpr uint8_t StatusYda = 0x02;   /* bit 1 Y data available */
-inline constexpr uint8_t StatusZda = 0x04;   /* bit 2 Z data available */
+inline constexpr uint8_t StatusXda = 0x01; /* bit 0 X data available */
+inline constexpr uint8_t StatusYda = 0x02; /* bit 1 Y data available */
+inline constexpr uint8_t StatusZda = 0x04; /* bit 2 Z data available */
 
 /** @brief OUT_X_L: magnetometer X axis low byte (6 bytes X/Y/Z). */
 inline constexpr uint8_t RegOutXL = 0x28;

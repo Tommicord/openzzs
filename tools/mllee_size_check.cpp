@@ -23,19 +23,16 @@
 
 #include <cstdio>
 
-namespace
-{
+namespace {
 template <typename T>
 void
-print_size (const char *const name)
-{
+print_size (const char *const name) {
     std::printf ("sizeof(%s)=%zu alignof(%s)=%zu\n", name, sizeof (T), name, alignof (T));
 }
 } // namespace
 
 int
-main ()
-{
+main () {
     print_size<zzs::mllee::Core> ("Core");
     print_size<zzs::mllee::PacklowState> ("PacklowState");
     print_size<zzs::mllee::Layer> ("Layer");
@@ -48,22 +45,19 @@ main ()
     print_size<zzs::mllee::onnx::TensorInfo> ("onnx::TensorInfo");
     std::printf ("arena=%u\n", static_cast<unsigned int> (zzs::mllee::_S_arena_bytes));
     std::printf ("fixed=%zu\n", sizeof (zzs::mllee::Core) - zzs::mllee::_S_arena_bytes);
-    std::printf ("budget=%u core=%zu chain=%u\n",
-                 static_cast<unsigned int> (zzs::mllee::_S_ram_budget_bytes),
-                 sizeof (zzs::mllee::Core),
-                 static_cast<unsigned int> (zzs::mllee::_S_stack_budget_bytes));
+    std::printf ("budget=%u core=%zu chain=%u\n", static_cast<unsigned int> (zzs::mllee::_S_ram_budget_bytes),
+                 sizeof (zzs::mllee::Core), static_cast<unsigned int> (zzs::mllee::_S_stack_budget_bytes));
 
     constexpr bool _S_32bit = sizeof (void *) == 4;
-    constexpr std::size_t _S_core_budget
-        = _S_32bit ? zzs::mllee::_S_core_budget_bytes
-                   : zzs::mllee::_S_core_budget_host_bytes;
+    constexpr std::size_t _S_core_budget =
+        _S_32bit ? zzs::mllee::_S_core_budget_bytes : zzs::mllee::_S_core_budget_host_bytes;
     constexpr std::size_t _S_pk_budget = _S_32bit ? 124u : 136u;
     constexpr std::size_t _S_ws_budget = _S_32bit ? 192u : 208u;
 
     // Exact 32-bit (Cortex-M4) layout; this is what check_mllee_ram.sh gates.
     static_assert (!_S_32bit || sizeof (zzs::mllee::Core) == 640u);
-    static_assert (!_S_32bit || sizeof (zzs::mllee::Core) + zzs::mllee::_S_stack_budget_bytes
-                                          == zzs::mllee::_S_ram_budget_bytes);
+    static_assert (!_S_32bit
+                   || sizeof (zzs::mllee::Core) + zzs::mllee::_S_stack_budget_bytes == zzs::mllee::_S_ram_budget_bytes);
     static_assert (!_S_32bit || sizeof (zzs::mllee::Workspace) == 192u);
     static_assert (!_S_32bit || sizeof (zzs::mllee::PacklowState) == 124u);
     static_assert (!_S_32bit || alignof (zzs::mllee::Core) == 4u);
@@ -78,36 +72,29 @@ main ()
     static_assert (sizeof (zzs::mllee::onnx::TensorInfo) == 28u);
 
     bool ok = true;
-    if (sizeof (zzs::mllee::Core) > _S_core_budget)
-        {
-            std::printf ("FAIL: Core exceeds the %zu-byte object budget\n", _S_core_budget);
-            ok = false;
-        }
-    if (_S_32bit && alignof (zzs::mllee::Core) > 4)
-        {
-            std::printf ("FAIL: Core alignment exceeds 4 bytes\n");
-            ok = false;
-        }
-    if (sizeof (zzs::mllee::PacklowState) > _S_pk_budget)
-        {
-            std::printf ("FAIL: PacklowState exceeds %zu bytes\n", _S_pk_budget);
-            ok = false;
-        }
-    if (sizeof (zzs::mllee::Workspace) > _S_ws_budget)
-        {
-            std::printf ("FAIL: Workspace exceeds %zu bytes\n", _S_ws_budget);
-            ok = false;
-        }
-    if (sizeof (zzs::mllee::onnx::Loader)
-        > zzs::mllee::onnx::_S_ram_budget_bytes)
-        {
-            std::printf ("FAIL: onnx::Loader exceeds its 128-byte budget\n");
-            ok = false;
-        }
-    if (sizeof (zzs::mllee::Layer) != zzs::mllee::_S_layer_desc_size)
-        {
-            std::printf ("FAIL: Layer descriptor size does not match the blob format\n");
-            ok = false;
-        }
+    if (sizeof (zzs::mllee::Core) > _S_core_budget) {
+        std::printf ("FAIL: Core exceeds the %zu-byte object budget\n", _S_core_budget);
+        ok = false;
+    }
+    if (_S_32bit && alignof (zzs::mllee::Core) > 4) {
+        std::printf ("FAIL: Core alignment exceeds 4 bytes\n");
+        ok = false;
+    }
+    if (sizeof (zzs::mllee::PacklowState) > _S_pk_budget) {
+        std::printf ("FAIL: PacklowState exceeds %zu bytes\n", _S_pk_budget);
+        ok = false;
+    }
+    if (sizeof (zzs::mllee::Workspace) > _S_ws_budget) {
+        std::printf ("FAIL: Workspace exceeds %zu bytes\n", _S_ws_budget);
+        ok = false;
+    }
+    if (sizeof (zzs::mllee::onnx::Loader) > zzs::mllee::onnx::_S_ram_budget_bytes) {
+        std::printf ("FAIL: onnx::Loader exceeds its 128-byte budget\n");
+        ok = false;
+    }
+    if (sizeof (zzs::mllee::Layer) != zzs::mllee::_S_layer_desc_size) {
+        std::printf ("FAIL: Layer descriptor size does not match the blob format\n");
+        ok = false;
+    }
     return ok ? 0 : 1;
 }

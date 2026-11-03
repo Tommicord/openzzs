@@ -36,6 +36,7 @@ set(_zzs_std_sources
   std/maybe.hpp
   std/signal_handler.hpp
   std/secure_channel.hpp
+  std/swiss_table.hpp
   std/string_view.hpp
   std/sunwind.hpp
 )

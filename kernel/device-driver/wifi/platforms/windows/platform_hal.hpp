@@ -35,8 +35,7 @@
 namespace zzs::kernel::device::driver::wifi::platform::windows {
 
 /** @brief Build the Windows WiFi HAL vtable. */
-[[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *,
-                              zzs::kernel::Status>
+[[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *, zzs::kernel::Status>
 create_windows_wifi_hal (WifiHal &hal_out) noexcept;
 
 /** @} */

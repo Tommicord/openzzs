@@ -30,7 +30,7 @@
 /** @brief Raw 16-bit little-endian sample from a byte pair. */
 [[nodiscard]] inline constexpr int16_t
 qmc5883l_raw16 (const uint8_t *p) noexcept {
-  return static_cast<int16_t> (static_cast<uint16_t> (p[0]) | (static_cast<uint16_t> (p[1]) << 8));
+    return static_cast<int16_t> (static_cast<uint16_t> (p[0]) | (static_cast<uint16_t> (p[1]) << 8));
 }
 
 /**
@@ -47,118 +47,120 @@ inline constexpr uint32_t Qmc5883lDataBlockBytes = 6u;
 
 /** @brief QMC5883L magnetometer driver (MAG_X/Y/Z). */
 class Qmc5883lMagDriver : public SensorDriver {
-public:
-  /** @brief Construct with a non-owning bus pointer and an optional clock
-   *         source callback for timestamps. */
-  explicit Qmc5883lMagDriver (bus::BusInterface *bus, uint64_t (*clock) (void) = nullptr) noexcept
-      : SensorDriver (bus, clock) {
-  }
-
-  [[nodiscard]] zzs::kernel::Status
-  init () noexcept override {
-    uint8_t who = 0;
-    zzs::kernel::Status st = bus_read8 (qmc5883l::RegChipId, who);
-    if (!zzs::kernel::status_ok (st))
-      return st;
-    if (who != qmc5883l::ChipIdValue)
-      return zzs::kernel::Status::BAD_TYPE;
-    _M_device_id = who;
-
-    /* Soft reset lives in CTRL2 bit 7, then wait for the POR time (350 us). */
-    st = bus_write8 (qmc5883l::RegCtrl2, qmc5883l::Ctrl2SoftReset);
-    if (!zzs::kernel::status_ok (st))
-      return st;
-    _M_bus->delay_ms (1u);
-
-    /* Enable the SET/RESET strap (recommended in the datasheet). */
-    st = bus_write8 (qmc5883l::RegSetReset, qmc5883l::SetResetEnable);
-    if (!zzs::kernel::status_ok (st))
-      return st;
-
-    /* Continuous mode, 100 Hz ODR, ±8 gauss, 512x oversampling. */
-    st = bus_write8 (qmc5883l::RegCtrl1, static_cast<uint8_t> (qmc5883l::Ctrl1ModeContinuous | qmc5883l::Ctrl1Odr100Hz
-                                                               | qmc5883l::Ctrl1Range8G | qmc5883l::Ctrl1Osr512));
-    if (!zzs::kernel::status_ok (st))
-      return st;
-
-    _M_axis = 0;
-    return zzs::kernel::Status::OK;
-  }
-
-  [[nodiscard]] zzs::kernel::Status
-  read_sample (sensor::Sample &out) noexcept override {
-    /* Round-robin across enabled axes: X, Y, Z (per-instance state). */
-    bool found = false;
-    for (uint8_t i = 0; i < 3u; ++i) {
-      const uint8_t candidate = static_cast<uint8_t> ((_M_axis + i) % 3u);
-      if (_M_enabled[candidate]) {
-        _M_axis = candidate;
-        found = true;
-        break;
-      }
+  public:
+    /** @brief Construct with a non-owning bus pointer and an optional clock
+     *         source callback for timestamps. */
+    explicit Qmc5883lMagDriver (bus::BusInterface *bus, uint64_t (*clock) (void) = nullptr) noexcept
+        : SensorDriver (bus, clock) {
     }
-    if (!found)
-      return zzs::kernel::Status::STALE;
 
-    uint8_t status = 0;
-    zzs::kernel::Status st = bus_read8 (qmc5883l::RegStatus, status);
-    if (!zzs::kernel::status_ok (st))
-      return st;
+    [[nodiscard]] zzs::kernel::Status
+    init () noexcept override {
+        uint8_t who = 0;
+        zzs::kernel::Status st = bus_read8 (qmc5883l::RegChipId, who);
+        if (!zzs::kernel::status_ok (st))
+            return st;
+        if (who != qmc5883l::ChipIdValue)
+            return zzs::kernel::Status::BAD_TYPE;
+        _M_device_id = who;
 
-    if ((status & qmc5883l::StatusDataReady) == 0u)
-      return zzs::kernel::Status::STALE;
+        /* Soft reset lives in CTRL2 bit 7, then wait for the POR time (350 us). */
+        st = bus_write8 (qmc5883l::RegCtrl2, qmc5883l::Ctrl2SoftReset);
+        if (!zzs::kernel::status_ok (st))
+            return st;
+        _M_bus->delay_ms (1u);
 
-    uint8_t data[Qmc5883lDataBlockBytes] = {0};
-    st = bus_read (qmc5883l::RegDataXlsb, data, Qmc5883lDataBlockBytes);
-    if (!zzs::kernel::status_ok (st))
-      return st;
+        /* Enable the SET/RESET strap (recommended in the datasheet). */
+        st = bus_write8 (qmc5883l::RegSetReset, qmc5883l::SetResetEnable);
+        if (!zzs::kernel::status_ok (st))
+            return st;
 
-    const int16_t raw = qmc5883l_raw16 (&data[_M_axis * 2u]);
-    const int32_t q15 = zzs::kernel::sensor::driver::fixed::q15_from_raw (raw);
-    const int32_t phys_q15 = zzs::kernel::sensor::driver::fixed::q15_mul (q15, qmc5883l::MagSensQ15MilligaussPerLsb);
+        /* Continuous mode, 100 Hz ODR, ±8 gauss, 512x oversampling. */
+        st = bus_write8 (qmc5883l::RegCtrl1,
+                         static_cast<uint8_t> (qmc5883l::Ctrl1ModeContinuous | qmc5883l::Ctrl1Odr100Hz
+                                               | qmc5883l::Ctrl1Range8G | qmc5883l::Ctrl1Osr512));
+        if (!zzs::kernel::status_ok (st))
+            return st;
 
-    out._M_channel = static_cast<sensor::Channel> (static_cast<uint8_t> (sensor::Channel::MAG_X) + _M_axis);
-    out._M_sample_q15 = zzs::kernel::sensor::driver::fixed::q15_to_raw (phys_q15);
-    out._M_timestamp_ns = timestamp_ns ();
+        _M_axis = 0;
+        return zzs::kernel::Status::OK;
+    }
 
-    _M_axis = static_cast<uint8_t> ((_M_axis + 1u) % 3u);
-    return zzs::kernel::Status::OK;
-  }
+    [[nodiscard]] zzs::kernel::Status
+    read_sample (sensor::Sample &out) noexcept override {
+        /* Round-robin across enabled axes: X, Y, Z (per-instance state). */
+        bool found = false;
+        for (uint8_t i = 0; i < 3u; ++i) {
+            const uint8_t candidate = static_cast<uint8_t> ((_M_axis + i) % 3u);
+            if (_M_enabled[candidate]) {
+                _M_axis = candidate;
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            return zzs::kernel::Status::STALE;
 
-  [[nodiscard]] zzs::kernel::Status
-  set_channel_enabled (sensor::Channel ch, bool enabled) noexcept override {
-    const uint8_t idx = static_cast<uint8_t> (ch) - static_cast<uint8_t> (sensor::Channel::MAG_X);
-    if (idx >= 3u)
-      return zzs::kernel::Status::OUT_OF_RANGE;
-    _M_enabled[idx] = enabled;
-    return zzs::kernel::Status::OK;
-  }
+        uint8_t status = 0;
+        zzs::kernel::Status st = bus_read8 (qmc5883l::RegStatus, status);
+        if (!zzs::kernel::status_ok (st))
+            return st;
 
-  [[nodiscard]] uint32_t
-  channel_rate_hz (sensor::Channel ch) noexcept override {
-    (void) ch;
-    return qmc5883l::OdrHz;
-  }
+        if ((status & qmc5883l::StatusDataReady) == 0u)
+            return zzs::kernel::Status::STALE;
 
-  [[nodiscard]] uint8_t
-  device_id () const noexcept override {
-    return _M_device_id;
-  }
+        uint8_t data[Qmc5883lDataBlockBytes] = {0};
+        st = bus_read (qmc5883l::RegDataXlsb, data, Qmc5883lDataBlockBytes);
+        if (!zzs::kernel::status_ok (st))
+            return st;
 
-  [[nodiscard]] bool
-  self_test () noexcept override {
-    uint8_t status = 0;
-    if (!zzs::kernel::status_ok (bus_read8 (qmc5883l::RegStatus, status)))
-      return false;
-    uint8_t data[Qmc5883lDataBlockBytes] = {0};
-    return zzs::kernel::status_ok (bus_read (qmc5883l::RegDataXlsb, data, Qmc5883lDataBlockBytes));
-  }
+        const int16_t raw = qmc5883l_raw16 (&data[_M_axis * 2u]);
+        const int32_t q15 = zzs::kernel::sensor::driver::fixed::q15_from_raw (raw);
+        const int32_t phys_q15 =
+            zzs::kernel::sensor::driver::fixed::q15_mul (q15, qmc5883l::MagSensQ15MilligaussPerLsb);
 
-private:
-  /** @brief Per-instance round-robin axis cursor (X/Y/Z). */
-  uint8_t _M_axis = 0;
-  /** @brief Whether each channel is enabled. */
-  bool _M_enabled[3] = {true, true, true};
+        out._M_channel = static_cast<sensor::Channel> (static_cast<uint8_t> (sensor::Channel::MAG_X) + _M_axis);
+        out._M_sample_q15 = zzs::kernel::sensor::driver::fixed::q15_to_raw (phys_q15);
+        out._M_timestamp_ns = timestamp_ns ();
+
+        _M_axis = static_cast<uint8_t> ((_M_axis + 1u) % 3u);
+        return zzs::kernel::Status::OK;
+    }
+
+    [[nodiscard]] zzs::kernel::Status
+    set_channel_enabled (sensor::Channel ch, bool enabled) noexcept override {
+        const uint8_t idx = static_cast<uint8_t> (ch) - static_cast<uint8_t> (sensor::Channel::MAG_X);
+        if (idx >= 3u)
+            return zzs::kernel::Status::OUT_OF_RANGE;
+        _M_enabled[idx] = enabled;
+        return zzs::kernel::Status::OK;
+    }
+
+    [[nodiscard]] uint32_t
+    channel_rate_hz (sensor::Channel ch) noexcept override {
+        (void) ch;
+        return qmc5883l::OdrHz;
+    }
+
+    [[nodiscard]] uint8_t
+    device_id () const noexcept override {
+        return _M_device_id;
+    }
+
+    [[nodiscard]] bool
+    self_test () noexcept override {
+        uint8_t status = 0;
+        if (!zzs::kernel::status_ok (bus_read8 (qmc5883l::RegStatus, status)))
+            return false;
+        uint8_t data[Qmc5883lDataBlockBytes] = {0};
+        return zzs::kernel::status_ok (bus_read (qmc5883l::RegDataXlsb, data, Qmc5883lDataBlockBytes));
+    }
+
+  private:
+    /** @brief Per-instance round-robin axis cursor (X/Y/Z). */
+    uint8_t _M_axis = 0;
+    /** @brief Whether each channel is enabled. */
+    bool _M_enabled[3] = {true, true, true};
 };
 
 /** @} */

@@ -44,68 +44,68 @@ namespace zzs::kernel::frames {
 
 /** @brief One feature frame: seq_len rows x feature_count int8 codes. */
 class Sequence {
-  int8_t _M_row[zzs::kernel::_S_seq_len][zzs::kernel::_S_feature_count]{};
-  uint32_t _M_row_count = 0u;
-  bool _M_complete = false;
+    int8_t _M_row[zzs::kernel::_S_seq_len][zzs::kernel::_S_feature_count]{};
+    uint32_t _M_row_count = 0u;
+    bool _M_complete = false;
 
-public:
-  Sequence () = default;
-  Sequence (const Sequence &) = delete;
-  Sequence &
-  operator= (const Sequence &) = delete;
-  Sequence (Sequence &&) = delete;
-  Sequence &
-  operator= (Sequence &&) = delete;
+  public:
+    Sequence () = default;
+    Sequence (const Sequence &) = delete;
+    Sequence &
+    operator= (const Sequence &) = delete;
+    Sequence (Sequence &&) = delete;
+    Sequence &
+    operator= (Sequence &&) = delete;
 
-  /** @brief Append one packed feature row. Returns true when the frame completes. */
-  [[nodiscard]] inline bool
-  append_row (const int8_t *const row) noexcept {
-    if (ZZS_UNLIKELY (row == nullptr || _M_complete || _M_row_count >= zzs::kernel::_S_seq_len))
-      return _M_complete;
-    ZZS_MEMCPY (_M_row[_M_row_count], row, zzs::kernel::_S_feature_count * sizeof (int8_t));
-    ++_M_row_count;
-    if (_M_row_count >= zzs::kernel::_S_seq_len)
-      _M_complete = true;
-    return _M_complete;
-  }
+    /** @brief Append one packed feature row. Returns true when the frame completes. */
+    [[nodiscard]] inline bool
+    append_row (const int8_t *const row) noexcept {
+        if (ZZS_UNLIKELY (row == nullptr || _M_complete || _M_row_count >= zzs::kernel::_S_seq_len))
+            return _M_complete;
+        ZZS_MEMCPY (_M_row[_M_row_count], row, zzs::kernel::_S_feature_count * sizeof (int8_t));
+        ++_M_row_count;
+        if (_M_row_count >= zzs::kernel::_S_seq_len)
+            _M_complete = true;
+        return _M_complete;
+    }
 
-  /** @brief Apply one packed feature row (alias for append_row). */
-  [[nodiscard]] inline bool
-  apply_row (const int8_t *const row) noexcept {
-    return append_row (row);
-  }
+    /** @brief Apply one packed feature row (alias for append_row). */
+    [[nodiscard]] inline bool
+    apply_row (const int8_t *const row) noexcept {
+        return append_row (row);
+    }
 
-  /** @brief True when a full frame is available. */
-  [[nodiscard]] inline bool
-  complete () const noexcept {
-    return _M_complete;
-  }
+    /** @brief True when a full frame is available. */
+    [[nodiscard]] inline bool
+    complete () const noexcept {
+        return _M_complete;
+    }
 
-  /** @brief Rows appended so far. */
-  [[nodiscard]] inline uint32_t
-  row_count () const noexcept {
-    return _M_row_count;
-  }
+    /** @brief Rows appended so far. */
+    [[nodiscard]] inline uint32_t
+    row_count () const noexcept {
+        return _M_row_count;
+    }
 
-  /** @brief Pointer to the contiguous frame buffer (seq_len * feature_count int8). */
-  [[nodiscard]] inline int8_t *
-  data () noexcept {
-    return &_M_row[0][0];
-  }
+    /** @brief Pointer to the contiguous frame buffer (seq_len * feature_count int8). */
+    [[nodiscard]] inline int8_t *
+    data () noexcept {
+        return &_M_row[0][0];
+    }
 
-  /** @brief Bytes of one frame. */
-  [[nodiscard]] inline static constexpr uint32_t
-  frame_bytes () noexcept {
-    return zzs::kernel::_S_sequence_bytes;
-  }
+    /** @brief Bytes of one frame. */
+    [[nodiscard]] inline static constexpr uint32_t
+    frame_bytes () noexcept {
+        return zzs::kernel::_S_sequence_bytes;
+    }
 
-  /** @brief Reset the frame for the next inference. */
-  inline void
-  reset () noexcept {
-    ZZS_MEMSET (_M_row, 0, sizeof (_M_row));
-    _M_row_count = 0u;
-    _M_complete = false;
-  }
+    /** @brief Reset the frame for the next inference. */
+    inline void
+    reset () noexcept {
+        ZZS_MEMSET (_M_row, 0, sizeof (_M_row));
+        _M_row_count = 0u;
+        _M_complete = false;
+    }
 };
 
 /** @} */

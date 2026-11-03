@@ -53,99 +53,100 @@ namespace zzs::mllee::onnx {
  * OnnxCode::STOPPED but the loader object remains valid and can be run again.
  */
 class Loader {
-public:
-  Loader () noexcept = default;
-  Loader (const Loader &) = delete;
-  Loader &
-  operator= (const Loader &) = delete;
+  public:
+    Loader () noexcept = default;
+    Loader (const Loader &) = delete;
+    Loader &
+    operator= (const Loader &) = delete;
 
-  /**
-   * @brief Bind the source and reset the header state.
-   *
-   * `fetch` must return a caller-owned chunk whose first byte is `offset` and
-   * whose memory stays valid until the next call.  Returning a null or empty
-   * chunk means EOF.  The callback is invoked with absolute file offsets and
-   * is never asked for more than the parser needs.
-   */
-  void
-  begin (const ChunkFn fetch, void *const context, const uint32_t size,
-         const uint32_t flags = loader_default_flags ()) noexcept {
-    this->_M_stream.begin (fetch, context, size);
-    this->_M_model.reset ();
-    this->_M_model._M_loader_flags = static_cast<uint8_t> (flags);
-    this->_M_node.reset ();
-    this->_M_tensor.reset (TensorRole::NONE);
-  }
+    /**
+     * @brief Bind the source and reset the header state.
+     *
+     * `fetch` must return a caller-owned chunk whose first byte is `offset` and
+     * whose memory stays valid until the next call.  Returning a null or empty
+     * chunk means EOF.  The callback is invoked with absolute file offsets and
+     * is never asked for more than the parser needs.
+     */
+    void
+    begin (const ChunkFn fetch, void *const context, const uint32_t size,
+           const uint32_t flags = loader_default_flags ()) noexcept {
+        this->_M_stream.begin (fetch, context, size);
+        this->_M_model.reset ();
+        this->_M_model._M_loader_flags = static_cast<uint8_t> (flags);
+        this->_M_node.reset ();
+        this->_M_tensor.reset (TensorRole::NONE);
+    }
 
-  [[nodiscard]] uint32_t
-  flags () const noexcept {
-    return this->_M_model._M_loader_flags;
-  }
+    [[nodiscard]] uint32_t
+    flags () const noexcept {
+        return this->_M_model._M_loader_flags;
+    }
 
-  [[nodiscard]] bool
-  ready () const noexcept {
-    return this->_M_stream.source_ok () && this->_M_stream.size () != 0u;
-  }
+    [[nodiscard]] bool
+    ready () const noexcept {
+        return this->_M_stream.source_ok () && this->_M_stream.size () != 0u;
+    }
 
-  /** @brief Walk the bound model and emit every event to `visitor`. */
-  [[nodiscard]] OnnxError
-  run (const Visitor &visitor) noexcept {
-    if (!this->ready ())
-      return OnnxError (OnnxCode::INTERNAL, 0);
-    Context context{this->_M_stream, this->_M_model, this->_M_node,
-                    this->_M_tensor, visitor,        static_cast<uint32_t> (this->_M_model._M_loader_flags)};
-    return read_model (context, this->_M_stream.size ());
-  }
+    /** @brief Walk the bound model and emit every event to `visitor`. */
+    [[nodiscard]] OnnxError
+    run (const Visitor &visitor) noexcept {
+        if (!this->ready ())
+            return OnnxError (OnnxCode::INTERNAL, 0);
+        Context context{this->_M_stream, this->_M_model, this->_M_node,
+                        this->_M_tensor, visitor,        static_cast<uint32_t> (this->_M_model._M_loader_flags)};
+        return read_model (context, this->_M_stream.size ());
+    }
 
-  /** @brief Convenience overload for a plain function callback. */
-  [[nodiscard]] OnnxError
-  run (const EventFn function, void *const context = nullptr) noexcept {
-    return this->run (visitor (function, context));
-  }
+    /** @brief Convenience overload for a plain function callback. */
+    [[nodiscard]] OnnxError
+    run (const EventFn function, void *const context = nullptr) noexcept {
+        return this->run (visitor (function, context));
+    }
 
-  [[nodiscard]] const ModelInfo &
-  model () const noexcept {
-    return this->_M_model;
-  }
+    [[nodiscard]] const ModelInfo &
+    model () const noexcept {
+        return this->_M_model;
+    }
 
-  [[nodiscard]] const NodeInfo &
-  node () const noexcept {
-    return this->_M_node;
-  }
+    [[nodiscard]] const NodeInfo &
+    node () const noexcept {
+        return this->_M_node;
+    }
 
-  [[nodiscard]] const TensorInfo &
-  tensor () const noexcept {
-    return this->_M_tensor;
-  }
+    [[nodiscard]] const TensorInfo &
+    tensor () const noexcept {
+        return this->_M_tensor;
+    }
 
-  /**
-   * @brief Copy an absolute source span without moving the parse cursor.
-   *
-   * `copied` receives the number of bytes written.  The caller asks for only
-   * as much as its own buffer can hold; the loader never allocates one.  A
-   * range that runs past the declared model size is rejected with
-   * LIMIT_EXCEEDED instead of being clamped silently.
-   */
-  [[nodiscard]] OnnxError
-  copy (const uint32_t offset, uint8_t *const destination, const uint32_t capacity, uint32_t &copied) const noexcept {
-    return this->_M_stream.copy_at (offset, destination, capacity, copied);
-  }
+    /**
+     * @brief Copy an absolute source span without moving the parse cursor.
+     *
+     * `copied` receives the number of bytes written.  The caller asks for only
+     * as much as its own buffer can hold; the loader never allocates one.  A
+     * range that runs past the declared model size is rejected with
+     * LIMIT_EXCEEDED instead of being clamped silently.
+     */
+    [[nodiscard]] OnnxError
+    copy (const uint32_t offset, uint8_t *const destination, const uint32_t capacity, uint32_t &copied) const noexcept {
+        return this->_M_stream.copy_at (offset, destination, capacity, copied);
+    }
 
-  /** @brief Copy a string whose span was reported by an event. */
-  [[nodiscard]] OnnxError
-  copy_string (const StringInfo &info, uint8_t *const destination, const uint32_t capacity,
-               uint32_t &written) const noexcept {
-    return onnx::copy_string (this->_M_stream, info, destination, capacity, written);
-  }
+    /** @brief Copy a string whose span was reported by an event. */
+    [[nodiscard]] OnnxError
+    copy_string (const StringInfo &info, uint8_t *const destination, const uint32_t capacity,
+                 uint32_t &written) const noexcept {
+        return onnx::copy_string (this->_M_stream, info, destination, capacity, written);
+    }
 
-private:
-  Stream _M_stream;
-  ModelInfo _M_model;
-  NodeInfo _M_node;
-  TensorInfo _M_tensor;
+  private:
+    Stream _M_stream;
+    ModelInfo _M_model;
+    NodeInfo _M_node;
+    TensorInfo _M_tensor;
 
-  static_assert (sizeof (Stream) + sizeof (ModelInfo) + sizeof (NodeInfo) + sizeof (TensorInfo) <= _S_ram_budget_bytes,
-                 "onnx::Loader exceeds the 128-byte resident budget");
+    static_assert (sizeof (Stream) + sizeof (ModelInfo) + sizeof (NodeInfo) + sizeof (TensorInfo)
+                       <= _S_ram_budget_bytes,
+                   "onnx::Loader exceeds the 128-byte resident budget");
 };
 
 static_assert (sizeof (Loader) == (sizeof (void *) == 4u ? 116u : _S_ram_budget_bytes),

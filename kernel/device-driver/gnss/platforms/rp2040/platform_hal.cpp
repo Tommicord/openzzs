@@ -29,183 +29,183 @@ namespace {
 
 /** @brief RP2040 UART byte-stream bus adapter (Pico SDK hardware/uart.h). */
 class Rp2040GnssBus {
-public:
+  public:
 #if defined(PICO_RP2040)
-  explicit Rp2040GnssBus (uart_inst_t *inst) noexcept : _M_inst (inst), _M_open (false) {
-  }
-#else
-  Rp2040GnssBus () noexcept = default;
-#endif
-  ~Rp2040GnssBus () noexcept = default;
-  Rp2040GnssBus (const Rp2040GnssBus &) = delete;
-  Rp2040GnssBus &
-  operator= (const Rp2040GnssBus &) = delete;
-  Rp2040GnssBus (Rp2040GnssBus &&) = delete;
-  Rp2040GnssBus &
-  operator= (Rp2040GnssBus &&) = delete;
-
-  [[nodiscard]] zzs::kernel::Status
-  open () noexcept {
-#if defined(PICO_RP2040)
-    if (_M_open)
-      return zzs::kernel::Status::OK;
-    /* Real path: uart_init(uart0, 115200), gpio_set_function TX/RX, set
-     * format 8N1, set fifo enabled. */
-    _M_open = true;
-    return zzs::kernel::Status::OK;
-#else
-    return zzs::kernel::Status::UNSUPPORTED;
-#endif
-  }
-
-  [[nodiscard]] zzs::kernel::Status
-  close () noexcept {
-#if defined(PICO_RP2040)
-    if (!_M_open)
-      return zzs::kernel::Status::OK;
-    uart_set_irq_enables (_M_inst, false, false);
-    _M_open = false;
-    return zzs::kernel::Status::OK;
-#else
-    return zzs::kernel::Status::UNSUPPORTED;
-#endif
-  }
-
-  [[nodiscard]] zzs::kernel::Status
-  read_bytes (uint8_t *buf, uint16_t max_bytes, uint16_t *filled) noexcept {
-    if (buf == nullptr || filled == nullptr || max_bytes == 0u)
-      return zzs::kernel::Status::OUT_OF_RANGE;
-#if defined(PICO_RP2040)
-    if (!_M_open)
-      return zzs::kernel::Status::INTERNAL;
-    uint16_t n = 0u;
-    while (n < max_bytes && uart_is_readable (_M_inst)) {
-      buf[n++] = static_cast<uint8_t> (uart_getc (_M_inst));
+    explicit Rp2040GnssBus (uart_inst_t *inst) noexcept : _M_inst (inst), _M_open (false) {
     }
-    *filled = n;
-    return n > 0u ? zzs::kernel::Status::OK : zzs::kernel::Status::STALE;
 #else
-    if (!_M_open)
-      return zzs::kernel::Status::INTERNAL;
-    return zzs::kernel::Status::UNSUPPORTED;
+    Rp2040GnssBus () noexcept = default;
 #endif
-  }
+    ~Rp2040GnssBus () noexcept = default;
+    Rp2040GnssBus (const Rp2040GnssBus &) = delete;
+    Rp2040GnssBus &
+    operator= (const Rp2040GnssBus &) = delete;
+    Rp2040GnssBus (Rp2040GnssBus &&) = delete;
+    Rp2040GnssBus &
+    operator= (Rp2040GnssBus &&) = delete;
 
-  [[nodiscard]] zzs::kernel::Status
-  write_bytes (const uint8_t *buf, uint16_t len) noexcept {
-    if (buf == nullptr && len > 0u)
-      return zzs::kernel::Status::OUT_OF_RANGE;
+    [[nodiscard]] zzs::kernel::Status
+    open () noexcept {
 #if defined(PICO_RP2040)
-    if (!_M_open)
-      return zzs::kernel::Status::INTERNAL;
-    for (uint16_t i = 0u; i < len; ++i)
-      uart_putc_raw (_M_inst, buf[i]);
-    return zzs::kernel::Status::OK;
+        if (_M_open)
+            return zzs::kernel::Status::OK;
+        /* Real path: uart_init(uart0, 115200), gpio_set_function TX/RX, set
+         * format 8N1, set fifo enabled. */
+        _M_open = true;
+        return zzs::kernel::Status::OK;
 #else
-    return zzs::kernel::Status::UNSUPPORTED;
+        return zzs::kernel::Status::UNSUPPORTED;
 #endif
-  }
+    }
 
-  void
-  delay_ms (uint32_t ms) noexcept {
+    [[nodiscard]] zzs::kernel::Status
+    close () noexcept {
 #if defined(PICO_RP2040)
-    sleep_ms (static_cast<uint32_t> (ms));
+        if (!_M_open)
+            return zzs::kernel::Status::OK;
+        uart_set_irq_enables (_M_inst, false, false);
+        _M_open = false;
+        return zzs::kernel::Status::OK;
 #else
-    (void) ms;
+        return zzs::kernel::Status::UNSUPPORTED;
 #endif
-  }
+    }
 
-  [[nodiscard]] zzs::kernel::Status
-  flush_rx () noexcept {
+    [[nodiscard]] zzs::kernel::Status
+    read_bytes (uint8_t *buf, uint16_t max_bytes, uint16_t *filled) noexcept {
+        if (buf == nullptr || filled == nullptr || max_bytes == 0u)
+            return zzs::kernel::Status::OUT_OF_RANGE;
 #if defined(PICO_RP2040)
-    if (!_M_open)
-      return zzs::kernel::Status::INTERNAL;
-    while (uart_is_readable (_M_inst))
-      (void) uart_getc (_M_inst);
-    return zzs::kernel::Status::OK;
+        if (!_M_open)
+            return zzs::kernel::Status::INTERNAL;
+        uint16_t n = 0u;
+        while (n < max_bytes && uart_is_readable (_M_inst)) {
+            buf[n++] = static_cast<uint8_t> (uart_getc (_M_inst));
+        }
+        *filled = n;
+        return n > 0u ? zzs::kernel::Status::OK : zzs::kernel::Status::STALE;
 #else
-    return zzs::kernel::Status::UNSUPPORTED;
+        if (!_M_open)
+            return zzs::kernel::Status::INTERNAL;
+        return zzs::kernel::Status::UNSUPPORTED;
 #endif
-  }
+    }
 
-  [[nodiscard]] bool
-  is_open () const noexcept {
-    return _M_open;
-  }
+    [[nodiscard]] zzs::kernel::Status
+    write_bytes (const uint8_t *buf, uint16_t len) noexcept {
+        if (buf == nullptr && len > 0u)
+            return zzs::kernel::Status::OUT_OF_RANGE;
+#if defined(PICO_RP2040)
+        if (!_M_open)
+            return zzs::kernel::Status::INTERNAL;
+        for (uint16_t i = 0u; i < len; ++i)
+            uart_putc_raw (_M_inst, buf[i]);
+        return zzs::kernel::Status::OK;
+#else
+        return zzs::kernel::Status::UNSUPPORTED;
+#endif
+    }
+
+    void
+    delay_ms (uint32_t ms) noexcept {
+#if defined(PICO_RP2040)
+        sleep_ms (static_cast<uint32_t> (ms));
+#else
+        (void) ms;
+#endif
+    }
+
+    [[nodiscard]] zzs::kernel::Status
+    flush_rx () noexcept {
+#if defined(PICO_RP2040)
+        if (!_M_open)
+            return zzs::kernel::Status::INTERNAL;
+        while (uart_is_readable (_M_inst))
+            (void) uart_getc (_M_inst);
+        return zzs::kernel::Status::OK;
+#else
+        return zzs::kernel::Status::UNSUPPORTED;
+#endif
+    }
+
+    [[nodiscard]] bool
+    is_open () const noexcept {
+        return _M_open;
+    }
 
 #if !defined(PICO_RP2040)
-  void
-  inject_rx (const uint8_t *data, uint16_t len) noexcept {
-    if (data == nullptr || len == 0u)
-      return;
-    (void) _M_rx.push (data, len);
-  }
+    void
+    inject_rx (const uint8_t *data, uint16_t len) noexcept {
+        if (data == nullptr || len == 0u)
+            return;
+        (void) _M_rx.push (data, len);
+    }
 
-  void
-  inject_nmea (const char *sentence) noexcept {
-    if (sentence == nullptr)
-      return;
-    uint16_t len = 0u;
-    while (sentence[len] != '\0')
-      ++len;
-    inject_rx (reinterpret_cast<const uint8_t *> (sentence), len);
-  }
+    void
+    inject_nmea (const char *sentence) noexcept {
+        if (sentence == nullptr)
+            return;
+        uint16_t len = 0u;
+        while (sentence[len] != '\0')
+            ++len;
+        inject_rx (reinterpret_cast<const uint8_t *> (sentence), len);
+    }
 #endif
 
-private:
+  private:
 #if defined(PICO_RP2040)
 #include "hardware/uart.h"
-  uart_inst_t *_M_inst = nullptr;
+    uart_inst_t *_M_inst = nullptr;
 #endif
-  bool _M_open = false;
-  detail::PortableRing _M_rx{256u};
-  detail::PortableRing _M_tx{256u};
+    bool _M_open = false;
+    detail::PortableRing _M_rx{256u};
+    detail::PortableRing _M_tx{256u};
 };
 
 /** @brief Return the single shared bus instance (function-local static). */
 Rp2040GnssBus &
 bus_ref () noexcept {
 #if defined(PICO_RP2040)
-  static Rp2040GnssBus _S_bus (nullptr);
+    static Rp2040GnssBus _S_bus (nullptr);
 #else
-  static Rp2040GnssBus _S_bus;
+    static Rp2040GnssBus _S_bus;
 #endif
-  return _S_bus;
+    return _S_bus;
 }
 
 [[nodiscard]] zzs::kernel::Status
 _S_open (void) noexcept {
-  return bus_ref ().open ();
+    return bus_ref ().open ();
 }
 
 [[nodiscard]] zzs::kernel::Status
 _S_close (void) noexcept {
-  return bus_ref ().close ();
+    return bus_ref ().close ();
 }
 
 [[nodiscard]] zzs::kernel::Status
 _S_read_bytes (uint8_t *buf, uint16_t max_bytes, uint16_t *filled) noexcept {
-  return bus_ref ().read_bytes (buf, max_bytes, filled);
+    return bus_ref ().read_bytes (buf, max_bytes, filled);
 }
 
 [[nodiscard]] zzs::kernel::Status
 _S_write_bytes (const uint8_t *buf, uint16_t len) noexcept {
-  return bus_ref ().write_bytes (buf, len);
+    return bus_ref ().write_bytes (buf, len);
 }
 
 void
 _S_delay_ms (uint32_t ms) noexcept {
-  bus_ref ().delay_ms (ms);
+    bus_ref ().delay_ms (ms);
 }
 
 [[nodiscard]] zzs::kernel::Status
 _S_flush_rx (void) noexcept {
-  return bus_ref ().flush_rx ();
+    return bus_ref ().flush_rx ();
 }
 
 [[nodiscard]] bool
 _S_is_open (void) noexcept {
-  return bus_ref ().is_open ();
+    return bus_ref ().is_open ();
 }
 
 /** @brief The single vtable (const, lives in .rodata). */
@@ -217,8 +217,8 @@ static const GnssPlatformHal _S_hal = {
 
 [[nodiscard]] const GnssPlatformHal *
 create_rp2040_gnss_hal () noexcept {
-  (void) bus_ref ();
-  return &_S_hal;
+    (void) bus_ref ();
+    return &_S_hal;
 }
 
 } // namespace zzs::kernel::device::driver::gnss::platform::rp2040

@@ -38,7 +38,7 @@ namespace zzs::mllee_native {
 inline constexpr uint16_t kDefaultSeed = 0xC0DEu;
 
 /** @brief Default class distribution (per-mille): 60% normal, 25% outage, 15% transition. */
-inline constexpr zzs::mllee_native::dataset::GenerationParams kDefaultParams{
+inline constexpr zzs::mllee_native::dataset::GenParam kDefaultParams{
     kDefaultSeed, 64u, /* num_samples */
     600u,              /* normal ratio */
     250u,              /* outage ratio */
@@ -51,13 +51,13 @@ inline constexpr auto g_dataset = zzs::mllee_native::dataset_gen::generate_datas
 /** @brief Number of samples in the compile-time dataset. */
 [[nodiscard]] constexpr uint32_t
 dataset_count () noexcept {
-  return g_dataset._M_count;
+    return g_dataset._M_count;
 }
 
 /** @brief Read-only access to sample i. */
 [[nodiscard]] constexpr const zzs::mllee_native::dataset::TrainingSample &
 dataset_sample (uint32_t i) noexcept {
-  return g_dataset._M_samples[i];
+    return g_dataset._M_samples[i];
 }
 
 /** @} */

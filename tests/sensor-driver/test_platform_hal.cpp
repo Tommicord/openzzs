@@ -20,22 +20,18 @@
  *        reads, channel enable/disable, channel rate query).
  */
 
-#include <catch2/catch_test_macros.hpp>
-
-#include <cstdint>
-
 #include "kernel/sensor-driver/fixed/q15.hpp"
 #include "kernel/sensor-driver/fixed/q31.hpp"
-
 #include "test_mock_bus.hpp"
 
-namespace
-{
+#include <catch2/catch_test_macros.hpp>
+#include <cstdint>
+
+namespace {
 using namespace zzs::kernel::sensor::driver::fixed;
 } // namespace
 
-TEST_CASE ("HAL initialization", "[sensor-driver][platform-hal][init]")
-{
+TEST_CASE ("HAL initialization", "[sensor-driver][platform-hal][init]") {
     test::MockHal hal;
     REQUIRE (hal.is_initialized () == false);
 
@@ -43,8 +39,7 @@ TEST_CASE ("HAL initialization", "[sensor-driver][platform-hal][init]")
     REQUIRE (hal.is_initialized () == true);
 }
 
-TEST_CASE ("Sample read returns Q15 values", "[sensor-driver][platform-hal][sample]")
-{
+TEST_CASE ("Sample read returns Q15 values", "[sensor-driver][platform-hal][sample]") {
     test::MockHal hal;
     REQUIRE (hal.init () == true);
 
@@ -57,8 +52,7 @@ TEST_CASE ("Sample read returns Q15 values", "[sensor-driver][platform-hal][samp
     REQUIRE (hal.read_channel (2) == _S_q15_max);
 }
 
-TEST_CASE ("Channel enable/disable", "[sensor-driver][platform-hal][channel]")
-{
+TEST_CASE ("Channel enable/disable", "[sensor-driver][platform-hal][channel]") {
     test::MockHal hal;
     REQUIRE (hal.init () == true);
 
@@ -69,8 +63,7 @@ TEST_CASE ("Channel enable/disable", "[sensor-driver][platform-hal][channel]")
     REQUIRE (hal.channel_enabled (0) == false);
 }
 
-TEST_CASE ("Channel rate query", "[sensor-driver][platform-hal][rate]")
-{
+TEST_CASE ("Channel rate query", "[sensor-driver][platform-hal][rate]") {
     test::MockHal hal;
     REQUIRE (hal.init () == true);
 
@@ -79,8 +72,7 @@ TEST_CASE ("Channel rate query", "[sensor-driver][platform-hal][rate]")
     REQUIRE (hal.channel_rate_hz (11) == 100u);
 }
 
-TEST_CASE ("Error: NULL HAL, uninitialized HAL", "[sensor-driver][platform-hal][error]")
-{
+TEST_CASE ("Error: NULL HAL, uninitialized HAL", "[sensor-driver][platform-hal][error]") {
     test::MockHal hal;
 
     /* Uninitialized HAL: reads return 0 (default value), channel not enabled. */

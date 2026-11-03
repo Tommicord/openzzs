@@ -35,8 +35,7 @@
 namespace zzs::kernel::device::driver::wifi::platform::rtlinux {
 
 /** @brief Build the RTLinux WiFi HAL vtable. */
-[[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *,
-                              zzs::kernel::Status>
+[[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *, zzs::kernel::Status>
 create_rtlinux_wifi_hal (WifiHal &hal_out) noexcept;
 
 /** @} */

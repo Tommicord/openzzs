@@ -38,13 +38,13 @@ namespace zzs::kernel::sensor::battery {
 /** @brief Battery channel id. */
 inline constexpr sensor::Channel
 channel (void) noexcept {
-  return sensor::Channel::BATTERY;
+    return sensor::Channel::BATTERY;
 }
 
 /** @brief Battery sample rate (Hz), from the platform HAL table. */
 [[nodiscard]] inline constexpr uint32_t
 rate_hz (void) noexcept {
-  return zzs::kernel::_S_battery_rate_hz;
+    return zzs::kernel::_S_battery_rate_hz;
 }
 
 /** @} */

@@ -35,62 +35,62 @@ namespace zzs::mllee::onnx {
  */
 [[nodiscard]] constexpr bool
 add_overflow_u32 (const uint32_t lhs, const uint32_t rhs, uint32_t &out) noexcept {
-  if (rhs > 0xFFFFFFFFu - lhs)
-    return true;
-  out = lhs + rhs;
-  return false;
+    if (rhs > 0xFFFFFFFFu - lhs)
+        return true;
+    out = lhs + rhs;
+    return false;
 }
 
 [[nodiscard]] constexpr bool
 add_overflow_u64 (const uint64_t lhs, const uint64_t rhs, uint64_t &out) noexcept {
-  if (rhs > 0xFFFFFFFFFFFFFFFFull - lhs)
-    return true;
-  out = lhs + rhs;
-  return false;
+    if (rhs > 0xFFFFFFFFFFFFFFFFull - lhs)
+        return true;
+    out = lhs + rhs;
+    return false;
 }
 
 [[nodiscard]] constexpr bool
 mul_overflow_u64 (const uint64_t lhs, const uint64_t rhs, uint64_t &out) noexcept {
-  if (lhs != 0u && rhs > 0xFFFFFFFFFFFFFFFFull / lhs)
-    return true;
-  out = lhs * rhs;
-  return false;
+    if (lhs != 0u && rhs > 0xFFFFFFFFFFFFFFFFull / lhs)
+        return true;
+    out = lhs * rhs;
+    return false;
 }
 
 [[nodiscard]] constexpr uint32_t
 saturate_u32 (const uint64_t value) noexcept {
-  return value > 0xFFFFFFFFull ? 0xFFFFFFFFu : static_cast<uint32_t> (value);
+    return value > 0xFFFFFFFFull ? 0xFFFFFFFFu : static_cast<uint32_t> (value);
 }
 
 [[nodiscard]] constexpr uint16_t
 saturate_u16 (const uint32_t value) noexcept {
-  return value > 0xFFFFu ? 0xFFFFu : static_cast<uint16_t> (value);
+    return value > 0xFFFFu ? 0xFFFFu : static_cast<uint16_t> (value);
 }
 
 [[nodiscard]] constexpr uint8_t
 saturate_u8 (const uint32_t value) noexcept {
-  return value > 0xFFu ? 0xFFu : static_cast<uint8_t> (value);
+    return value > 0xFFu ? 0xFFu : static_cast<uint8_t> (value);
 }
 
 /** @brief Saturating increment that also reports that it stuck at the maximum. */
 template <typename T>
 [[nodiscard]] constexpr bool
 saturating_increment (T &value, const T maximum) noexcept {
-  if (value == maximum)
-    return false;
-  ++value;
-  return true;
+    if (value == maximum)
+        return false;
+    ++value;
+    return true;
 }
 
 /** @brief Convert a signed wire integer to a non-negative 32-bit length. */
 [[nodiscard]] constexpr bool
 non_negative_u32 (const int64_t value, uint32_t &out) noexcept {
-  if (value < 0)
-    return false;
-  if (static_cast<uint64_t> (value) > 0xFFFFFFFFull)
-    return false;
-  out = static_cast<uint32_t> (value);
-  return true;
+    if (value < 0)
+        return false;
+    if (static_cast<uint64_t> (value) > 0xFFFFFFFFull)
+        return false;
+    out = static_cast<uint32_t> (value);
+    return true;
 }
 
 /**
@@ -102,14 +102,14 @@ non_negative_u32 (const int64_t value, uint32_t &out) noexcept {
  */
 [[nodiscard]] constexpr bool
 packed_bytes (const uint8_t bits, const uint64_t elements, uint64_t &out) noexcept {
-  if (bits == 0u)
-    return false;
-  uint64_t product = 0;
-  if (mul_overflow_u64 (elements, bits, product))
-    return false;
-  if (add_overflow_u64 (product, 7u, product))
-    return false;
-  out = product / 8u;
-  return true;
+    if (bits == 0u)
+        return false;
+    uint64_t product = 0;
+    if (mul_overflow_u64 (elements, bits, product))
+        return false;
+    if (add_overflow_u64 (product, 7u, product))
+        return false;
+    out = product / 8u;
+    return true;
 }
 } // namespace zzs::mllee::onnx

@@ -46,61 +46,61 @@ namespace {
 /** @brief Radio-control hook: reset (portable functional stub). */
 [[nodiscard]] zzs::kernel::Status
 _S_reset () noexcept {
-  return zzs::kernel::Status::UNSUPPORTED;
+    return zzs::kernel::Status::UNSUPPORTED;
 }
 
 /** @brief Radio-control hook: set channel (validated). */
 [[nodiscard]] zzs::kernel::Status
 _S_set_channel (uint8_t channel) noexcept {
-  (void) channel;
+    (void) channel;
 
-  return zzs::kernel::Status::UNSUPPORTED;
+    return zzs::kernel::Status::UNSUPPORTED;
 }
 
 /** @brief Radio-control hook: set country (validated). */
 [[nodiscard]] zzs::kernel::Status
 _S_set_country (const char cc[2]) noexcept {
-  (void) cc;
+    (void) cc;
 
-  return zzs::kernel::Status::UNSUPPORTED;
+    return zzs::kernel::Status::UNSUPPORTED;
 }
 
 /** @brief Radio-control hook: MAC address (returns all-zeros; the real HAL
  *         reads the factory-programmed MAC from the WiFi module EEPROM). */
 [[nodiscard]] zzs::kernel::Status
 _S_mac_addr (uint8_t mac[6]) noexcept {
-  (void) mac;
-  return zzs::kernel::Status::UNSUPPORTED;
+    (void) mac;
+    return zzs::kernel::Status::UNSUPPORTED;
 }
 
 /** @brief Radio-control hook: delay (portable stub; replaced by a timer
  *         on the real platform). */
 void
 _S_delay_ms (uint32_t ms) noexcept {
-  (void) ms;
+    (void) ms;
 }
 
 } // namespace
 
 [[nodiscard]] zzs::base::Maybe<zzs::kernel::device::driver::StreamBusInterface *, zzs::kernel::Status>
 create_beaglebone_wifi_hal (WifiHal &hal_out) noexcept {
-  /* Populate the radio-control vtable with validated hooks.  No bus is
-   * created (the application supplies its own stream bus over the
-   * BeagleBone UART device).  On a real device the hooks would drive the
-   * module; on the host they report UNSUPPORTED because no hardware is
-   * present. */
-  hal_out._M_reset = &_S_reset;
-  hal_out._M_set_channel = &_S_set_channel;
-  hal_out._M_set_country = &_S_set_country;
-  hal_out._M_mac_addr = &_S_mac_addr;
-  hal_out._M_delay_ms = &_S_delay_ms;
+    /* Populate the radio-control vtable with validated hooks.  No bus is
+     * created (the application supplies its own stream bus over the
+     * BeagleBone UART device).  On a real device the hooks would drive the
+     * module; on the host they report UNSUPPORTED because no hardware is
+     * present. */
+    hal_out._M_reset = &_S_reset;
+    hal_out._M_set_channel = &_S_set_channel;
+    hal_out._M_set_country = &_S_set_country;
+    hal_out._M_mac_addr = &_S_mac_addr;
+    hal_out._M_delay_ms = &_S_delay_ms;
 #if defined(__linux__)
-  /* Real implementation: open the BeagleBone UART device and export GPIO
-   * chip-select lines via sysfs for a WiFi module.  Not available on the
-   * host, so the bus is unsupported. */
-  (void) hal_out;
+    /* Real implementation: open the BeagleBone UART device and export GPIO
+     * chip-select lines via sysfs for a WiFi module.  Not available on the
+     * host, so the bus is unsupported. */
+    (void) hal_out;
 #endif
-  return zzs::kernel::Status::UNSUPPORTED;
+    return zzs::kernel::Status::UNSUPPORTED;
 }
 
 /** @} */

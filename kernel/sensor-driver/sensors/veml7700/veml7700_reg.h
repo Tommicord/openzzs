@@ -29,8 +29,7 @@
  * ambient light sensor.  Integer-only; no float.  Lux is computed in Q11.
  * @{
  */
-namespace zzs::kernel::sensor::driver::sensors::veml7700
-{
+namespace zzs::kernel::sensor::driver::sensors::veml7700 {
 
 /** @brief I2C address (fixed). */
 inline constexpr uint8_t I2cAddr = 0x10;
@@ -41,8 +40,8 @@ inline constexpr uint8_t RegAlsConf = 0x00;
 inline constexpr uint16_t AlsConfGainMask = 0x7000;   /* bits [14:12] ALS gain */
 inline constexpr uint16_t AlsConfGain1_6x = 0x0000;   /* 1/6x */
 inline constexpr uint16_t AlsConfGain1_4x = 0x1000;   /* 1/4x (default) */
-inline constexpr uint16_t AlsConfGain1x   = 0x5000;   /* 1x */
-inline constexpr uint16_t AlsConfGain2x   = 0x7000;   /* 2x */
+inline constexpr uint16_t AlsConfGain1x = 0x5000;     /* 1x */
+inline constexpr uint16_t AlsConfGain2x = 0x7000;     /* 2x */
 inline constexpr uint16_t AlsConfIntegMask = 0x0C00;  /* bits [11:10] integration time */
 inline constexpr uint16_t AlsConfInteg25ms = 0x0000;  /* 25 ms */
 inline constexpr uint16_t AlsConfInteg50ms = 0x0400;  /* 50 ms */

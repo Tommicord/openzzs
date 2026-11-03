@@ -73,32 +73,32 @@ inline constexpr int32_t _S_code_to_q15_scale = 258;
 
 [[nodiscard]] inline constexpr int32_t
 code_to_q15 (const int32_t code) noexcept {
-  return code * _S_code_to_q15_scale;
+    return code * _S_code_to_q15_scale;
 }
 
 [[nodiscard]] inline constexpr int8_t
 q15_to_code (const int32_t value_q15) noexcept {
-  return _S_i8_code (_S_round_shift (static_cast<int64_t> (value_q15) * 127, _S_grad_frac_bits));
+    return _S_i8_code (_S_round_shift (static_cast<int64_t> (value_q15) * 127, _S_grad_frac_bits));
 }
 
 /** @brief Saturating narrowing of an int32 Q15 intermediate into int16 storage. */
 [[nodiscard]] inline constexpr int16_t
 q15_to_i16_sat (const int32_t value) noexcept {
-  if (value > _S_q15_max)
-    return static_cast<int16_t> (_S_q15_max);
-  if (value < _S_q15_min)
-    return static_cast<int16_t> (_S_q15_min);
-  return static_cast<int16_t> (value);
+    if (value > _S_q15_max)
+        return static_cast<int16_t> (_S_q15_max);
+    if (value < _S_q15_min)
+        return static_cast<int16_t> (_S_q15_min);
+    return static_cast<int16_t> (value);
 }
 
 /** @brief Saturating clamp of a Q15 int32 to the Q15 range. */
 [[nodiscard]] inline constexpr int32_t
 q15_clamp (const int32_t value) noexcept {
-  if (value > _S_q15_max)
-    return _S_q15_max;
-  if (value < _S_q15_min)
-    return _S_q15_min;
-  return value;
+    if (value > _S_q15_max)
+        return _S_q15_max;
+    if (value < _S_q15_min)
+        return _S_q15_min;
+    return value;
 }
 
 /** @} */
@@ -116,71 +116,71 @@ q15_clamp (const int32_t value) noexcept {
  *         (ties go toward +infinity, so the bias is +0.5 LSB, not sign-symmetric). */
 [[nodiscard]] inline constexpr int32_t
 q15_mul (const int32_t a, const int32_t b) noexcept {
-  return q15_clamp (_S_round_shift (static_cast<int64_t> (a) * b, _S_grad_frac_bits));
+    return q15_clamp (_S_round_shift (static_cast<int64_t> (a) * b, _S_grad_frac_bits));
 }
 
 /** @brief (a * b) / 2^15 truncated toward minus infinity (cheaper, biased). */
 [[nodiscard]] inline constexpr int32_t
 q15_mul_trunc (const int32_t a, const int32_t b) noexcept {
-  return q15_clamp (static_cast<int32_t> ((static_cast<int64_t> (a) * b) >> _S_grad_frac_bits));
+    return q15_clamp (static_cast<int32_t> ((static_cast<int64_t> (a) * b) >> _S_grad_frac_bits));
 }
 
 /** @brief (a * b + round) >> shift for an int64 accumulator, saturating to Q15. */
 [[nodiscard]] inline constexpr int32_t
 q15_requant (const int64_t accumulator, const uint32_t shift) noexcept {
-  return q15_clamp (_S_round_shift (accumulator, shift));
+    return q15_clamp (_S_round_shift (accumulator, shift));
 }
 
 /** @brief a / b in Q15 (a and b are both Q15); b == 0 yields 0, never a trap. */
 [[nodiscard]] inline constexpr int32_t
 q15_div (const int32_t a, const int32_t b) noexcept {
-  if (b == 0)
-    return 0;
-  const int64_t scaled = (static_cast<int64_t> (a) << _S_grad_frac_bits) / b;
-  return q15_clamp (
-      static_cast<int32_t> (scaled > _S_q15_max ? _S_q15_max : (scaled < _S_q15_min ? _S_q15_min : scaled)));
+    if (b == 0)
+        return 0;
+    const int64_t scaled = (static_cast<int64_t> (a) << _S_grad_frac_bits) / b;
+    return q15_clamp (
+        static_cast<int32_t> (scaled > _S_q15_max ? _S_q15_max : (scaled < _S_q15_min ? _S_q15_min : scaled)));
 }
 
 /** @brief Saturating Q15 sum of two Q15 values. */
 [[nodiscard]] inline constexpr int32_t
 q15_add_sat (const int32_t a, const int32_t b) noexcept {
-  return q15_clamp (a + b);
+    return q15_clamp (a + b);
 }
 
 /** @brief Saturating Q15 difference of two Q15 values. */
 [[nodiscard]] inline constexpr int32_t
 q15_sub_sat (const int32_t a, const int32_t b) noexcept {
-  return q15_clamp (a - b);
+    return q15_clamp (a - b);
 }
 
 /** @brief a * b / 2^shift with rounding, for an int32 accumulator and a small shift. */
 [[nodiscard]] inline constexpr int32_t
 q15_scale_shift (const int32_t a, const int32_t b, const uint32_t shift) noexcept {
-  return static_cast<int32_t> ((static_cast<int64_t> (a) * b + (static_cast<int64_t> (1) << (shift - 1u))) >> shift);
+    return static_cast<int32_t> ((static_cast<int64_t> (a) * b + (static_cast<int64_t> (1) << (shift - 1u))) >> shift);
 }
 
 /** @brief 1024-iteration-free reciprocal: floor(2^30 / x) saturating to Q15. */
 [[nodiscard]] inline constexpr int32_t
 q15_reciprocal (const int32_t x_q15) noexcept {
-  if (x_q15 <= 0)
-    return _S_q15_max;
-  const int64_t scaled = (static_cast<int64_t> (1) << 30) / x_q15;
-  return static_cast<int32_t> (scaled > _S_q15_max ? _S_q15_max : scaled);
+    if (x_q15 <= 0)
+        return _S_q15_max;
+    const int64_t scaled = (static_cast<int64_t> (1) << 30) / x_q15;
+    return static_cast<int32_t> (scaled > _S_q15_max ? _S_q15_max : scaled);
 }
 
 /** @brief sqrt in Q15: sqrt(x * 2^15) using the core's integer square root. */
 [[nodiscard]] inline constexpr int32_t
 q15_sqrt (const int32_t x_q15) noexcept {
-  if (x_q15 <= 0)
-    return 0;
-  const uint32_t scaled = static_cast<uint32_t> (x_q15) << _S_grad_frac_bits;
-  return static_cast<int32_t> (_S_isqrt (scaled));
+    if (x_q15 <= 0)
+        return 0;
+    const uint32_t scaled = static_cast<uint32_t> (x_q15) << _S_grad_frac_bits;
+    return static_cast<int32_t> (_S_isqrt (scaled));
 }
 
 /** @brief Integer absolute value of a Q15 value (no INT_MIN aliasing). */
 [[nodiscard]] inline constexpr int32_t
 q15_abs (const int32_t value) noexcept {
-  return value < 0 ? -value : value;
+    return value < 0 ? -value : value;
 }
 
 /** @} */
@@ -231,69 +231,69 @@ inline constexpr int32_t _S_exp_clamp_q15 = 262144;
  *         two Q15 quantities that exceeds 1.0 still evaluates correctly. */
 [[nodiscard]] inline constexpr int32_t
 ratio_q15 (const int32_t num, const int32_t den) noexcept {
-  if (den == 0)
-    return 0;
-  const int64_t scaled = (static_cast<int64_t> (num) << 15) / den;
-  return q15_clamp (
-      static_cast<int32_t> (scaled > _S_q15_max ? _S_q15_max : (scaled < -_S_q15_one ? -_S_q15_one : scaled)));
+    if (den == 0)
+        return 0;
+    const int64_t scaled = (static_cast<int64_t> (num) << 15) / den;
+    return q15_clamp (
+        static_cast<int32_t> (scaled > _S_q15_max ? _S_q15_max : (scaled < -_S_q15_one ? -_S_q15_one : scaled)));
 }
 
 /** @brief exp(-t) in Q15 for t >= 0, interpolated on the inference exp table. */
 [[nodiscard]] inline constexpr int32_t
 q15_exp_neg (const int32_t t_q15) noexcept {
-  if (t_q15 <= 0)
-    return _S_q15_max;
-  const int64_t scaled = static_cast<int64_t> (t_q15) * 8;
-  const int32_t index = static_cast<int32_t> (scaled >> 15);
-  if (index >= 255)
-    return 0;
-  const int32_t fraction = static_cast<int32_t> (scaled & 0x7FFFu);
-  const int32_t low = _S_exp_table._M_value[static_cast<uint32_t> (index)];
-  const int32_t high = _S_exp_table._M_value[static_cast<uint32_t> (index + 1)];
-  return low + (static_cast<int32_t> (high - low) * fraction >> 15);
+    if (t_q15 <= 0)
+        return _S_q15_max;
+    const int64_t scaled = static_cast<int64_t> (t_q15) * 8;
+    const int32_t index = static_cast<int32_t> (scaled >> 15);
+    if (index >= 255)
+        return 0;
+    const int32_t fraction = static_cast<int32_t> (scaled & 0x7FFFu);
+    const int32_t low = _S_exp_table._M_value[static_cast<uint32_t> (index)];
+    const int32_t high = _S_exp_table._M_value[static_cast<uint32_t> (index + 1)];
+    return low + (static_cast<int32_t> (high - low) * fraction >> 15);
 }
 
 /** @brief exp(x) in Q15.  x > 0 would exceed 1.0 and clamps to the Q15 max. */
 [[nodiscard]] inline constexpr int32_t
 q15_exp (const int32_t x_q15) noexcept {
-  return x_q15 <= 0 ? q15_exp_neg (-x_q15) : _S_q15_max;
+    return x_q15 <= 0 ? q15_exp_neg (-x_q15) : _S_q15_max;
 }
 
 /** @brief exp(x) for an x already in Q7 log units, result in Q15. */
 [[nodiscard]] inline constexpr int32_t
 q15_exp_q7 (const int32_t x_q7) noexcept {
-  return q15_exp (x_q7 << 8);
+    return q15_exp (x_q7 << 8);
 }
 
 /** @brief tanh(x) for x in Q15, over the full +/-8 domain. */
 [[nodiscard]] inline constexpr int32_t
 q15_tanh (const int32_t x_q15) noexcept {
-  const int32_t magnitude = x_q15 < 0 ? -x_q15 : x_q15;
-  const int32_t clamped = magnitude > _S_exp_clamp_q15 ? _S_exp_clamp_q15 : magnitude;
-  const int32_t decay = q15_exp_neg (2 * clamped);
-  const int32_t value = ratio_q15 (_S_q15_one - 1 - decay, _S_q15_one + decay);
-  return x_q15 < 0 ? -value : value;
+    const int32_t magnitude = x_q15 < 0 ? -x_q15 : x_q15;
+    const int32_t clamped = magnitude > _S_exp_clamp_q15 ? _S_exp_clamp_q15 : magnitude;
+    const int32_t decay = q15_exp_neg (2 * clamped);
+    const int32_t value = ratio_q15 (_S_q15_one - 1 - decay, _S_q15_one + decay);
+    return x_q15 < 0 ? -value : value;
 }
 
 /** @brief sigmoid(x) = 1 / (1 + exp(-x)) in Q15; saturates at the Q15 edges. */
 [[nodiscard]] inline constexpr int32_t
 q15_sigmoid (const int32_t x_q15) noexcept {
-  if (x_q15 <= -_S_exp_clamp_q15)
-    return 0;
-  if (x_q15 >= _S_exp_clamp_q15)
-    return _S_q15_max;
-  /* exp(-x) only represents x >= 0, so the negative half uses
-     sigmoid(-a) = 1 - sigmoid(a) instead of an unrepresentable exp. */
-  if (x_q15 >= 0)
-    return ratio_q15 (_S_q15_one, _S_q15_one + q15_exp_neg (x_q15));
-  const int32_t mirrored = ratio_q15 (_S_q15_one, _S_q15_one + q15_exp_neg (-x_q15));
-  return _S_q15_one - mirrored;
+    if (x_q15 <= -_S_exp_clamp_q15)
+        return 0;
+    if (x_q15 >= _S_exp_clamp_q15)
+        return _S_q15_max;
+    /* exp(-x) only represents x >= 0, so the negative half uses
+       sigmoid(-a) = 1 - sigmoid(a) instead of an unrepresentable exp. */
+    if (x_q15 >= 0)
+        return ratio_q15 (_S_q15_one, _S_q15_one + q15_exp_neg (x_q15));
+    const int32_t mirrored = ratio_q15 (_S_q15_one, _S_q15_one + q15_exp_neg (-x_q15));
+    return _S_q15_one - mirrored;
 }
 
 /** @brief sigmoid'(x) = s * (1 - s) in Q15, without a second exp evaluation. */
 [[nodiscard]] inline constexpr int32_t
 q15_sigmoid_grad (const int32_t s_q15) noexcept {
-  return q15_mul (s_q15, _S_q15_one - 1 - s_q15);
+    return q15_mul (s_q15, _S_q15_one - 1 - s_q15);
 }
 
 /**
@@ -307,67 +307,67 @@ q15_sigmoid_grad (const int32_t s_q15) noexcept {
  */
 [[nodiscard]] inline constexpr int32_t
 q15_log_q15 (const int32_t p_q15) noexcept {
-  if (p_q15 <= 0)
-    return _S_q15_min;
-  /* Normalize p to the [0.5, 1) window: p = m * 2^-n with m in Q15. */
-  uint32_t shifted = static_cast<uint32_t> (p_q15);
-  int32_t n = 0;
-  while (shifted < 16384u) {
-    shifted <<= 1;
-    ++n;
-  }
-  while (shifted >= _S_q15_one) {
-    shifted >>= 1;
-    --n;
-  }
-  const int32_t m = static_cast<int32_t> (shifted);
-  /* ln m = 2 * atanh((m - 1) / (m + 1)), series in u^2 (|u| <= 1/3). */
-  const int32_t u = ratio_q15 (m - _S_q15_one, m + _S_q15_one);
-  const int32_t u2 = q15_mul (u, u);
-  const int32_t inner = q15_mul (u2, 6554) + 10923;         /* u2/5 + 1/3 */
-  const int32_t bracket = q15_mul (u2, inner) + _S_q15_one; /* 1 + u2/3 + u2^2/5 */
-  const int32_t ln_m = 2 * q15_mul (u, bracket);
-  /* ln p = ln m - n * ln 2, still in Q15. */
-  return ln_m - n * _S_ln2_q15;
+    if (p_q15 <= 0)
+        return _S_q15_min;
+    /* Normalize p to the [0.5, 1) window: p = m * 2^-n with m in Q15. */
+    uint32_t shifted = static_cast<uint32_t> (p_q15);
+    int32_t n = 0;
+    while (shifted < 16384u) {
+        shifted <<= 1;
+        ++n;
+    }
+    while (shifted >= _S_q15_one) {
+        shifted >>= 1;
+        --n;
+    }
+    const int32_t m = static_cast<int32_t> (shifted);
+    /* ln m = 2 * atanh((m - 1) / (m + 1)), series in u^2 (|u| <= 1/3). */
+    const int32_t u = ratio_q15 (m - _S_q15_one, m + _S_q15_one);
+    const int32_t u2 = q15_mul (u, u);
+    const int32_t inner = q15_mul (u2, 6554) + 10923;         /* u2/5 + 1/3 */
+    const int32_t bracket = q15_mul (u2, inner) + _S_q15_one; /* 1 + u2/3 + u2^2/5 */
+    const int32_t ln_m = 2 * q15_mul (u, bracket);
+    /* ln p = ln m - n * ln 2, still in Q15. */
+    return ln_m - n * _S_ln2_q15;
 }
 
 /** @brief log(p) in Q7 for a positive Q15 p; p <= 0 maps to the -inf sentinel. */
 [[nodiscard]] inline constexpr int32_t
 q7_log_q15 (const int32_t p_q15) noexcept {
-  if (p_q15 <= 0)
-    return _S_q15_min;
-  const int32_t result = _S_round_shift (static_cast<int64_t> (q15_log_q15 (p_q15)) * _S_q7_one, 15u);
-  return result < _S_q15_min ? _S_q15_min : result;
+    if (p_q15 <= 0)
+        return _S_q15_min;
+    const int32_t result = _S_round_shift (static_cast<int64_t> (q15_log_q15 (p_q15)) * _S_q7_one, 15u);
+    return result < _S_q15_min ? _S_q15_min : result;
 }
 
 /** @brief -log(p) in Q7, never negative: the cross-entropy primitive. */
 [[nodiscard]] inline constexpr int32_t
 q7_neg_log_q15 (const int32_t p_q15) noexcept {
-  const int32_t l = q7_log_q15 (p_q15);
-  return l > 0 ? 0 : -l;
+    const int32_t l = q7_log_q15 (p_q15);
+    return l > 0 ? 0 : -l;
 }
 
 /** @brief Convert a Q15 magnitude to Q7 log units (only 1.0 -> 0 is meaningful). */
 [[nodiscard]] inline constexpr int32_t
 q7_from_q15 (const int32_t value_q15) noexcept {
-  return value_q15 >> 8;
+    return value_q15 >> 8;
 }
 
 /** @brief Convert Q7 log units back to Q15, saturating outside the Q15 window. */
 [[nodiscard]] inline constexpr int32_t
 q15_from_q7 (const int32_t value_q7) noexcept {
-  return q15_clamp (value_q7 << 8);
+    return q15_clamp (value_q7 << 8);
 }
 
 /** @brief ln(1 + exp(x)) in Q7 for x in Q15: the softplus/log-sum-exp atom. */
 [[nodiscard]] inline constexpr int32_t
 q7_log1p_exp (const int32_t x_q15) noexcept {
-  if (x_q15 > 8192) {
-    /* ln(1 + e^x) = x + ln(1 + e^-x) and the correction is under 0.001. */
-    const int32_t correction = q7_log_q15 (_S_q15_one + q15_exp_neg (x_q15));
-    return q7_from_q15 (x_q15) + correction;
-  }
-  return q7_log_q15 (_S_q15_one + q15_exp (x_q15));
+    if (x_q15 > 8192) {
+        /* ln(1 + e^x) = x + ln(1 + e^-x) and the correction is under 0.001. */
+        const int32_t correction = q7_log_q15 (_S_q15_one + q15_exp_neg (x_q15));
+        return q7_from_q15 (x_q15) + correction;
+    }
+    return q7_log_q15 (_S_q15_one + q15_exp (x_q15));
 }
 
 /** @} */
@@ -375,25 +375,25 @@ q7_log1p_exp (const int32_t x_q15) noexcept {
 /** @brief Round-half-away-from-zero division of two int32 values (no floats). */
 [[nodiscard]] inline constexpr int32_t
 div_round (int32_t numerator, const int32_t denominator) noexcept {
-  if (denominator == 0)
-    return 0;
-  const bool negative = (numerator < 0) != (denominator < 0);
-  if (numerator < 0)
-    numerator = -numerator;
-  const int32_t absolute_denominator = denominator < 0 ? -denominator : denominator;
-  const int32_t quotient = (numerator + absolute_denominator / 2) / absolute_denominator;
-  return negative ? -quotient : quotient;
+    if (denominator == 0)
+        return 0;
+    const bool negative = (numerator < 0) != (denominator < 0);
+    if (numerator < 0)
+        numerator = -numerator;
+    const int32_t absolute_denominator = denominator < 0 ? -denominator : denominator;
+    const int32_t quotient = (numerator + absolute_denominator / 2) / absolute_denominator;
+    return negative ? -quotient : quotient;
 }
 
 /** @brief Smallest multiple of @p alignment that is >= @p value. */
 [[nodiscard]] inline constexpr uint32_t
 align_up (const uint32_t value, const uint32_t alignment) noexcept {
-  return (value + alignment - 1u) & ~(alignment - 1u);
+    return (value + alignment - 1u) & ~(alignment - 1u);
 }
 
 /** @brief True when @p value is a valid Q15 gradient lane. */
 [[nodiscard]] inline constexpr bool
 q15_in_range (const int32_t value) noexcept {
-  return value >= _S_q15_min && value <= _S_q15_max;
+    return value >= _S_q15_min && value <= _S_q15_max;
 }
 } // namespace zzs::mllee::train

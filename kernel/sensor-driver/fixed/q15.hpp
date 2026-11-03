@@ -60,19 +60,19 @@ using q15_t = int32_t;
 /** @brief Wrap a raw int16 as a Q15 value without range checking. */
 [[nodiscard]] inline constexpr q15_t
 q15_from_raw (const int16_t raw) noexcept {
-  return static_cast<q15_t> (raw);
+    return static_cast<q15_t> (raw);
 }
 
 /** @brief Return the raw int16 storage of a Q15 value. */
 [[nodiscard]] inline constexpr int16_t
 q15_to_raw (const q15_t value) noexcept {
-  return static_cast<int16_t> (value);
+    return static_cast<int16_t> (value);
 }
 
 /** @brief Saturating clamp of an arbitrary int32 into the Q15 range. */
 [[nodiscard]] inline constexpr q15_t
 q15_clamp (const int32_t value) noexcept {
-  return value > _S_q15_max ? _S_q15_max : (value < _S_q15_min ? _S_q15_min : value);
+    return value > _S_q15_max ? _S_q15_max : (value < _S_q15_min ? _S_q15_min : value);
 }
 
 /** @brief Saturating Q15 add.  Uses __builtin_add_overflow when available,
@@ -80,10 +80,10 @@ q15_clamp (const int32_t value) noexcept {
  *         range. */
 [[nodiscard]] inline constexpr q15_t
 q15_add (const q15_t lhs, const q15_t rhs) noexcept {
-  int32_t sum = 0;
-  if (_S_add_overflow (lhs, rhs, sum))
-    return rhs > 0 ? _S_q15_max : _S_q15_min;
-  return sum > _S_q15_max ? _S_q15_max : (sum < _S_q15_min ? _S_q15_min : sum);
+    int32_t sum = 0;
+    if (_S_add_overflow (lhs, rhs, sum))
+        return rhs > 0 ? _S_q15_max : _S_q15_min;
+    return sum > _S_q15_max ? _S_q15_max : (sum < _S_q15_min ? _S_q15_min : sum);
 }
 
 /** @brief Saturating Q15 subtract.  Uses __builtin_sub_overflow when
@@ -91,10 +91,10 @@ q15_add (const q15_t lhs, const q15_t rhs) noexcept {
  *         the Q15 range. */
 [[nodiscard]] inline constexpr q15_t
 q15_sub (const q15_t lhs, const q15_t rhs) noexcept {
-  int32_t diff = 0;
-  if (_S_sub_overflow (lhs, rhs, diff))
-    return rhs < 0 ? _S_q15_max : _S_q15_min;
-  return diff > _S_q15_max ? _S_q15_max : (diff < _S_q15_min ? _S_q15_min : diff);
+    int32_t diff = 0;
+    if (_S_sub_overflow (lhs, rhs, diff))
+        return rhs < 0 ? _S_q15_max : _S_q15_min;
+    return diff > _S_q15_max ? _S_q15_max : (diff < _S_q15_min ? _S_q15_min : diff);
 }
 
 /** @brief Q15 x Q15 -> Q15 with round-half-up and saturation.
@@ -104,9 +104,9 @@ q15_sub (const q15_t lhs, const q15_t rhs) noexcept {
  *  narrowing back to the Q15 int32 computation type with saturation. */
 [[nodiscard]] inline constexpr q15_t
 q15_mul (const q15_t lhs, const q15_t rhs) noexcept {
-  const int64_t wide = static_cast<int64_t> (lhs) * rhs;
-  const int64_t rounded = zzs::mllee::_S_round_shift (wide, _S_q15_frac_bits);
-  return rounded > _S_q15_max ? _S_q15_max : (rounded < _S_q15_min ? _S_q15_min : static_cast<q15_t> (rounded));
+    const int64_t wide = static_cast<int64_t> (lhs) * rhs;
+    const int64_t rounded = zzs::mllee::_S_round_shift (wide, _S_q15_frac_bits);
+    return rounded > _S_q15_max ? _S_q15_max : (rounded < _S_q15_min ? _S_q15_min : static_cast<q15_t> (rounded));
 }
 
 /** @brief Q15 x Q15 -> Q15 saturating multiply (explicit saturation helper).
@@ -115,33 +115,33 @@ q15_mul (const q15_t lhs, const q15_t rhs) noexcept {
  *  call site. */
 [[nodiscard]] inline constexpr q15_t
 q15_mul_sat (const q15_t lhs, const q15_t rhs) noexcept {
-  return q15_mul (lhs, rhs);
+    return q15_mul (lhs, rhs);
 }
 
 /** @brief Q15 absolute value.  INT16_MIN cannot alias its own negative, so
  *         the result clamps to INT16_MAX. */
 [[nodiscard]] inline constexpr q15_t
 q15_abs (const q15_t value) noexcept {
-  return value == _S_q15_min ? _S_q15_max : (value >= 0 ? value : -value);
+    return value == _S_q15_min ? _S_q15_max : (value >= 0 ? value : -value);
 }
 
 /** @brief Q11 -> Q15: shift left by 4 (gain 4 fraction bits). */
 [[nodiscard]] inline constexpr q15_t
 q15_from_q11 (const q11_t value) noexcept {
-  return value << 4;
+    return value << 4;
 }
 
 /** @brief Q15 -> Q11: shift right by 4 with round-half-up. */
 [[nodiscard]] inline constexpr q11_t
 q15_to_q11 (const q15_t value) noexcept {
-  return static_cast<q11_t> (zzs::mllee::_S_round_shift (static_cast<int64_t> (value), 4u));
+    return static_cast<q11_t> (zzs::mllee::_S_round_shift (static_cast<int64_t> (value), 4u));
 }
 
 /** @brief Q31 -> Q15: narrow with saturation.  Q31 has 31 fraction bits, so
  *         dropping 16 fraction bits maps a Q31 value onto the Q15 grid. */
 [[nodiscard]] inline constexpr q15_t
 q15_from_q31 (const int64_t q31) noexcept {
-  return q15_clamp (static_cast<int32_t> (q31 >> 16));
+    return q15_clamp (static_cast<int32_t> (q31 >> 16));
 }
 
 /** @} */
