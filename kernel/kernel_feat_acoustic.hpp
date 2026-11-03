@@ -72,26 +72,30 @@ struct _S_AcousticState {
   bool _M_configured;
 };
 
-/** @brief Configure acoustic from the envelope sample rate. */
+/** @brief Configure acoustic from the PCM sample rate (1 kHz, downsampled from
+ *         48 kHz AAudio capture).  Running at 1 kHz gives Nyquist 500 Hz, well
+ *         above the 120 Hz hum (2x mains on a 60 Hz grid) that the old 200 Hz
+ *         envelope path could not resolve. */
 [[nodiscard]] inline zzs::kernel::Status
 acoustic_configure (void *const state) noexcept {
   _S_AcousticState *const s = static_cast<_S_AcousticState *> (state);
   if (s == nullptr)
     return zzs::kernel::Status::OUT_OF_RANGE;
   if (s->_M_sample_rate_hz == 0u)
-    s->_M_sample_rate_hz = zzs::kernel::_S_envelope_rate_hz;
+    s->_M_sample_rate_hz = 1000u; /* PCM-fed at 1 kHz, not envelope at 200 Hz */
   if (s->_M_window_samples == 0u)
     s->_M_window_samples = zzs::kernel::_S_acoustic_samples;
 
-  /* Hum at 2*mains and the fundamental + 2nd/3rd harmonics for THD. */
-  const zzs::kernel::Status st0 =
-      zzs::kernel::dsp::goertzel_bin_configure (s->_M_hum_bin, zzs::kernel::_S_mains_low_hz * 2u, s->_M_sample_rate_hz);
+  /* Hum at 2*mains (120 Hz on 60 Hz grid) and the fundamental + harmonics
+     for THD.  All below Nyquist (500 Hz) at 1 kHz sample rate. */
+  const zzs::kernel::Status st0 = zzs::kernel::dsp::goertzel_bin_configure (
+      s->_M_hum_bin, zzs::kernel::_S_mains_freq_hz * 2u, s->_M_sample_rate_hz);
   const zzs::kernel::Status st1 =
-      zzs::kernel::dsp::goertzel_bin_configure (s->_M_h1_bin, zzs::kernel::_S_mains_low_hz, s->_M_sample_rate_hz);
+      zzs::kernel::dsp::goertzel_bin_configure (s->_M_h1_bin, zzs::kernel::_S_mains_freq_hz, s->_M_sample_rate_hz);
   const zzs::kernel::Status st2 =
-      zzs::kernel::dsp::goertzel_bin_configure (s->_M_h2_bin, zzs::kernel::_S_mains_low_hz * 2u, s->_M_sample_rate_hz);
+      zzs::kernel::dsp::goertzel_bin_configure (s->_M_h2_bin, zzs::kernel::_S_mains_freq_hz * 2u, s->_M_sample_rate_hz);
   const zzs::kernel::Status st3 =
-      zzs::kernel::dsp::goertzel_bin_configure (s->_M_h3_bin, zzs::kernel::_S_mains_low_hz * 3u, s->_M_sample_rate_hz);
+      zzs::kernel::dsp::goertzel_bin_configure (s->_M_h3_bin, zzs::kernel::_S_mains_freq_hz * 3u, s->_M_sample_rate_hz);
   if (st0 != zzs::kernel::Status::OK) {
     zzs::base::log_error ("acoustic_configure: goertzel_bin_configure={}", zzs::kernel::status_name (st0));
     return st0;

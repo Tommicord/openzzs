@@ -88,6 +88,11 @@ inline constexpr int32_t _S_sample_min = -32768;
 /** @brief Q15 value of 1.0, used as the exclusive ceiling of a saturated Q15. */
 inline constexpr int32_t _S_q15_one = 32768;
 
+/** @brief Q15 value of 1.0 as int16 (32767, since 32768 does not fit in int16).
+ *         Used for coefficient and gain storage where the wire format is int16.
+ *         32767/32768 ≈ 0.99997 — negligible error for unity gain. */
+inline constexpr int16_t _S_q15_one_i16 = 32767;
+
 /**
  * @brief Shift between the wire format and the resonator format.
  *

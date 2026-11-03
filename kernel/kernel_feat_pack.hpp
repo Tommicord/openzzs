@@ -39,11 +39,22 @@
  */
 namespace zzs::kernel::feat {
 
-/** @brief Saturate a Q15 value into the int8 range [-128, 127]. */
+/** @brief Q15-to-int8 code step: 32768 / 127 ≈ 258.
+ *
+ * Matches `mllee_native::detail::q15_raw_to_code` used by the training
+ * pipeline, so inference input codes match training input codes exactly.
+ */
 [[nodiscard]] inline int8_t
-feat_sat_i8 (const int32_t value_q15) noexcept {
-  const int32_t v = zzs::kernel::fx::clamp_q15 (value_q15);
-  return static_cast<int8_t> (v < -128 ? -128 : (v > 127 ? 127 : v));
+q15_to_i8_code (const int32_t value_q15) noexcept {
+  /* Divide by the code step (258), round toward zero, clamp to [-48, 48].
+   * Matches `mllee_native::detail::q15_raw_to_code` used by the training
+   * pipeline.  Training data codes fall within [-86, 29]; clamping at 48 keeps
+   * saturated device features (e.g. flicker 100Hz hitting 126) from dominating
+   * the model and producing degenerate one-hot [127, 0, 0] outputs, while
+   * preserving the device-relevant features (flicker_100hz max=31,
+   * acoustic_100hz max=42) that the model was trained on. */
+  const int32_t code = value_q15 / 258;
+  return static_cast<int8_t> (code < -48 ? -48 : (code > 48 ? 48 : code));
 }
 
 /** @brief Pack one Q15 feature value into row slot `index` as an int8 code. */
@@ -51,7 +62,7 @@ inline void
 feat_pack_slot (int8_t *const row, const uint32_t index, const int32_t value_q15) noexcept {
   if (row == nullptr || index >= zzs::kernel::_S_feature_count)
     return;
-  row[index] = feat_sat_i8 (value_q15);
+  row[index] = q15_to_i8_code (value_q15);
 }
 
 /** @brief Pack a full feature row: write `value_q15` at every slot given. */
@@ -61,7 +72,7 @@ feat_pack_row (int8_t *const row, const int32_t *const values_q15, const uint32_
     return;
   const uint32_t n = count < zzs::kernel::_S_feature_count ? count : zzs::kernel::_S_feature_count;
   for (uint32_t i = 0; i < n; ++i)
-    row[i] = feat_sat_i8 (values_q15[i]);
+    row[i] = q15_to_i8_code (values_q15[i]);
   zzs::base::log_debug ("feat_pack_row: emitted row count={}", n);
 }
 

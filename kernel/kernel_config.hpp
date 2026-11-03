@@ -240,16 +240,33 @@ inline constexpr uint32_t _S_resonator_max_samples = 256u;
 /**
  * @name Mains grid
  *
- * Both grids are carried because the deployment region is not known at build
- * time: the PLHR stage computes the 50 Hz and 60 Hz harmonic sets and the
- * feature vector reports the stronger one, so nothing in the kernel assumes a
- * country.  The bands are integer hertz, and every threshold derived from them
- * is computed from these numbers at run time rather than baked in.
+ * The deployment region is not known at build time, so the mains frequency is
+ * detected at run time from the sensor data (Goertzel scan at 50/60 Hz in the
+ * PLHR stage) and stored in `_S_mains_freq_hz`.  All stages read this variable
+ * instead of a compile-time constant.  The default is 60 Hz until a detection
+ * window has been processed.
  * @{
  */
-inline constexpr uint32_t _S_mains_low_hz = 50u;
-inline constexpr uint32_t _S_mains_high_hz = 60u;
+
+/** @brief Detected mains grid frequency in hertz (runtime, default 60). */
+inline uint32_t _S_mains_freq_hz = 60u;
 inline constexpr uint32_t _S_harmonics = 4u;
+
+/**
+ * @brief Detect the mains grid frequency from a window of samples.
+ *
+ * Runs a Goertzel scan at 50 Hz and 60 Hz and returns the frequency with the
+ * stronger squared-magnitude bin.  Integer-only: resonator coefficients come
+ * from the fixed-point trigonometry table; no float, no heap, no exceptions.
+ * The caller is responsible for storing the result in `_S_mains_freq_hz`.
+ *
+ * @param samples          window of Q15 int16 samples
+ * @param count            number of samples
+ * @param sample_rate_hz   sample rate of the samples
+ * @returns 50 or 60 (the stronger bin), or `_S_mains_freq_hz` on invalid input
+ */
+[[nodiscard]] inline uint32_t
+detect_mains_freq_hz (const int16_t *const samples, const uint32_t count, const uint32_t sample_rate_hz) noexcept;
 
 /** @brief PLHR passband: above the 50/60 Hz fundamental, below the mag alias. */
 inline constexpr uint32_t _S_plhr_band_low_hz = 45u;

@@ -46,7 +46,7 @@ inline constexpr int32_t kCodeStep = 258;
 [[nodiscard]] constexpr int8_t
 q15_raw_to_code (const int16_t q15_raw) noexcept {
   const int32_t code = static_cast<int32_t> (q15_raw) / kCodeStep;
-  return static_cast<int8_t> (code > 127 ? 127 : (code < -127 ? -127 : code));
+  return static_cast<int8_t> (code > 48 ? 48 : (code < -48 ? -48 : code));
 }
 
 /** @brief Flatten `seq_len` windows x `feature_count` features into int8 codes.

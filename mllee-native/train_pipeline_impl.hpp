@@ -25,6 +25,7 @@
 #include "mllee-native/model.hpp"
 #include "mllee-native/train_pipeline.hpp"
 #include "mllee/core_format.hpp"
+#include "mllee/core_ops.hpp"
 #include "mllee/core_quant.hpp"
 #include "mllee/train_attention.hpp"
 #include "mllee/train_conv.hpp"
@@ -121,6 +122,9 @@ mlp_forward_hook (StepContext &context) noexcept {
     acc += static_cast<int32_t> (output_b.code_at (k));
     output.set_code (k, acc);
   }
+
+  /* Softmax activation on output codes (matches inference SOFTMAX layer). */
+  _S_softmax_row (output._M_code, output._M_code, kOutputDim);
 
   /* MSE loss: loss = sum_k (output[k] - target[k])^2 / (4 * output_dim) */
   int32_t mse = 0;

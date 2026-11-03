@@ -64,8 +64,9 @@ struct _S_FlickerState {
   int16_t _M_window_buf[_S_flicker_samples];
 
   /* 100/120 Hz hum resonator, stepped incrementally in feed and read in
-     produce (no window re-feed). */
+     produce (no window re-feed).  Only valid when below Nyquist. */
   _S_GoertzelBin _M_hum_bin;
+  bool _M_hum_bin_configured; /* true when hum_freq < sample_rate/2 */
 
   /* 5-window DC history for the flicker drop median. */
   int16_t _M_dc_history[5];
@@ -74,22 +75,31 @@ struct _S_FlickerState {
   bool _M_configured;
 };
 
-/** @brief Configure flicker from the light sample rate. */
+/** @brief Configure flicker from the grid sample rate (the light channel is
+ *         upsampled to the 100 Hz grid before reaching this stage). */
 [[nodiscard]] inline zzs::kernel::Status
 flicker_configure (void *const state) noexcept {
   _S_FlickerState *const s = static_cast<_S_FlickerState *> (state);
   if (s == nullptr)
     return zzs::kernel::Status::OUT_OF_RANGE;
   if (s->_M_sample_rate_hz == 0u)
-    s->_M_sample_rate_hz = zzs::kernel::_S_light_rate_hz;
+    s->_M_sample_rate_hz = zzs::kernel::_S_grid_rate_hz;
   if (s->_M_window_samples == 0u)
     s->_M_window_samples = zzs::kernel::_S_flicker_samples;
-  /* Hum resonator at 2*mains (100/120 Hz). */
-  const zzs::kernel::Status st =
-      zzs::kernel::dsp::goertzel_bin_configure (s->_M_hum_bin, zzs::kernel::_S_mains_low_hz * 2u, s->_M_sample_rate_hz);
-  if (st != zzs::kernel::Status::OK) {
-    zzs::base::log_error ("flicker_configure: goertzel_bin_configure={}", zzs::kernel::status_name (st));
-    return st;
+
+  /* Hum resonator at 2*mains (100/120 Hz).  Only configure when below Nyquist;
+     on a 100 Hz grid the 100/120 Hz bin aliases to DC and saturates, which
+     would poison the feature row. */
+  const uint32_t hum_freq = zzs::kernel::_S_mains_freq_hz * 2u;
+  s->_M_hum_bin_configured = false;
+  if (hum_freq < s->_M_sample_rate_hz / 2u) {
+    const zzs::kernel::Status st =
+        zzs::kernel::dsp::goertzel_bin_configure (s->_M_hum_bin, hum_freq, s->_M_sample_rate_hz);
+    if (st != zzs::kernel::Status::OK) {
+      zzs::base::log_error ("flicker_configure: goertzel_bin_configure={}", zzs::kernel::status_name (st));
+      return st;
+    }
+    s->_M_hum_bin_configured = true;
   }
   s->_M_tick = 0;
   s->_M_dc_index = 0;
@@ -97,7 +107,6 @@ flicker_configure (void *const state) noexcept {
     s->_M_dc_history[i] = 0;
   s->_M_window_ready = false;
   s->_M_configured = true;
-  zzs::base::log_debug ("flicker_configure: rate={} window={}", s->_M_sample_rate_hz, s->_M_window_samples);
   return zzs::kernel::Status::OK;
 }
 
@@ -109,7 +118,8 @@ flicker_reset (void *const state) noexcept {
     return;
   for (uint32_t i = 0; i < s->_M_window_samples; ++i)
     s->_M_window_buf[i] = 0;
-  zzs::kernel::dsp::goertzel_bin_reset (s->_M_hum_bin);
+  if (s->_M_hum_bin_configured)
+    zzs::kernel::dsp::goertzel_bin_reset (s->_M_hum_bin);
   s->_M_tick = 0;
   for (uint32_t i = 0; i < 5u; ++i)
     s->_M_dc_history[i] = 0;
@@ -128,8 +138,9 @@ flicker_feed (void *const state, const sensor::Channel channel, const int16_t sa
   if (s->_M_tick < s->_M_window_samples)
     s->_M_window_buf[s->_M_tick] = sample_q15;
 
-  /* Step the hum resonator incrementally per sample. */
-  zzs::kernel::dsp::goertzel_bin_step (s->_M_hum_bin, sample_q15);
+  /* Step the hum resonator incrementally per sample (only when configured). */
+  if (s->_M_hum_bin_configured)
+    zzs::kernel::dsp::goertzel_bin_step (s->_M_hum_bin, sample_q15);
 
   ++s->_M_tick;
   if (s->_M_tick >= s->_M_window_samples) {
@@ -166,11 +177,17 @@ flicker_produce (void *const state, int32_t *const slots, const uint32_t slot_co
   if (!s->_M_window_ready)
     return zzs::kernel::Status::NOT_READY;
 
-  /* light_100hz_power: O(1) read of the incrementally-stepped hum resonator. */
-  const uint32_t hum_power_q14 = zzs::kernel::dsp::goertzel_bin_power_q14 (s->_M_hum_bin);
-  const zzs::kernel::fx::_S_LevelReference ref = zzs::kernel::fx::level_reference_of (n);
-  const int32_t hum_db_q8 = zzs::kernel::fx::db_q8 (hum_power_q14, ref);
-  slots[meta::_S_feat_flicker_start + meta::flicker::power_100hz] = hum_db_q8 << 7u;
+  /* light_100hz_power: O(1) read of the incrementally-stepped hum resonator.
+     When the hum bin is not configured (above Nyquist), report 0 instead of
+     a saturated aliased-DC value that would poison the feature row. */
+  if (s->_M_hum_bin_configured) {
+    const uint32_t hum_power_q14 = zzs::kernel::dsp::goertzel_bin_power_q14 (s->_M_hum_bin);
+    const zzs::kernel::fx::_S_LevelReference ref = zzs::kernel::fx::level_reference_of (n);
+    const int32_t hum_db_q8 = zzs::kernel::fx::db_q8 (hum_power_q14, ref);
+    slots[meta::_S_feat_flicker_start + meta::flicker::power_100hz] = hum_db_q8 << 7u;
+  } else {
+    slots[meta::_S_feat_flicker_start + meta::flicker::power_100hz] = 0;
+  }
 
   /* light_flicker_index: (max-min)/(max+min) as Q15. */
   int32_t max_v = s->_M_window_buf[0];
@@ -195,7 +212,8 @@ flicker_produce (void *const state, int32_t *const slots, const uint32_t slot_co
   slots[meta::_S_feat_flicker_start + meta::flicker::flicker_drop] = drop_q15;
 
   /* Window consumed: reset the hum resonator for the next window. */
-  zzs::kernel::dsp::goertzel_bin_reset (s->_M_hum_bin);
+  if (s->_M_hum_bin_configured)
+    zzs::kernel::dsp::goertzel_bin_reset (s->_M_hum_bin);
   s->_M_window_ready = false;
   zzs::base::log_debug ("flicker_produce: window complete");
   return zzs::kernel::Status::OK;

@@ -124,7 +124,7 @@ polyphase_load_branch (_S_PolyphaseFir &fir, const uint32_t branch, const int16_
     br._M_coeff_q15[t] = coeff_q15[t];
   for (uint32_t t = tap_count; t < _S_poly_max_taps; ++t)
     br._M_coeff_q15[t] = 0;
-  br._M_gain_q15 = static_cast<int16_t> (zzs::kernel::_S_q15_one);
+  br._M_gain_q15 = zzs::kernel::_S_q15_one_i16;
   zzs::base::log_debug ("polyphase_load_branch: ok branch={} taps={}", branch, tap_count);
   return zzs::kernel::Status::OK;
 }
@@ -164,8 +164,11 @@ polyphase_step_branch (const _S_PolyphaseFir &fir, const uint32_t branch) noexce
   for (uint32_t t = 0; t < br._M_tap_count; ++t)
     linear[t] = fir._M_delay[(newest + fir._M_delay_len - t) & mask];
   const int64_t acc = zzs::kernel::simd::dot_widen_q15 (linear, br._M_coeff_q15, br._M_tap_count);
-  int32_t out = zzs::kernel::fx::clamp_q15 (acc);
-  out = zzs::kernel::fx::q15_mul (out, static_cast<int32_t> (br._M_gain_q15));
+  /* dot_widen_q15 returns Q30 (sum of Q15xQ15 products).  Round-half-up to Q15
+     before applying the branch gain; plain `>> 15` truncates toward -inf and
+     biases positives down by 1 LSB, which breaks exact passthrough. */
+  const int32_t out_q15 = zzs::kernel::fx::_S_round_shift (acc, zzs::kernel::_S_state_frac_bits);
+  int32_t out = zzs::kernel::fx::q15_mul (out_q15, static_cast<int32_t> (br._M_gain_q15));
   return static_cast<int16_t> (out);
 }
 

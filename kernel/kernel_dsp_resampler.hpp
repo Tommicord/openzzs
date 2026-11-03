@@ -122,10 +122,10 @@ resampler_configure (_S_Resampler &res, const uint32_t in_rate_hz, const uint32_
   for (uint32_t b = 0; b < res._M_q; ++b) {
     _S_PolyBranch &br = res._M_fir._M_branch[b];
     br._M_tap_count = 1u;
-    br._M_coeff_q15[0] = static_cast<int16_t> (zzs::kernel::_S_q15_one);
+    br._M_coeff_q15[0] = zzs::kernel::_S_q15_one_i16;
     for (uint32_t t = 1; t < _S_poly_max_taps; ++t)
       br._M_coeff_q15[t] = 0;
-    br._M_gain_q15 = static_cast<int16_t> (zzs::kernel::_S_q15_one);
+    br._M_gain_q15 = zzs::kernel::_S_q15_one_i16;
   }
 
   res._M_linear_mode = false;

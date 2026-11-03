@@ -63,6 +63,7 @@ using zzs::kernel::dsp::_S_BiquadCoeffs;
 using zzs::kernel::dsp::_S_BiquadState;
 using zzs::kernel::dsp::_S_goertzel_max_bins;
 using zzs::kernel::dsp::_S_GoertzelBank;
+using zzs::kernel::dsp::_S_GoertzelBin;
 using zzs::kernel::dsp::bandpass_coeffs;
 using zzs::kernel::dsp::biquad_reset;
 using zzs::kernel::dsp::biquad_step;
@@ -71,6 +72,7 @@ using zzs::kernel::dsp::goertzel_bank_power_q14;
 using zzs::kernel::dsp::goertzel_bank_reset;
 using zzs::kernel::dsp::goertzel_bank_step;
 using zzs::kernel::dsp::goertzel_bin_configure;
+using zzs::kernel::dsp::goertzel_bin_power_q14;
 using zzs::kernel::dsp::goertzel_bin_reset;
 using zzs::kernel::dsp::goertzel_bin_step;
 
@@ -89,6 +91,7 @@ struct _S_PlhrState {
   int16_t _M_window_buf[sm::COUNT][_S_plhr_samples]; /* per-axis window */
   bool _M_window_ready;                              /* true once a full window has been accumulated */
   bool _M_configured;
+  bool _M_mains_detected; /* true once mains frequency has been detected */
 };
 
 /** @brief Configure PLHR from the magnetometer sample rate and window length. */
@@ -98,7 +101,7 @@ plhr_configure (void *const state) noexcept {
   if (s == nullptr)
     return zzs::kernel::Status::OUT_OF_RANGE;
   if (s->_M_sample_rate_hz == 0u)
-    s->_M_sample_rate_hz = zzs::kernel::_S_mag_rate_hz;
+    s->_M_sample_rate_hz = zzs::kernel::_S_grid_rate_hz;
   if (s->_M_window_samples == 0u)
     s->_M_window_samples = zzs::kernel::_S_plhr_samples;
 
@@ -118,15 +121,18 @@ plhr_configure (void *const state) noexcept {
     (void) st;
   }
 
-  /* Goertzel banks: 50 Hz grid + 60 Hz grid, 4 harmonics each, per axis. */
+  /* Goertzel banks: 50 Hz grid + 60 Hz grid, 4 harmonics each, per axis.
+     Both grids are configured so the first window can be scanned to detect
+     which mains frequency is present; the result is stored in
+     zzs::kernel::_S_mains_freq_hz for other stages to use. */
   for (uint32_t a = 0; a < sm::COUNT; ++a) {
     s->_M_bank[a]._M_bin_count = 0;
-    constexpr uint32_t grid_freqs[2] = {zzs::kernel::_S_mains_low_hz, zzs::kernel::_S_mains_high_hz};
+    constexpr uint32_t grid_freqs[2] = {50u, 60u};
     for (uint32_t g = 0; g < 2u; ++g) {
       const uint32_t base = grid_freqs[g];
       for (uint32_t h = 0; h < zzs::kernel::_S_harmonics; ++h) {
         const uint32_t f = base * (h + 1u);
-        if (f >= s->_M_sample_rate_hz / 2u)
+        if (f > s->_M_sample_rate_hz / 2u)
           continue; /* above Nyquist: skip bin */
         const zzs::kernel::Status st = zzs::kernel::dsp::goertzel_bank_add_bin (s->_M_bank[a], f, s->_M_sample_rate_hz);
         if (st != zzs::kernel::Status::OK) {
@@ -139,6 +145,7 @@ plhr_configure (void *const state) noexcept {
 
   s->_M_tick = 0;
   s->_M_window_ready = false;
+  s->_M_mains_detected = false;
   s->_M_configured = true;
   zzs::base::log_debug ("plhr_configure: rate={} window={}", s->_M_sample_rate_hz, s->_M_window_samples);
   return zzs::kernel::Status::OK;
@@ -158,6 +165,7 @@ plhr_reset (void *const state) noexcept {
   }
   s->_M_tick = 0;
   s->_M_window_ready = false;
+  s->_M_mains_detected = false;
 }
 
 /** @brief Feed one resampled Q15 sample for a magnetometer axis. */
@@ -212,6 +220,17 @@ plhr_produce (void *const state, int32_t *const slots, const uint32_t slot_count
   if (!s->_M_window_ready)
     return zzs::kernel::Status::NOT_READY;
 
+  /* On the first window, scan 50 Hz and 60 Hz to detect the mains grid
+     frequency and publish it in zzs::kernel::_S_mains_freq_hz so other
+     stages (acoustic, flicker) can tune their resonators to the same grid. */
+  if (!s->_M_mains_detected) {
+    const uint32_t detected =
+        zzs::kernel::detect_mains_freq_hz (s->_M_window_buf[0], s->_M_window_samples, s->_M_sample_rate_hz);
+    zzs::kernel::_S_mains_freq_hz = detected;
+    s->_M_mains_detected = true;
+    zzs::base::log_debug ("plhr_produce: mains detected={} Hz", detected);
+  }
+
   /* Level reference for normalizing bin power to dB-relative Q15. */
   const zzs::kernel::fx::_S_LevelReference ref = zzs::kernel::fx::level_reference_of (s->_M_window_samples);
 
@@ -249,3 +268,37 @@ plhr_vtable (void) noexcept {
 
 /** @} */
 } // namespace zzs::kernel::feat
+
+namespace zzs::kernel {
+
+/** @brief Detect the mains grid frequency from a window of samples.
+ *
+ * Runs a Goertzel scan at 50 Hz and 60 Hz on `samples` and returns the
+ * frequency with the stronger squared-magnitude bin.  The caller stores the
+ * result in `_S_mains_freq_hz`.
+ */
+[[nodiscard]] inline uint32_t
+detect_mains_freq_hz (const int16_t *const samples, const uint32_t count, const uint32_t sample_rate_hz) noexcept {
+  if (samples == nullptr || count == 0u || sample_rate_hz == 0u)
+    return _S_mains_freq_hz;
+
+  dsp::_S_GoertzelBin bin50;
+  dsp::_S_GoertzelBin bin60;
+  if (dsp::goertzel_bin_configure (bin50, 50u, sample_rate_hz) != zzs::kernel::Status::OK)
+    return _S_mains_freq_hz;
+  if (dsp::goertzel_bin_configure (bin60, 60u, sample_rate_hz) != zzs::kernel::Status::OK)
+    return _S_mains_freq_hz;
+
+  for (uint32_t i = 0; i < count; ++i) {
+    dsp::goertzel_bin_step (bin50, samples[i]);
+    dsp::goertzel_bin_step (bin60, samples[i]);
+  }
+
+  const uint32_t p50 = dsp::goertzel_bin_power_q14 (bin50);
+  const uint32_t p60 = dsp::goertzel_bin_power_q14 (bin60);
+  const uint32_t detected = p60 > p50 ? 60u : 50u;
+  _S_mains_freq_hz = detected;
+  return detected;
+}
+
+} // namespace zzs::kernel

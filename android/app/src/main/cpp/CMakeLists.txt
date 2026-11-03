@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.22.1)
 project("openzzs-android" LANGUAGES CXX C)
 
 # NDK Clang 14 supports gnu++2b (C++23 draft), not c++23 yet
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++2b -fexceptions -frtti -O2 -DZZS_MLLEE_HOST")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++2b -fexceptions -frtti -O2 -g -DZZS_MLLEE_HOST")
 
 # OpenZZS source root (project root = ../../.. from this file)
 set(OPENZZS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../..")
@@ -13,6 +13,7 @@ include_directories(${OPENZZS_ROOT})
 include_directories(${OPENZZS_ROOT}/kernel)
 include_directories(${OPENZZS_ROOT}/mllee)
 include_directories(${OPENZZS_ROOT}/std)
+include_directories(${OPENZZS_ROOT}/bootstrap-monitor)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 # Android NDK libraries
@@ -45,10 +46,13 @@ add_custom_command(
 
 add_custom_target(gen_model_blob_target DEPENDS ${GEN_MODEL_BLOB_OUT})
 
-# Source files: JNI bridge + Android sensor polling thread + generated model blob
+# Source files: Android JNI pipeline + Android HAL + generated model blob.
+# Note: sensr_jni.cpp (not bootstrap-monitor/main.cpp) is used on Android
+# because it implements the correct slow-sensor upsampling path for the
+# preprocessing bank.  main.cpp is the host-only standalone monitor.
 set(OPENZZS_NATIVE_SRCS
-    ${CMAKE_CURRENT_SOURCE_DIR}/sensr_jni.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/sensr_android.cpp
+    ${OPENZZS_ROOT}/android/app/src/main/cpp/sensr_jni.cpp
+    ${OPENZZS_ROOT}/kernel/sensor-driver/platforms/android/platform_hal.cpp
     ${GEN_MODEL_BLOB_OUT}
 )
 
@@ -58,6 +62,7 @@ add_dependencies(openzzs-android gen_model_blob_target)
 target_link_libraries(openzzs-android
     ${ANDROID_LOG_LIBRARY}
     ${ANDROID_NATIVE_LIBRARY}
+    aaudio
 )
 
 # Allow the shared library to find dependencies at runtime

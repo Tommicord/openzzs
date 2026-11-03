@@ -24,6 +24,7 @@
 #include "mllee-native/model_config.hpp"
 #include "mllee-native/model_export.hpp"
 #include "mllee-native/q11_q15_q31.hpp"
+#include "mllee-native/trained_weights.hpp"
 
 #include <cstdint>
 
@@ -57,8 +58,9 @@ using zzs::mllee_native::export_::validate_model;
 using zzs::mllee_native::export_::conv_attn::kConvAttnBlobSize;
 using zzs::mllee_native::export_::multitask::kMultiTaskBlobSize;
 
-/** @brief Requantization multiplier (Q15, 32768 = 1.0 identity). */
-inline constexpr int32_t kRequantMult = 32768;
+/** @brief Requantization multiplier (Q15, 128 = divide-by-256 to match
+ *         mlp_forward_hook training scale). */
+inline constexpr int32_t kRequantMult = 128;
 
 /**
  * @brief OOP model container: weights, bias, and trained state, all sized by
@@ -466,19 +468,19 @@ private:
 };
 
 /** @brief Trained hidden weight codes: [out * in_dim + in] = 3040 int8 codes. */
-alignas (4) inline int8_t g_model_hidden_weights[kHiddenInput * kHiddenDim] = {};
+alignas (4) extern const int8_t g_model_hidden_weights[kHiddenInput * kHiddenDim];
 
 /** @brief Trained hidden bias codes: [out] = 16 int8 codes. */
-alignas (4) inline int8_t g_model_hidden_bias[kHiddenDim] = {};
+alignas (4) extern const int8_t g_model_hidden_bias[kHiddenDim];
 
 /** @brief Trained output weight codes: [out * in_dim + in] = 48 int8 codes. */
-alignas (4) inline int8_t g_model_weights[kHiddenDim * kOutputDim] = {};
+alignas (4) extern const int8_t g_model_weights[kHiddenDim * kOutputDim];
 
 /** @brief Trained output bias codes: [out] = 3 int8 codes. */
-alignas (4) inline int8_t g_model_bias[kOutputDim] = {};
+alignas (4) extern const int8_t g_model_bias[kOutputDim];
 
 /** @brief Whether the weights have been trained (set by training pipeline). */
-inline bool g_model_trained = false;
+inline bool g_model_trained = true;
 
 /** @brief Build the complete model blob at compile time.
  *

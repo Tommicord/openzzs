@@ -92,7 +92,7 @@ stage_produce_all (const _S_Stage *const stages, const uint32_t stage_count, int
     return Status::OUT_OF_RANGE;
   if (slot_count < zzs::kernel::_S_feature_count)
     return Status::OUT_OF_RANGE;
-  Status last = Status::OK;
+  Status last = Status::NOT_READY;
   for (uint32_t i = 0; i < stage_count; ++i) {
     if (stages[i]._M_vtable == nullptr)
       return Status::OUT_OF_RANGE;
@@ -100,12 +100,16 @@ stage_produce_all (const _S_Stage *const stages, const uint32_t stage_count, int
       return Status::OUT_OF_RANGE;
     const Status st = stages[i]._M_vtable->_M_produce (stages[i]._M_state, slots, slot_count);
     if (st == Status::OK)
-      zzs::base::log_debug ("stage {} produced window", i);
+      last = Status::OK;
     else if (st != Status::NOT_READY) {
       zzs::base::log_error ("stage {} produce failed ({})", i, status_name (st));
-      last = st;
+      return st; // Real error
     }
+    zzs::base::log_debug ("stage {} produced window", i);
   }
+  // Return OK if at least one stage produced.  Slots persist in the bank, so
+  // a row contains the latest features from every stage even when stages
+  // complete at different rates (PLHR/vibration ~1s, flicker ~100s at 1Hz).
   return last;
 }
 
