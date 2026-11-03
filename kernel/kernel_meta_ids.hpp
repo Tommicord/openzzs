@@ -103,11 +103,22 @@ inline constexpr uint32_t thd = 1;         /* sound_thd */
 inline constexpr uint32_t level_db = 2;    /* sound_level_dB */
 } // namespace acoustic
 
-/** @brief First reserved index. */
+/* ---- Reserved spectral features (filled by PLHR stage produce) ---- */
+
+/** @brief Start index of the reserved spectral block. */
 inline constexpr uint32_t _S_feat_reserved_start = _S_feat_acoustic_start + _S_feat_acoustic_count;
+/** @brief Reserved spectral block length. */
+inline constexpr uint32_t _S_feat_reserved_count = 3u;
+
+namespace spectral {
+inline constexpr uint32_t spectral_flatness = 0; /* spectral flatness (tonal vs noise) */
+inline constexpr uint32_t harmonic_to_noise = 1; /* harmonic-to-noise ratio */
+inline constexpr uint32_t freq_drift = 2;        /* mains frequency drift rate */
+} // namespace spectral
 
 /** @brief Verify the block lengths do not exceed the feature count. */
 static_assert (_S_feat_plhr_count + _S_feat_vib_count + _S_feat_flicker_count + _S_feat_acoustic_count
+                       + _S_feat_reserved_count
                    <= _S_feature_total,
                "feature block lengths must not exceed _S_feature_count");
 
@@ -191,6 +202,13 @@ feat_name (const uint32_t index) noexcept {
     return "acoustic_sound_thd";
   case 34:
     return "acoustic_sound_level_db";
+  /* Reserved spectral */
+  case 35:
+    return "spectral_spectral_flatness";
+  case 36:
+    return "spectral_harmonic_to_noise";
+  case 37:
+    return "spectral_freq_drift";
   default:
     return "reserved";
   }

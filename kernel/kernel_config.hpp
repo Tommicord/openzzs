@@ -268,6 +268,28 @@ inline constexpr uint32_t _S_harmonics = 4u;
 [[nodiscard]] inline uint32_t
 detect_mains_freq_hz (const int16_t *const samples, const uint32_t count, const uint32_t sample_rate_hz) noexcept;
 
+/**
+ * @brief Detect the mains grid frequency with fine resolution.
+ *
+ * Runs a Goertzel scan across a range around the nominal mains frequency
+ * (50 Hz or 60 Hz grid) in fine steps, then uses parabolic interpolation on
+ * the peak bin to estimate the sub-bin frequency.  Returns the estimated
+ * frequency in millihertz (e.g. 60000 = 60.000 Hz).
+ *
+ * Integer-only: resonator coefficients come from the fixed-point
+ * trigonometry table; no float, no heap, no exceptions.
+ *
+ * @param samples          window of Q15 int16 samples
+ * @param count            number of samples
+ * @param sample_rate_hz   sample rate of the samples
+ * @param nominal_hz       nominal mains frequency (50 or 60) to scan around
+ * @returns Estimated mains frequency in millihertz, or nominal_hz * 1000 on
+ *          invalid input.
+ */
+[[nodiscard]] inline uint32_t
+detect_mains_freq_fine (const int16_t *const samples, const uint32_t count, const uint32_t sample_rate_hz,
+                        const uint32_t nominal_hz) noexcept;
+
 /** @brief PLHR passband: above the 50/60 Hz fundamental, below the mag alias. */
 inline constexpr uint32_t _S_plhr_band_low_hz = 45u;
 inline constexpr uint32_t _S_plhr_band_high_hz = 250u;

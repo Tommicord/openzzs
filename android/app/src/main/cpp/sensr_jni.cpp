@@ -43,9 +43,9 @@
 #include <string>
 #include <time.h>
 
-#define LOGI(...) __android_log_print (ANDROID_LOG_INFO, "OpenZZS", __VA_ARGS__)
-#define LOGE(...) __android_log_print (ANDROID_LOG_ERROR, "OpenZZS", __VA_ARGS__)
-#define LOGW(...) __android_log_print (ANDROID_LOG_WARN, "OpenZZS", __VA_ARGS__)
+#define LOGI(...) __android_log_print (ANDROID_LOG_INFO, "openzzs", __VA_ARGS__)
+#define LOGE(...) __android_log_print (ANDROID_LOG_ERROR, "openzzs", __VA_ARGS__)
+#define LOGW(...) __android_log_print (ANDROID_LOG_WARN, "openzzs", __VA_ARGS__)
 
 namespace {
 
@@ -120,9 +120,17 @@ _aaudio_callback (AAudioStream * /*stream*/, void * /*user_data*/, void *audio_d
     frames_left -= copy;
 
     /* Downsample 48 kHz -> 1 kHz: take one sample every 48 frames.
-     * Feed directly to the acoustic stage (bypass envelope/resampler/grid
-     * so Goertzel can resolve 120 Hz hum on a 60 Hz grid; Nyquist at
-     * 1 kHz is 500 Hz, well above 120 Hz). */
+     * Feed directly to the acoustic stage (Goertzel resolves 120 Hz hum).
+     * Also feed the same 1 kHz PCM directly into the PLHR stage as
+     * MAG_X/Y/Z so the existing PLHR bandpass + Goertzel harmonic banks
+     * process mic data instead of dead magnetometer data (mag is HAL-capped
+     * at 100 Hz, Nyquist = 50 Hz, so 60 Hz PLHR is unreachable via
+     * magnetometer).
+     *
+     * The PLHR stage advances its window tick on MAG_Z, so all three axes
+     * must be pushed in order: X, Y, Z.  All three receive the same mono PCM
+     * since we have a single microphone channel.
+     */
     while (_S_aaudio_buf_len >= 48u) {
       /* Simple decimation: average 48 samples for anti-aliasing. */
       double sum = 0.0;
@@ -133,12 +141,30 @@ _aaudio_callback (AAudioStream * /*stream*/, void * /*user_data*/, void *audio_d
         _S_aaudio_buf[i - 48u] = _S_aaudio_buf[i];
       _S_aaudio_buf_len -= 48u;
 
-      /* Feed directly to acoustic stage under the grid lock. */
+      /* Feed both stages under the grid lock. */
       std::lock_guard<std::mutex> lock (_S_bank_mutex);
       if (const zzs::kernel::Status afst = zzs::kernel::feat::acoustic_feed (
               _S_acoustic_state, zzs::kernel::sensor::Channel::SOUND_ENVELOPE, sample_q15);
           !zzs::kernel::status_ok (afst) && afst != zzs::kernel::Status::NOT_READY)
         LOGE ("acoustic_feed failed: %d", static_cast<int> (afst));
+
+      /* Feed PLHR stage directly at 1 kHz (no resampler decimation that
+       * would destroy the 120 Hz hum).  All three axes get the same PCM;
+       * the PLHR stage advances its window tick on MAG_Z. */
+      static uint64_t _S_plhr_ts = 0;
+      _S_plhr_ts += zzs::kernel::_S_grid_period_ns;
+      if (const zzs::kernel::Status pfst =
+              zzs::kernel::feat::plhr_feed (_S_plhr_state, zzs::kernel::sensor::Channel::MAG_X, sample_q15);
+          !zzs::kernel::status_ok (pfst) && pfst != zzs::kernel::Status::NOT_READY)
+        LOGE ("plhr_feed MAG_X failed: %d", static_cast<int> (pfst));
+      if (const zzs::kernel::Status pfst =
+              zzs::kernel::feat::plhr_feed (_S_plhr_state, zzs::kernel::sensor::Channel::MAG_Y, sample_q15);
+          !zzs::kernel::status_ok (pfst) && pfst != zzs::kernel::Status::NOT_READY)
+        LOGE ("plhr_feed MAG_Y failed: %d", static_cast<int> (pfst));
+      if (const zzs::kernel::Status pfst =
+              zzs::kernel::feat::plhr_feed (_S_plhr_state, zzs::kernel::sensor::Channel::MAG_Z, sample_q15);
+          !zzs::kernel::status_ok (pfst) && pfst != zzs::kernel::Status::NOT_READY)
+        LOGE ("plhr_feed MAG_Z failed: %d", static_cast<int> (pfst));
     }
   }
   return AAUDIO_CALLBACK_RESULT_CONTINUE;
@@ -252,8 +278,20 @@ _feed_grid_sample (zzs::kernel::sensor::Channel channel, int16_t sample_q15, uin
   if (!_S_frame.append_row (row))
     return; // Frame not complete yet
 
-  // Frame complete: run inference
-  if (zzs::mllee_native::model::g_model_blob[0] != 'M') {
+  // Frame complete: run inference using the OUTPRED model blob from the VTable.
+  if (const zzs::mllee::Status st = zzs::mllee_native::model::init_model_vtable (); !zzs::mllee::status_ok (st)) {
+    LOGW ("init_model_vtable failed: %d, skipping inference", static_cast<int> (st));
+    _S_frame.reset ();
+    return;
+  }
+  const uint32_t idx = zzs::mllee_native::model::find_outpred ();
+  if (idx == zzs::mllee_native::model::ModelVTable<>::k_npos) {
+    LOGW ("outpred model not registered in VTable, skipping inference");
+    _S_frame.reset ();
+    return;
+  }
+  const zzs::mllee_native::model::VTableEntry &entry = zzs::mllee_native::model::g_model_vtable[idx];
+  if (entry._M_blob[0] != 'M') {
     LOGW ("Model blob not initialized, skipping inference");
     _S_frame.reset ();
     return;
@@ -276,8 +314,8 @@ _feed_grid_sample (zzs::kernel::sensor::Channel channel, int16_t sample_q15, uin
   clock_gettime (CLOCK_MONOTONIC, &ts_start);
 
   const auto result =
-      _S_core.run (zzs::mllee_native::model::g_model_blob, zzs::mllee_native::model::kBlobSize,
-                   reinterpret_cast<const int8_t *> (_S_frame.data ()), zzs::mllee_native::model::kInputDim);
+      _S_core.run (entry._M_blob, entry._M_blob_size, reinterpret_cast<const int8_t *> (_S_frame.data ()),
+                   zzs::mllee_native::model::kInputDim);
   if (!result) {
     LOGE ("mllee inference failed: %d", static_cast<int> (result.error ().kind ()));
     _S_frame.reset ();
@@ -299,7 +337,7 @@ _feed_grid_sample (zzs::kernel::sensor::Channel channel, int16_t sample_q15, uin
     prob_codes[i] = result.value ()._M_data[i];
 
   LOGE ("DEBUG raw codes: [%d, %d, %d] blob[0]=%c kRequantMult=%d", prob_codes[0], prob_codes[1], prob_codes[2],
-        zzs::mllee_native::model::g_model_blob[0], zzs::mllee_native::model::kRequantMult);
+        entry._M_blob[0], zzs::mllee_native::model::kRequantMult);
 
   // Convert to probabilities (0-100%).
   // Softmax output codes are in [0, 127] (0 = 0% probability, 127 = 100%),
@@ -510,7 +548,7 @@ Java_com_openzzs_SensrBridge_initNative (JNIEnv *env, jobject thiz) noexcept {
   }
 
   // Build model blob from trained or init weights
-  auto model_st = zzs::mllee_native::model::init_model_blob ();
+  auto model_st = zzs::mllee_native::model::init_model_vtable ();
   if (!zzs::mllee::status_ok (model_st)) {
     LOGE ("init_model_blob failed: %d", static_cast<int> (model_st));
     return JNI_ERR;
@@ -526,6 +564,14 @@ Java_com_openzzs_SensrBridge_initNative (JNIEnv *env, jobject thiz) noexcept {
   st = zzs::kernel::dsp::resampler_configure (_S_resampler_mag_z, 200, 100);
   if (!zzs::kernel::status_ok (st))
     LOGE ("mag_z resampler configure failed: %d", static_cast<int> (st));
+
+  /* PLHR stage runs at 1 kHz (fed directly from AAudio PCM downsampled to
+   * 1 kHz), not at the 100 Hz grid.  The magnetometer is HAL-capped at 100
+   * Hz (Nyquist = 50 Hz), so 60 Hz PLHR is unreachable via magnetometer.
+   * The mic at 1 kHz has Nyquist = 500 Hz, well above 120 Hz.  Override the
+   * default sample rate (_S_grid_rate_hz = 100) that plhr_configure sets. */
+  auto *plhr_state = reinterpret_cast<zzs::kernel::feat::_S_PlhrState *> (_S_plhr_state);
+  plhr_state->_M_sample_rate_hz = 1000u;
 
   st = zzs::kernel::dsp::resampler_configure (_S_resampler_accel_x, 200, 100);
   if (!zzs::kernel::status_ok (st))
